@@ -1,5 +1,5 @@
-from Simulation.Environment import Environment
-from Simulation import Agents
+from RAPID.Environment import Environment
+from RAPID import Agents
 
 from PIL import Image
 
