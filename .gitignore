@@ -1,2 +1,4 @@
 images_env/
-build/
+builds/
+tests/
+*.o
