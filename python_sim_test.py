@@ -1,4 +1,4 @@
-from RAPID.Environment import Environment
+from RAPID.Environment import Environment, TargetPointEnvironment
 from RAPID import Agents
 
 from PIL import Image
@@ -20,7 +20,9 @@ img = Image.open(ENV_IMAGE_PATH).convert("L")
 
 
 def main():
-    env = Environment(background_color= BACKGROUND_COLOR, env_image=img)
+    #env = Environment(background_color= BACKGROUND_COLOR, env_image=img)
+
+    env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img)
 
 
     for i in range(NB_GROUND_AGENTS):

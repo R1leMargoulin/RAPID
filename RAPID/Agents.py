@@ -3,12 +3,13 @@ from pygame.draw import *
 from pygame import Surface, SRCALPHA
 
 from .Environment import Environment
+from .utils import *
 
 import numpy as np
 import random
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, size, color, x=0, y=0, w=0):
+    def __init__(self, env:Environment, size, color, transform = (0, 0, 0), max_speed = (2,2,2)):
         super().__init__()
 
         self.env = env
@@ -20,19 +21,15 @@ class Robot(Sprite):
 
         # default values
         self.speed = 0
-        self.max_speed_x = 2.0
-        self.max_speed_y = 2.0
-        self.max_speed_w = 2.0
+
+        self.max_speed = Transform2d(max_speed[0], max_speed[1], max_speed[2] )
 
         # initial position
-        self.x = x
-        self.y = y
-        self.w = w
+
+        self.transform = Transform2d(transform[0], transform[1], transform[2])
 
         # initial velocity
-        self.speed_x = 0
-        self.speed_y = 0
-        self.speed_w = 0
+        self.speed = Transform2d(0,0,0)
 
         # inital values
         self.is_active = True
@@ -40,8 +37,8 @@ class Robot(Sprite):
         self.energy = 0
 
         # move agent object on coords
-        self.rect.centerx = int(self.x)
-        self.rect.centery = int(self.y)
+        self.rect.centerx = int(self.transform.x)
+        self.rect.centery = int(self.transform.y)
 
 
 
@@ -71,8 +68,8 @@ class Robot(Sprite):
 
 
         # update position based on delta x/y
-        self.x = self.x + speed_x
-        self.y = self.y + speed_y
+        self.transform.x = self.transform.x + speed_x
+        self.transform.y = self.transform.y + speed_y
 
         
         #detect collisions-------------------------------------------------------------------------------------------
@@ -91,39 +88,35 @@ class Robot(Sprite):
                     sides.append("bottom")
             
             if ("top" in sides):
-                self.y += 1
+                self.transform.y += 1
             if ("bottom" in sides):
-                self.y -= 1
+                self.transform.y -= 1
             if ("left" in sides):
-                self.x -= 1
+                self.transform.x -= 1
             if ("right" in sides):
-                self.x += 1
+                self.transform.x += 1
         #-----------------------------------------------------------------------------------------------------------
         
         
         # ensure it stays within the screen window
-        self.x = max(self.x, 0)
-        self.x = min(self.x, self.env.screen.get_width())
-        self.y = max(self.y, 0)
-        self.y = min(self.y, self.env.screen.get_height())
+        self.transform.x = max(self.transform.x, 0)
+        self.transform.x = min(self.transform.x, self.env.screen.get_width())
+        self.transform.y = max(self.transform.y, 0)
+        self.transform.y = min(self.transform.y, self.env.screen.get_height())
 
         # update graphics
-        self.rect.centerx = int(self.x)
-        self.rect.centery = int(self.y)
+        self.rect.centerx = int(self.transform.x)
+        self.rect.centery = int(self.transform.y)
 
 
 class Ground(Robot):
-    def __init__(self, env, x=0, y=0, w=0):
-        size = 4
+    def __init__(self, env, size = 4, color = (0, 255, 0), transform = (0,0,0), max_speed = (1.0,0.0,0.5)):
         color = (0, 255, 0)
-        super().__init__(env, size, color, x, y, w)
-        self.max_speed_x = 1
-        self.max_speed_y = 0.0
-        self.max_speed_w = 0.5 #en radians
+        super().__init__(env, size, color, transform=transform, max_speed=max_speed)
 
-        self.speed_x = self.max_speed_x
-        self.speed_y = self.max_speed_y
-        self.speed_w = self.max_speed_w
+        self.speed.x = self.max_speed.x
+        self.speed.y = self.max_speed.y
+        self.speed.w = self.max_speed.w
 
 
     def update(self, screen):
@@ -133,14 +126,14 @@ class Ground(Robot):
 
     def diff_move_random(self):
         #random rotation
-        rotation = random.uniform(-self.speed_w,self.speed_w)
-        self.w += rotation
+        self.speed.w = random.uniform(-self.max_speed.w ,self.max_speed.w)
+        self.transform.w += self.speed.w
 
         #2pi modulo
-        self.w = self.w%(2*np.pi)
+        self.transform.w = self.transform.w%(2*np.pi)
         
-        xmove = self.speed_x * np.cos(self.w)
-        ymove = self.speed_x * np.sin(self.w)
+        xmove = self.speed.x * np.cos(self.transform.w)
+        ymove = self.speed.x * np.sin(self.transform.w)
 
         self.translate(xmove, ymove)
 
@@ -149,8 +142,6 @@ class Ground(Robot):
 
 
 class Aerial(Robot):
-    def __init__(self, env, x=0, y=0):
-        size = 3
-        color = (0, 0, 255)
+    def __init__(self, env, size = 3, color = (0, 0, 255), x=0, y=0):        
         super().__init__(env, size, color)
         self.vmax = 2.0
