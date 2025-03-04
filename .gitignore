@@ -1,4 +1,3 @@
 images_env/
-builds/
-tests/
 *.o
+*/__pycache__/

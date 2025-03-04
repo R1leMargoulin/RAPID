@@ -14,7 +14,7 @@ BACKGROUND_COLOR = (200, 200, 200)
 
 ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/test_500_500.png"
 
-NB_GROUND_AGENTS = 200
+NB_GROUND_AGENTS = 100
 
 img = Image.open(ENV_IMAGE_PATH).convert("L")
 
