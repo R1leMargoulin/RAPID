@@ -8,6 +8,7 @@ import numpy as np
 from PIL import Image
 from random import uniform, randrange
 import logging
+import time
 
 
 
@@ -25,6 +26,7 @@ class Environment():
         #env init
         pygame.init()
         self.clock = pygame.time.Clock()
+        self.start_time = 0
 
         self.width = width
         self.height = height
@@ -50,6 +52,7 @@ class Environment():
         pass
 
     def run(self):
+        self.start_time = time.time()
         while self.running:
             # check user input events
             for event in pygame.event.get():
@@ -77,7 +80,9 @@ class Environment():
             a.update(self.screen)
 
         for o in self.obstacles:
-            self.screen.blit(o.image, o.rect)    
+            self.screen.blit(o.image, o.rect)
+
+            
 
     def add_agent(self, agent):
         self.agents.append(agent)
@@ -110,7 +115,7 @@ class Environment():
 
 
 class TargetPointEnvironment(Environment):
-    def __init__(self, width = 100, height = 100, background_color=(11, 11, 11), caption=f'simulation_target_point', env_image = None, target_point:tuple[int,int]=None, amount_of_agents=1):
+    def __init__(self, width = 100, height = 100, background_color=(11, 11, 11), caption=f'simulation_target_point', env_image = None, target_point:tuple[int,int]=None, amount_of_agents_goal=1):
         """"
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         In this Environment, the Agents has to reach a target point in order to complete the mission.
@@ -123,15 +128,22 @@ class TargetPointEnvironment(Environment):
         - target_point:tuple:(int,int) (default : random) : target points that has to be reached by agents
         - amount_of_agents:int (default : 1) : amount of agents that needs to reach the point in order to complete the mission.
         """
+
         super().__init__(width, height, background_color, caption, env_image)
         if target_point :
             self.init_target_point(x=target_point[0], y=target_point[1])
         else : #s'il n'y a pas de target point, on en génère un aléatoirement:
             self.init_target_point(x = randrange(0, self.width), y = randrange(0, self.height))
 
+        self.amount_of_agent_goal = amount_of_agents_goal
+
+
     def update(self):
+
         super().update()
         self.screen.blit(self.target_point.image, self.target_point.rect)
+        if(self.goal_condition()):
+            self.running = False
 
     
     def init_target_point(self, x, y):
@@ -147,7 +159,9 @@ class TargetPointEnvironment(Environment):
             logging.warning("Target point overlaps with an obstacle, reallocating it randomly.")
             self.target_point.rect.center = (randrange(0, self.width), randrange(0, self.height))
 
-    #def goal_condition(self):
-
-
-
+    def goal_condition(self):
+        if len(pygame.sprite.spritecollide(self.target_point, self.agent_group, False)) >= self.amount_of_agent_goal:
+            logging.info (f"Goal reached at time : {round(time.time() - self.start_time, 2)}")
+            return True
+        else:
+            return False

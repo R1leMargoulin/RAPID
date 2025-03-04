@@ -3,6 +3,8 @@ from RAPID import Agents
 
 from PIL import Image
 
+import logging
+
 
 SIMULATION_NAME = 'Multi-Robot-Exploration'
 EXPERIMENT_NAME = 'multi_robot / Example 01'
@@ -12,17 +14,19 @@ SCREEN_WIDTH = 500
 SCREEN_HEIGHT = 500
 BACKGROUND_COLOR = (200, 200, 200)
 
-ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/test_500_500.png"
+ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/test_50_50.png"
 
-NB_GROUND_AGENTS = 100
+NB_GROUND_AGENTS = 10
 
 img = Image.open(ENV_IMAGE_PATH).convert("L")
 
 
+logging.basicConfig(level=logging.DEBUG)
+
 def main():
     #env = Environment(background_color= BACKGROUND_COLOR, env_image=img)
 
-    env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img)
+    env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img, amount_of_agents_goal=2)
 
 
     for i in range(NB_GROUND_AGENTS):
