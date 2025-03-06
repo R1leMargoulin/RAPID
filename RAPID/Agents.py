@@ -7,11 +7,12 @@ from .utils import *
 
 import numpy as np
 import random
+import logging
 from mergedeep import merge
 
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, transform = (0, 0, 0), max_speed = (2,2,2)):
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2)):#TODO : commenter
         super().__init__()
 
         self.env = env
@@ -21,20 +22,16 @@ class Robot(Sprite):
         circle(self.surf, color, (size, size), size)
         self.rect = self.surf.get_rect()
 
-        # default values
-        self.speed = 0
-
+        # initial velocity
+        self.speed = Transform2d(0,0,0)
+        # max speed
         self.max_speed = Transform2d(max_speed[0], max_speed[1], max_speed[2] )
 
         # initial position
-
-        self.transform = Transform2d(transform[0], transform[1], transform[2])
-
-        # initial velocity
-        self.speed = Transform2d(0,0,0)
+        self.transform = Transform2d(init_transform[0], init_transform[1], init_transform[2])
 
         # inital values
-        self.is_active = True
+        
         #TODO, remettre ces variables plus tard
         # self.target = None
         # self.energy = 0
@@ -43,6 +40,7 @@ class Robot(Sprite):
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
 
+        self.behavior_space = []
 
         self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), -1), "interest_points":{}}
         if self.env.full_knowledge:
@@ -51,11 +49,9 @@ class Robot(Sprite):
                 self.belief_space["occupancy_grid"][o.rect.centerx][o.rect.centery] = 1 #draw obstacles in the belief space occupation grid
 
             self.belief_space["interest_points"].update(self.env.interest_points) #take knowledge of the interest points.
-
-
-
-
-
+        
+        #Ready!
+        self.is_active = True
 
     def update(self, screen):
 
@@ -118,7 +114,7 @@ class Robot(Sprite):
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
 
-    def belief_link(self, robot_id, beliefs):
+    def belief_transfer(self, robot_id, beliefs): #TODO, implementer le transfert des beliefs plus tard.
         """
         Belief transmission from one agent to another. 
         Return : 
@@ -132,16 +128,26 @@ class Robot(Sprite):
             return False, None
 
 class Ground(Robot):
-    def __init__(self, env, robot_id, size = 4, color = (0, 255, 0), transform = (0,0,0), max_speed = (1.0,0.0,1.5)):
-        super().__init__(env, robot_id, size, color, transform=transform, max_speed=max_speed)
+    def __init__(self, env, robot_id, size = 4, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5), behavior_to_use = "random"):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed)
+        self.behavior_space = ["random", "target_djikstra"]
 
-
+        if not( behavior_to_use in self.behavior_space) :
+            logging.error(f"Ground robot:init -> behavior_to_use not in the behavior space.\n the behavior should be in {self.behavior_space}")
+            exit()
+        else : 
+            self.behavior = behavior_to_use
 
     def update(self, screen):
         # self.behavior_diff_move_random()
-        self.behavior_target_djikstra()
-        screen.blit(self.surf, self.rect)
 
+        match self.behavior:
+            case "random":
+                self.behavior_diff_move_random()
+            case "target_djikstra":
+                self.behavior_target_djikstra()
+
+        screen.blit(self.surf, self.rect)
 
     def behavior_diff_move_random(self):
         #set srobot speed at it's max speed
@@ -162,8 +168,8 @@ class Ground(Robot):
         self.translate(xmove, ymove)
 
     def behavior_target_djikstra(self): #TODO: reparer
-        self.speed.x = 2
-        self.speed.y = 2
+        self.speed.x = 1
+        self.speed.y = 1
 
         if "target_points" in self.belief_space["interest_points"]:
             if not "djikstra" in self.belief_space:
@@ -171,8 +177,6 @@ class Ground(Robot):
             else : 
                 #determination de la cellule discrete de la belief base sur laquelle on est:
                 position_actuelle = (int(self.transform.x), int(self.transform.y)) #TODO changer si on decide de varier la taille de la belief map.
-                print(f"pos reelle : {self.transform.x, self.transform.y}")
-                print(f"pos sur la grille : {position_actuelle[0], position_actuelle[1]}")
 
                 # Directions possibles (4-connectées)
                 directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
@@ -184,24 +188,21 @@ class Ground(Robot):
                     # Vérifier si le voisin est valide (pas d'obstacle et a l'inerieur de l'env)
                     if 0 <= voisin[0] < self.belief_space["occupancy_grid"].shape[0] and 0 <= voisin[1] < self.belief_space["occupancy_grid"].shape[1] and self.belief_space["occupancy_grid"][voisin] == 0:
                         voisins.append(voisin)
-                        print(f"voisin :{voisin}")
-                        print(f"value{self.belief_space["djikstra"][voisin]}")
                         
                 # Trouver le voisin avec le coût le plus bas dans la distance_map
                 if voisins:
                     meilleur_voisin = min(voisins, key=lambda v: self.belief_space["djikstra"][v])
                     #meilleur_voisin = (meilleur_voisin[1], meilleur_voisin [0]) #repassage des coords numpy à mes coordonnees d'environment
                     direction_vers_voisin = (meilleur_voisin[0] - position_actuelle[0], meilleur_voisin[1] - position_actuelle[1]) #TODO repasser en coordonnees continues
-                    print(f"direction vector :{direction_vers_voisin}")
+
                     angle = np.arctan2(direction_vers_voisin[1], direction_vers_voisin[0])
                     
-                    print(f"meilleur voisin :{meilleur_voisin}")
-                    print(f"angle :{angle}")
+
                     #Angle to rotate to go in the neighbor direction
                     tfw = (angle - self.transform.w)%(2*np.pi)  #differance of angle
-                    print(f"self.transform.w :{self.transform.w}")
-                    print(f"tfw :{tfw}")
-                    self.speed.w = min(self.max_speed.w, tfw)
+
+                    #self.speed.w = min(self.max_speed.w, tfw) #TODO regérer la limite d'angle
+                    self.speed.w = tfw
 
                     self.transform.w += self.speed.w
                     #2pi modulo
@@ -210,7 +211,7 @@ class Ground(Robot):
                     
                     xmove = self.speed.x * np.cos(self.transform.w)
                     ymove = self.speed.x * np.sin(self.transform.w)
-                    print(xmove, ymove)
+
                     self.translate(xmove, ymove)
 
 
