@@ -14,9 +14,9 @@ SCREEN_WIDTH = 500
 SCREEN_HEIGHT = 500
 BACKGROUND_COLOR = (200, 200, 200)
 
-ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/test_50_50.png"
+ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/test_500_500.png"
 
-NB_GROUND_AGENTS = 10
+NB_GROUND_AGENTS = 1
 
 img = Image.open(ENV_IMAGE_PATH).convert("L")
 
@@ -26,11 +26,11 @@ logging.basicConfig(level=logging.DEBUG)
 def main():
     #env = Environment(background_color= BACKGROUND_COLOR, env_image=img)
 
-    env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img, amount_of_agents_goal=2)
+    env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img, amount_of_agents_goal=1)
 
 
     for i in range(NB_GROUND_AGENTS):
-        env.add_agent(Agents.Ground(env=env))
+        env.add_agent(Agents.Ground(robot_id=len(env.agents)+1, env=env))
         
     
     env.run()

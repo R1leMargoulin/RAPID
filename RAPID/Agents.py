@@ -7,9 +7,11 @@ from .utils import *
 
 import numpy as np
 import random
+from mergedeep import merge
+
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, size, color, transform = (0, 0, 0), max_speed = (2,2,2)):
+    def __init__(self, env:Environment, robot_id:int, size, color, transform = (0, 0, 0), max_speed = (2,2,2)):
         super().__init__()
 
         self.env = env
@@ -33,12 +35,25 @@ class Robot(Sprite):
 
         # inital values
         self.is_active = True
-        self.target = None
-        self.energy = 0
+        #TODO, remettre ces variables plus tard
+        # self.target = None
+        # self.energy = 0
 
         # move agent object on coords
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
+
+
+        self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), -1), "interest_points":{}}
+        if self.env.full_knowledge:
+            self.belief_space["occupancy_grid"] *= 0 #make all cell free
+            for o in self.env.obstacles:
+                self.belief_space["occupancy_grid"][o.rect.centerx][o.rect.centery] = 1 #draw obstacles in the belief space occupation grid
+
+            self.belief_space["interest_points"].update(self.env.interest_points) #take knowledge of the interest points.
+
+
+
 
 
 
@@ -57,11 +72,6 @@ class Robot(Sprite):
         self.random_move_behavior()
         
         screen.blit(self.surf, self.rect)
-
-    def random_move_behavior(self):
-        randx = random.uniform(-2.0,2.0)
-        randy = random.uniform(-2.0,2.0)
-        self.translate( randx, randy)
 
     def translate(self, speed_x, speed_y):
         # slow down agent if it moves faster than it max velocity
@@ -108,40 +118,111 @@ class Robot(Sprite):
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
 
+    def belief_link(self, robot_id, beliefs):
+        """
+        Belief transmission from one agent to another. 
+        Return : 
+        - [False, None] If the beliefs space are the same for the two agents : beliefs are the same.
+        - [True, New belief_space] If the beliefs spaces are not the same, a merge is done on the two beliefs.
+        """
+        if beliefs != self.belief_link:
+            merge(self.belief_space, beliefs)
+            return True, self.belief_space
+        else :
+            return False, None
 
 class Ground(Robot):
-    def __init__(self, env, size = 4, color = (0, 255, 0), transform = (0,0,0), max_speed = (1.0,0.0,0.5)):
-        color = (0, 255, 0)
-        super().__init__(env, size, color, transform=transform, max_speed=max_speed)
+    def __init__(self, env, robot_id, size = 4, color = (0, 255, 0), transform = (0,0,0), max_speed = (1.0,0.0,1.5)):
+        super().__init__(env, robot_id, size, color, transform=transform, max_speed=max_speed)
 
-        self.speed.x = self.max_speed.x
-        self.speed.y = self.max_speed.y
-        self.speed.w = self.max_speed.w
 
 
     def update(self, screen):
-        self.diff_move_random()
+        # self.behavior_diff_move_random()
+        self.behavior_target_djikstra()
         screen.blit(self.surf, self.rect)
 
 
-    def diff_move_random(self):
+    def behavior_diff_move_random(self):
+        #set srobot speed at it's max speed
+        self.speed.x = self.max_speed.x
+        self.speed.y = self.max_speed.y
+
         #random rotation
         self.speed.w = random.uniform(-self.max_speed.w ,self.max_speed.w)
         self.transform.w += self.speed.w
 
         #2pi modulo
         self.transform.w = self.transform.w%(2*np.pi)
-        
+        #TODO refaire ce diff drive dégueu
+        #calculation of the x and y movement depending of the x direction speed and the w orientation.
         xmove = self.speed.x * np.cos(self.transform.w)
         ymove = self.speed.x * np.sin(self.transform.w)
 
         self.translate(xmove, ymove)
 
+    def behavior_target_djikstra(self): #TODO: reparer
+        self.speed.x = 2
+        self.speed.y = 2
+
+        if "target_points" in self.belief_space["interest_points"]:
+            if not "djikstra" in self.belief_space:
+                self.belief_space.update({"djikstra": djikstra(self.belief_space["occupancy_grid"], self.belief_space["interest_points"]["target_points"][0])}) #fonctionne en full knowledge de la map.
+            else : 
+                #determination de la cellule discrete de la belief base sur laquelle on est:
+                position_actuelle = (int(self.transform.x), int(self.transform.y)) #TODO changer si on decide de varier la taille de la belief map.
+                print(f"pos reelle : {self.transform.x, self.transform.y}")
+                print(f"pos sur la grille : {position_actuelle[0], position_actuelle[1]}")
+
+                # Directions possibles (4-connectées)
+                directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+                voisins = []
+
+                for direction in directions: # voisins potentiels
+                    voisin = (position_actuelle[0] + direction[0], position_actuelle[1] + direction[1])
+
+                    # Vérifier si le voisin est valide (pas d'obstacle et a l'inerieur de l'env)
+                    if 0 <= voisin[0] < self.belief_space["occupancy_grid"].shape[0] and 0 <= voisin[1] < self.belief_space["occupancy_grid"].shape[1] and self.belief_space["occupancy_grid"][voisin] == 0:
+                        voisins.append(voisin)
+                        print(f"voisin :{voisin}")
+                        print(f"value{self.belief_space["djikstra"][voisin]}")
+                        
+                # Trouver le voisin avec le coût le plus bas dans la distance_map
+                if voisins:
+                    meilleur_voisin = min(voisins, key=lambda v: self.belief_space["djikstra"][v])
+                    #meilleur_voisin = (meilleur_voisin[1], meilleur_voisin [0]) #repassage des coords numpy à mes coordonnees d'environment
+                    direction_vers_voisin = (meilleur_voisin[0] - position_actuelle[0], meilleur_voisin[1] - position_actuelle[1]) #TODO repasser en coordonnees continues
+                    print(f"direction vector :{direction_vers_voisin}")
+                    angle = np.arctan2(direction_vers_voisin[1], direction_vers_voisin[0])
+                    
+                    print(f"meilleur voisin :{meilleur_voisin}")
+                    print(f"angle :{angle}")
+                    #Angle to rotate to go in the neighbor direction
+                    tfw = (angle - self.transform.w)%(2*np.pi)  #differance of angle
+                    print(f"self.transform.w :{self.transform.w}")
+                    print(f"tfw :{tfw}")
+                    self.speed.w = min(self.max_speed.w, tfw)
+
+                    self.transform.w += self.speed.w
+                    #2pi modulo
+                    self.transform.w = self.transform.w%(2*np.pi)
+                    #self.speed.x = direction_vers_voisin
+                    
+                    xmove = self.speed.x * np.cos(self.transform.w)
+                    ymove = self.speed.x * np.sin(self.transform.w)
+                    print(xmove, ymove)
+                    self.translate(xmove, ymove)
 
 
 
+                
+
+        pass #TODO
+
+    def frontier_search_behavior(self):
+        pass #TODO
 
 class Aerial(Robot):
-    def __init__(self, env, size = 3, color = (0, 0, 255), x=0, y=0):        
-        super().__init__(env, size, color)
+    def __init__(self, env, robot_id, size = 3, color = (0, 0, 255), transform=(0,0,0)):        
+        super().__init__(env, robot_id, size, color, transform=transform)
         self.vmax = 2.0

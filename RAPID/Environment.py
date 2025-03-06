@@ -13,7 +13,7 @@ import time
 
 
 class Environment():
-    def __init__(self, width:int=100, height:int=100, background_color = (11,11,11), caption = f'simulation', env_image:Image.Image = None):
+    def __init__(self, width:int=100, height:int=100, background_color = (11,11,11), caption = f'simulation', env_image:Image.Image = None, communication_level="full", full_knowledge:bool=True):
         """"
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         Params : 
@@ -22,6 +22,11 @@ class Environment():
         - background_color:(int,int,int) = rgb color of the backgroung
         - caption:str = name given to the env
         - env_image:PIL.Image.Image = image computed into environment (overrides the witdh and height)
+        - communication_level:str (default "full") = degree of communication between agents:
+            - "full : Agents can all communicate no matter distance
+            - "range-limited" : communications between robots is limited by a distance radius.
+            - "none" : no communication between agents at all
+        - full_knowledge:bool (default True) = If True, the full environment map will be given to the robot in it's belief space at it's init.
         """
         #env init
         pygame.init()
@@ -34,6 +39,10 @@ class Environment():
 
         self.agents = []
         self.obstacles = []
+        self.interest_points = {}
+
+        self.communication_level = communication_level
+        self.full_knowledge= full_knowledge
         
 
         if(env_image):
@@ -82,8 +91,6 @@ class Environment():
         for o in self.obstacles:
             self.screen.blit(o.image, o.rect)
 
-            
-
     def add_agent(self, agent):
         self.agents.append(agent)
         self.agent_group.add(self.agents[-1])
@@ -94,8 +101,11 @@ class Environment():
         np_img[np_img > 0] = 1
 
         dims = np_img.shape
-        self.width = dims[0]
-        self.height = dims[1]
+        self.width = dims[1]
+        self.height = dims[0]
+        print(f"width : {self.width}")
+        print(f"height : {self.height}")
+
 
         self.screen = pygame.display.set_mode((self.width, self.height))
 
@@ -111,8 +121,6 @@ class Environment():
         sprite.rect = pygame.Rect(coord_x,coord_y, 1,1)
         self.obstacles.append(sprite)
     
-
-
 
 class TargetPointEnvironment(Environment):
     def __init__(self, width = 100, height = 100, background_color=(11, 11, 11), caption=f'simulation_target_point', env_image = None, target_point:tuple[int,int]=None, amount_of_agents_goal=1):
@@ -130,13 +138,13 @@ class TargetPointEnvironment(Environment):
         """
 
         super().__init__(width, height, background_color, caption, env_image)
+        self.interest_points.update({"target_points":[]})
         if target_point :
             self.init_target_point(x=target_point[0], y=target_point[1])
         else : #s'il n'y a pas de target point, on en génère un aléatoirement:
             self.init_target_point(x = randrange(0, self.width), y = randrange(0, self.height))
 
         self.amount_of_agent_goal = amount_of_agents_goal
-
 
     def update(self):
 
@@ -145,7 +153,6 @@ class TargetPointEnvironment(Environment):
         if(self.goal_condition()):
             self.running = False
 
-    
     def init_target_point(self, x, y):
 
         sprite = Sprite()
@@ -158,6 +165,8 @@ class TargetPointEnvironment(Environment):
         while pygame.sprite.spritecollide(self.target_point, self.obstacles_group, False):
             logging.warning("Target point overlaps with an obstacle, reallocating it randomly.")
             self.target_point.rect.center = (randrange(0, self.width), randrange(0, self.height))
+        
+        self.interest_points["target_points"].append((self.target_point.rect.centerx, self.target_point.rect.centery))
 
     def goal_condition(self):
         if len(pygame.sprite.spritecollide(self.target_point, self.agent_group, False)) >= self.amount_of_agent_goal:
