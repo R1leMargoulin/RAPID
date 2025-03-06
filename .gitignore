@@ -2,3 +2,4 @@ images_env/
 *.o
 __pycache__/
 test.py
+experiments/

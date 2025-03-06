@@ -13,7 +13,7 @@ import time
 
 
 class Environment():
-    def __init__(self, width:int=100, height:int=100, background_color = (11,11,11), caption = f'simulation', env_image:Image.Image = None, communication_level="full", full_knowledge:bool=True):
+    def __init__(self, width:int=100, height:int=100, background_color = (200,200,200), caption = f'simulation', env_image:Image.Image = None, communication_level="full", full_knowledge:bool=True, limit_of_steps=None):
         """"
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         Params : 
@@ -43,6 +43,8 @@ class Environment():
 
         self.communication_level = communication_level
         self.full_knowledge= full_knowledge
+
+        self.limit_of_steps = limit_of_steps
         
 
         if(env_image):
@@ -56,6 +58,7 @@ class Environment():
         self.agent_group = pygame.sprite.Group()
 
         pygame.display.set_caption(caption)
+        self.step = 0
         self.running = True
 
         pass
@@ -71,11 +74,13 @@ class Environment():
                     if event.key == K_ESCAPE:
                         self.running = False
             #will update all agents in the self.agents object
+            self.step += 1
             self.update()
             # draw all changes to the screen
             pygame.display.flip()
             self.clock.tick(24)         # wait until next frame (at 60 FPS)
-
+            if self.limit_of_steps !=None and self.step >= self.limit_of_steps:
+                self.running = False
         # Done! Time to quit.
         pygame.quit()
 
@@ -103,12 +108,9 @@ class Environment():
         dims = np_img.shape
         self.width = dims[1]
         self.height = dims[0]
-        print(f"width : {self.width}")
-        print(f"height : {self.height}")
 
 
         self.screen = pygame.display.set_mode((self.width, self.height))
-
         for l in range(len(np_img)) :
             for o in range(len(np_img[l])):
                 if np_img[l][o] == 1:
@@ -123,7 +125,7 @@ class Environment():
     
 
 class TargetPointEnvironment(Environment):
-    def __init__(self, width = 100, height = 100, background_color=(11, 11, 11), caption=f'simulation_target_point', env_image = None, target_point:tuple[int,int]=None, amount_of_agents_goal=1):
+    def __init__(self, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, target_point:tuple[int,int]=None, amount_of_agents_goal=1):
         """"
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         In this Environment, the Agents has to reach a target point in order to complete the mission.
@@ -137,7 +139,7 @@ class TargetPointEnvironment(Environment):
         - amount_of_agents:int (default : 1) : amount of agents that needs to reach the point in order to complete the mission.
         """
 
-        super().__init__(width, height, background_color, caption, env_image)
+        super().__init__(width, height, background_color, caption, env_image, limit_of_steps=limit_of_steps)
         self.interest_points.update({"target_points":[]})
         if target_point :
             self.init_target_point(x=target_point[0], y=target_point[1])

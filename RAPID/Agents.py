@@ -17,6 +17,8 @@ class Robot(Sprite):
 
         self.env = env
 
+        self.robot_id = robot_id
+
         # draw agent
         self.surf = Surface((2*size, 2*size), SRCALPHA, 32)
         circle(self.surf, color, (size, size), size)
@@ -33,6 +35,7 @@ class Robot(Sprite):
         # inital values
         
         #TODO, remettre ces variables plus tard
+        self.total_distance_made = 0.0
         # self.target = None
         # self.energy = 0
 
@@ -70,7 +73,9 @@ class Robot(Sprite):
         screen.blit(self.surf, self.rect)
 
     def translate(self, speed_x, speed_y):
-        # slow down agent if it moves faster than it max velocity
+        #old positions for distance calculation
+        old_tfx = self.transform.x
+        old_tfy = self.transform.y
 
 
         # update position based on delta x/y
@@ -109,6 +114,8 @@ class Robot(Sprite):
         self.transform.x = min(self.transform.x, self.env.screen.get_width())
         self.transform.y = max(self.transform.y, 0)
         self.transform.y = min(self.transform.y, self.env.screen.get_height())
+
+        self.total_distance_made += np.sqrt((self.transform.x - old_tfx)**2 + (self.transform.y - old_tfy)**2)
 
         # update graphics
         self.rect.centerx = int(self.transform.x)
@@ -214,11 +221,6 @@ class Ground(Robot):
 
                     self.translate(xmove, ymove)
 
-
-
-                
-
-        pass #TODO
 
     def frontier_search_behavior(self):
         pass #TODO
