@@ -45,15 +45,23 @@ class Environment():
         self.full_knowledge= full_knowledge
 
         self.limit_of_steps = limit_of_steps
+
+        
         
 
         if(env_image):
+            self.width = env_image.size[0]
+            self.height = env_image.size[1]
+            self.real_occupation_grid = np.zeros((self.width, self.height))
+            
             self.create_env_from_image(env_image)
         else:
+            self.real_occupation_grid = np.zeros((self.width, self.height))
             self.screen = pygame.display.set_mode((self.width, self.height))
 
+        
 
-
+        
         self.obstacles_group = pygame.sprite.Group(self.obstacles)
         self.agent_group = pygame.sprite.Group()
 
@@ -117,11 +125,16 @@ class Environment():
                     self.create_wall(o,l)
 
     def create_wall(self, coord_x, coord_y):
+        self.real_occupation_grid[coord_x][coord_y] = 1
+
         sprite = pygame.sprite.Sprite()
         sprite.image = pygame.Surface((1, 1))
         sprite.image.fill((0, 0, 0))
         sprite.rect = pygame.Rect(coord_x,coord_y, 1,1)
         self.obstacles.append(sprite)
+    
+    def goal_condition(self):
+        pass #abstraite celle la
     
 
 class TargetPointEnvironment(Environment):
@@ -176,3 +189,47 @@ class TargetPointEnvironment(Environment):
             return True
         else:
             return False
+
+class ExplorationEnvironment(Environment):
+    """in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is full of 1"""
+    def __init__(self, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, communication_level="full", full_knowledge = True, limit_of_steps=None):
+        super().__init__(width, height, background_color, caption, env_image, communication_level, full_knowledge, limit_of_steps)
+        #TODO : initier et placer la fog en interest point
+        exp_map = np.zeros((self.width, self.height))
+        self.interest_points.update({"exploration_map":exp_map})
+
+        self.fog_texture = pygame.Surface((1,1))
+        self.fog_texture.fill((100, 100, 100))
+
+        
+
+    def run(self):
+        #remove some fog around agents before launching
+        for agent in self.agents:
+            neighbours = agent.get_neighbors_pixels(distance = 20, stop_at_wall = True, self_inclusion = True)
+            self.explore_cells(neighbours)
+
+        super().run()
+
+    def update(self):
+        super().update()
+        #TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        #Il faut que les agents effacent la fog autours d'eux maintenant.
+        self.draw_fog()
+        pass
+
+
+    def draw_fog(self):
+        unexplored_poses = np.where(self.interest_points["exploration_map"] == 0)
+        for i in range(len(unexplored_poses[0])):
+            self.screen.blit(self.fog_texture, pygame.Rect(unexplored_poses[0][i], unexplored_poses[1][i], 1, 1))
+        pass
+    
+    def goal_condition(self):
+        if (self.interest_points["exploration_map"]==1).all():
+            return True
+        pass #TODO #objectif : plus de fog
+
+    def explore_cells(self, cells):
+        for cell in cells:
+            self.interest_points["exploration_map"][cell[0]][cell[1]] = 1

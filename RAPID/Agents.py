@@ -121,6 +121,44 @@ class Robot(Sprite):
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
 
+    def get_neighbors_pixels(self, distance:int, stop_at_wall = False, self_inclusion = False):
+        todo_queue = [(int(self.transform.x), int(self.transform.y))]
+        next_queue = []
+        neighbors = []
+
+        if self_inclusion:
+            neighbors.append(todo_queue[0])
+
+        for i in range(distance):
+            while len(todo_queue)>0:
+                print("aaaa")
+                for direction in DIRECTIONS:
+                    neighbor = (todo_queue[0][0] + direction[0], todo_queue[0][1] + direction[1])
+                    #if it's already in neighbors, we don't want it:
+                    if (neighbor in neighbors):
+                        pass
+                    else:
+                        #if it's out of environment, we won't take it
+                        if (0 > neighbor[0] or  neighbor[0] > self.env.width) or (0 > neighbor[1] or  neighbor[1] > self.env.width):
+                            pass
+                        else:
+                            neighbors.append(neighbor) #we add the cell to neighbors
+                            #if we have to stop at a wall and the cells corresponds to the one of a wall, we stop the propagation.
+                            if stop_at_wall and (self.env.real_occupation_grid[neighbor[0]][neighbor[1]]==1):
+                                pass
+                            else:
+                                next_queue.append(neighbor)
+                todo_queue.pop(0)
+            #then for the next distance, the next_queue becomes the todo_queue and we empty the next queue
+            todo_queue = next_queue
+            next_queue = []
+        
+        print(f"neighbors {distance}:{neighbors}")
+
+        return neighbors
+            
+
+
     def belief_transfer(self, robot_id, beliefs): #TODO, implementer le transfert des beliefs plus tard.
         """
         Belief transmission from one agent to another. 

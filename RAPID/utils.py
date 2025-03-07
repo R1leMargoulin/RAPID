@@ -14,7 +14,7 @@ class Transform2d():
                 self.y = y
                 self.w = w
 
-
+DIRECTIONS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 
 def djikstra(occupancy_grid:np.ndarray, target_coord:tuple[int,int]):
     # Dimensions of the occupancy grid
@@ -27,15 +27,12 @@ def djikstra(occupancy_grid:np.ndarray, target_coord:tuple[int,int]):
     queue = [target_coord]
     djikstra[target_coord] = 0
 
-    # Directions for wave propagation (4-connected grid)
-    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-
     while queue:
         current = queue.pop(0)  # Pop from the front of the list
         current_distance = djikstra[current]
 
         # Explore neighbors
-        for direction in directions:
+        for direction in DIRECTIONS:
             neighbor = (current[0] + direction[0], current[1] + direction[1])
 
             # Check if the neighbor is within bounds and not an obstacle
