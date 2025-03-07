@@ -131,7 +131,6 @@ class Robot(Sprite):
 
         for i in range(distance):
             while len(todo_queue)>0:
-                print("aaaa")
                 for direction in DIRECTIONS:
                     neighbor = (todo_queue[0][0] + direction[0], todo_queue[0][1] + direction[1])
                     #if it's already in neighbors, we don't want it:
@@ -139,7 +138,7 @@ class Robot(Sprite):
                         pass
                     else:
                         #if it's out of environment, we won't take it
-                        if (0 > neighbor[0] or  neighbor[0] > self.env.width) or (0 > neighbor[1] or  neighbor[1] > self.env.width):
+                        if (0 > neighbor[0] or  neighbor[0] > self.env.width -1) or (0 > neighbor[1] or  neighbor[1] > self.env.width -1):
                             pass
                         else:
                             neighbors.append(neighbor) #we add the cell to neighbors
@@ -152,8 +151,6 @@ class Robot(Sprite):
             #then for the next distance, the next_queue becomes the todo_queue and we empty the next queue
             todo_queue = next_queue
             next_queue = []
-        
-        print(f"neighbors {distance}:{neighbors}")
 
         return neighbors
             
