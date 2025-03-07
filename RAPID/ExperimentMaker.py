@@ -108,7 +108,7 @@ class ExperimentMaker():
                     color = None
 
                 if "init_transform" in self.agent_groups[agent_type]["parameters"]:
-                    init_transform = self.agent_groups[agent_type]["parameters"]["init_transform"]
+                    pass
                 else: 
                     init_transform = None
                 
@@ -123,6 +123,7 @@ class ExperimentMaker():
 
 
             for agent in range(self.agent_groups[agent_type]["amount"]): #TODO peut etre mettre ca dan une fonction add_agents a partir des agents
+                init_transform = self.agent_groups[agent_type]["parameters"]["init_transform"]
                 if init_transform == "random":
                     init_transform = (random.randrange(0,self.env.width), random.randrange(0,self.env.height), random.uniform(0, 2*3.14))
 

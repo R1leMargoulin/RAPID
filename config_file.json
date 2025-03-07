@@ -1,6 +1,6 @@
 {
-    "name":"target_point_Random_Lents_and_rapides", 
-    "env_image":"/home/erwan/Documents/tests_simulations/RAPID/images_env/test_500_500.png",
+    "name":"demo_ap_djikstra", 
+    "env_image":"/home/erwan/Documents/tests_simulations/RAPID/images_env/test_demo.png",
     "env_size":[200,200],
     "env_type":"TargetPointEnvironment",
     "env_params":{
@@ -16,20 +16,10 @@
                 "max_speed": [1,0,1],
                 "behavior_to_use": "target_djikstra"
             },
-            "amount":2
-        },
-        "random_ground_Rapides":{
-            "type":"Ground",
-            "parameters":{
-                "color":[0, 150, 150],
-                "init_transform":"random",
-                "max_speed": [2,0,1],
-                "behavior_to_use": "target_djikstra"
-            },
-            "amount":2
+            "amount":5
         }
     },
     "nb_simulations":10,
     "result_path":"./experiments/",
-    "limit_of_steps":1000
+    "limit_of_steps":200
 }
