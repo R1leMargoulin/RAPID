@@ -17,7 +17,7 @@ BACKGROUND_COLOR = (200, 200, 200)
 
 ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/test_500_500.png"
 
-NB_GROUND_AGENTS = 5
+NB_GROUND_AGENTS = 10
 
 img = Image.open(ENV_IMAGE_PATH).convert("L")
 
@@ -39,7 +39,7 @@ def main():
                                     env, 
                                     robot_id=len(env.agents)+1, 
                                     init_transform=init_pos,
-                                    max_speed=(1,0,0.5),
+                                    max_speed=(2,0,0.5),
                                     behavior_to_use="random"
                                 ))
         

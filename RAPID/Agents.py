@@ -12,7 +12,7 @@ from mergedeep import merge
 
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2)):#TODO : commenter
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20):#TODO : commenter
         super().__init__()
 
         self.env = env
@@ -31,6 +31,8 @@ class Robot(Sprite):
 
         # initial position
         self.transform = Transform2d(init_transform[0], init_transform[1], init_transform[2])
+
+        self.vision_range = vision_range
 
         # inital values
         
@@ -121,7 +123,21 @@ class Robot(Sprite):
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
 
-    def get_neighbors_pixels(self, distance:int, stop_at_wall = False, self_inclusion = False):
+    def sense(self):
+        #TODO maybe add interest points.
+        #first, get neighbors in order to see the unseen ones.
+        neighbors = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
+        for n in neighbors:
+            self.behavior_space["occupancy_grid"][n[0]][n[1]] = self.env.real_occupation_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
+
+    def get_neighbors_pixels(self, distance:int, stop_at_wall = False, self_inclusion = True):
+        """
+        get neighbors around the agents:\\
+        Params:\\
+        - distance:int : until what distance cells are considered as neighbors
+        - stop at walls:bool (default False), cells behind a wall are considered as neighbors?
+        - self_inclusion: bool (default:True), do we include the cell the agent is on?.
+        """
         todo_queue = [(int(self.transform.x), int(self.transform.y))]
         next_queue = []
         neighbors = []
@@ -154,8 +170,6 @@ class Robot(Sprite):
 
         return neighbors
             
-
-
     def belief_transfer(self, robot_id, beliefs): #TODO, implementer le transfert des beliefs plus tard.
         """
         Belief transmission from one agent to another. 

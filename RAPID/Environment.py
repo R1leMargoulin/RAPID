@@ -207,13 +207,15 @@ class ExplorationEnvironment(Environment):
         #remove some fog around agents before launching
         for agent in self.agents:
             neighbours = agent.get_neighbors_pixels(distance = 20, stop_at_wall = True, self_inclusion = True)
-            self.explore_cells(neighbours)
-
+            self.mark_explored_cells(neighbours)
         super().run()
 
     def update(self):
         super().update()
         #TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        for agent in self.agents:
+            neighbours = agent.get_neighbors_pixels(distance = agent.vision_range, stop_at_wall = True, self_inclusion = True)
+            self.mark_explored_cells(neighbours)
         #Il faut que les agents effacent la fog autours d'eux maintenant.
         self.draw_fog()
         pass
@@ -224,12 +226,13 @@ class ExplorationEnvironment(Environment):
         for i in range(len(unexplored_poses[0])):
             self.screen.blit(self.fog_texture, pygame.Rect(unexplored_poses[0][i], unexplored_poses[1][i], 1, 1))
         pass
+
     
     def goal_condition(self):
         if (self.interest_points["exploration_map"]==1).all():
             return True
         pass #TODO #objectif : plus de fog
 
-    def explore_cells(self, cells):
+    def mark_explored_cells(self, cells):
         for cell in cells:
-            self.interest_points["exploration_map"][cell[0]][cell[1]] = 1
+            self.interest_points["exploration_map"][cell[0]-1][cell[1]-1] = 1
