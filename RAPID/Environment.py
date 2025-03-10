@@ -104,6 +104,9 @@ class Environment():
         for o in self.obstacles:
             self.screen.blit(o.image, o.rect)
 
+        if(self.goal_condition()):
+            self.running = False
+
     def add_agent(self, agent):
         self.agents.append(agent)
         self.agent_group.add(self.agents[-1])
@@ -134,7 +137,7 @@ class Environment():
         self.obstacles.append(sprite)
     
     def goal_condition(self):
-        pass #abstraite celle la
+        return False
     
 
 class TargetPointEnvironment(Environment):
@@ -165,8 +168,6 @@ class TargetPointEnvironment(Environment):
 
         super().update()
         self.screen.blit(self.target_point.image, self.target_point.rect)
-        if(self.goal_condition()):
-            self.running = False
 
     def init_target_point(self, x, y):
 
@@ -197,6 +198,8 @@ class ExplorationEnvironment(Environment):
         #TODO : initier et placer la fog en interest point
         exp_map = np.zeros((self.width, self.height))
         self.interest_points.update({"exploration_map":exp_map})
+        #on va pas mettre de fog sur les murs parce que la vision ne les traverse pas, si on a des murs plus épais que 2, alors il y aura toujours de la fog.
+        self.interest_points["exploration_map"] += self.real_occupation_grid
 
         self.fog_texture = pygame.Surface((1,1))
         self.fog_texture.fill((100, 100, 100))
@@ -229,8 +232,12 @@ class ExplorationEnvironment(Environment):
 
     
     def goal_condition(self):
-        if (self.interest_points["exploration_map"]==1).all():
+        # print(np.count_nonzero(self.interest_points["exploration_map"]==1))
+        # print(self.width*self.height)
+        # print(np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height))
+        if ((np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height))>= 0.97):
             return True
+        
         pass #TODO #objectif : plus de fog
 
     def mark_explored_cells(self, cells):
