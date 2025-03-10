@@ -15,9 +15,9 @@ SCREEN_WIDTH = 500
 SCREEN_HEIGHT = 500
 BACKGROUND_COLOR = (200, 200, 200)
 
-ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/test_50_50.png"
+ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/test_demo.png"
 
-NB_GROUND_AGENTS = 3
+NB_GROUND_AGENTS = 20
 
 img = Image.open(ENV_IMAGE_PATH).convert("L")
 

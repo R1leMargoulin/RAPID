@@ -13,8 +13,8 @@ import time
 
 
 class Environment():
-    def __init__(self, width:int=100, height:int=100, background_color = (200,200,200), caption = f'simulation', env_image:Image.Image = None, communication_level="full", full_knowledge:bool=True, limit_of_steps=None):
-        """"
+    def __init__(self, width:int=100, height:int=100, background_color = (200,200,200), caption = f'simulation', env_image:Image.Image = None, full_knowledge:bool=True, limit_of_steps=None):
+        """
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         Params : 
         - width:int (default 100) = width of the environment
@@ -22,10 +22,6 @@ class Environment():
         - background_color:(int,int,int) = rgb color of the backgroung
         - caption:str = name given to the env
         - env_image:PIL.Image.Image = image computed into environment (overrides the witdh and height)
-        - communication_level:str (default "full") = degree of communication between agents:
-            - "full : Agents can all communicate no matter distance
-            - "range-limited" : communications between robots is limited by a distance radius.
-            - "none" : no communication between agents at all
         - full_knowledge:bool (default True) = If True, the full environment map will be given to the robot in it's belief space at it's init.
         """
         #env init
@@ -40,14 +36,12 @@ class Environment():
         self.agents = []
         self.obstacles = []
         self.interest_points = {}
+        self.agents_tools = {}
 
-        self.communication_level = communication_level
         self.full_knowledge= full_knowledge
 
         self.limit_of_steps = limit_of_steps
 
-        
-        
 
         if(env_image):
             self.width = env_image.size[0]
@@ -192,9 +186,22 @@ class TargetPointEnvironment(Environment):
             return False
 
 class ExplorationEnvironment(Environment):
-    """in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is full of 1"""
-    def __init__(self, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, communication_level="full", full_knowledge = True, limit_of_steps=None):
-        super().__init__(width, height, background_color, caption, env_image, communication_level, full_knowledge, limit_of_steps)
+    def __init__(self, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = True, limit_of_steps=None):
+        """
+        ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
+        in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 97% of 1\\
+        
+        Params :
+        
+        - width:int (default 100) = width of the environment
+        - heigth:int (default 100) = height of the environment
+        - background_color:(int,int,int) = rgb color of the backgroung
+        - caption:str = name given to the env
+        - env_image:PIL.Image.Image = image computed into environment (overrides the witdh and height)
+        - full_knowledge:bool (default True) = If True, the full environment map will be given to the robot in it's belief space at it's init.
+        - limit_of_steps:int = steps limitation representing a time limit to explore the environment if needed.
+        """
+        super().__init__(width, height, background_color, caption, env_image, full_knowledge, limit_of_steps)
         #TODO : initier et placer la fog en interest point
         exp_map = np.zeros((self.width, self.height))
         self.interest_points.update({"exploration_map":exp_map})
@@ -203,6 +210,8 @@ class ExplorationEnvironment(Environment):
 
         self.fog_texture = pygame.Surface((1,1))
         self.fog_texture.fill((100, 100, 100))
+
+        self.exploration_completion = 0.0
 
         
 
@@ -235,10 +244,11 @@ class ExplorationEnvironment(Environment):
         # print(np.count_nonzero(self.interest_points["exploration_map"]==1))
         # print(self.width*self.height)
         # print(np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height))
-        if ((np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height))>= 0.97):
+        self.exploration_completion = np.count_nonzero((self.interest_points["exploration_map"]==1)/(self.width*self.height))
+        if (self.exploration_completion >= 0.97):
             return True
-        
-        pass #TODO #objectif : plus de fog
+        else:
+            return False
 
     def mark_explored_cells(self, cells):
         for cell in cells:

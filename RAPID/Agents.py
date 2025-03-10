@@ -10,13 +10,31 @@ import random
 import logging
 from mergedeep import merge
 
+COMMUNICATION_MODE_LIST = ["blackboard", "limited"]
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20):#TODO : commenter
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_mode="blackboard", communication_range = 40):#TODO : commenter
+        """
+        Robot class are our agents representing robots.
+
+        Params:
+        - env:Environment = RAPID environment the robot is in
+        - robot_id:int = identifier of the robot
+        - size:int = size of the robot
+        - init transform : 2D transform of the robot:
+            - x:float = x position
+            - y:float = y position
+            - w:float = w rotation in radian around the z axis (yaw).
+        - max speed: 2d transform vector, representing the maximum speeds for all components.
+        - vision range:int = distance a robot can sense
+        - communication_mode:str = method of communication in ["blackboard", "limited"] :
+            - "blackboard" : all robots share a blackboard in the environment, the knowledge is centralized on this blackboard
+            - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
+        - communication_range:int =  when communication is limited, the robot can share information within robots in the communication radius.
+        """
         super().__init__()
-
+        # inital values
         self.env = env
-
         self.robot_id = robot_id
 
         # draw agent
@@ -24,19 +42,21 @@ class Robot(Sprite):
         circle(self.surf, color, (size, size), size)
         self.rect = self.surf.get_rect()
 
-        # initial velocity
+        # Geometry
         self.speed = Transform2d(0,0,0)
-        # max speed
         self.max_speed = Transform2d(max_speed[0], max_speed[1], max_speed[2] )
-
-        # initial position
         self.transform = Transform2d(init_transform[0], init_transform[1], init_transform[2])
 
+        #vision
         self.vision_range = vision_range
 
-        # inital values
+        #communication
+        self.communication_mode = communication_mode
+        self.communication_range = communication_range
+
         
         #TODO, remettre ces variables plus tard
+        #Metrics
         self.total_distance_made = 0.0
         # self.target = None
         # self.energy = 0
@@ -47,13 +67,31 @@ class Robot(Sprite):
 
         self.behavior_space = []
 
-        self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), -1), "interest_points":{}}
-        if self.env.full_knowledge:
-            self.belief_space["occupancy_grid"] *= 0 #make all cell free
-            for o in self.env.obstacles:
-                self.belief_space["occupancy_grid"][o.rect.centerx][o.rect.centery] = 1 #draw obstacles in the belief space occupation grid
+        if communication_mode not in COMMUNICATION_MODE_LIST:
+            logging.error(f"unknown communication mode for robot {self.robot_id}.\n list of available communication mode : {COMMUNICATION_MODE_LIST}")
+            exit()
 
-            self.belief_space["interest_points"].update(self.env.interest_points) #take knowledge of the interest points.
+        if self.communication_mode == "blackboard":
+            if "blackboard" in self.env.agents_tools:
+                pass
+            else:
+                self.env.agents_tools["blackboard"]={}
+                self.env.agents_tools["blackboard"]["occupancy_grid"]=np.full((self.env.width, env.height), -1)
+                if self.env.full_knowledge:
+                    self.env.agents_tools["blackboard"]["occupancy_grid"] *= 0 #make all cell free
+                    for o in self.env.obstacles:
+                        self.env.agents_tools["blackboard"]["occupancy_grid"][o.rect.centerx][o.rect.centery] = 1 #draw obstacles in the belief space occupation grid
+
+                    self.env.agents_tools["blackboard"].update(self.env.interest_points) #take knowledge of the interest points.
+
+        elif self.communication_mode == "limited":
+            self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), -1), "interest_points":{}}
+            if self.env.full_knowledge:
+                self.belief_space["occupancy_grid"] *= 0 #make all cell free
+                for o in self.env.obstacles:
+                    self.belief_space["occupancy_grid"][o.rect.centerx][o.rect.centery] = 1 #draw obstacles in the belief space occupation grid
+
+                self.belief_space["interest_points"].update(self.env.interest_points) #take knowledge of the interest points.
         
         #Ready!
         self.is_active = True
@@ -127,8 +165,13 @@ class Robot(Sprite):
         #TODO maybe add interest points.
         #first, get neighbors in order to see the unseen ones.
         neighbors = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
-        for n in neighbors:
-            self.behavior_space["occupancy_grid"][n[0]][n[1]] = self.env.real_occupation_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
+        if self.communication_mode == "blackboard":
+            for n in neighbors:
+                self.env.agents_tools["blackboard"]["occupancy_grid"][n[0]][n[1]] = self.env.real_occupation_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
+
+        elif self.communication_mode == "limited":
+            for n in neighbors:
+                self.belief_space["occupancy_grid"][n[0]][n[1]] = self.env.real_occupation_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
 
     def get_neighbors_pixels(self, distance:int, stop_at_wall = False, self_inclusion = True):
         """
@@ -184,8 +227,8 @@ class Robot(Sprite):
             return False, None
 
 class Ground(Robot):
-    def __init__(self, env, robot_id, size = 4, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5), behavior_to_use = "random"):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed)
+    def __init__(self, env, robot_id, size = 4, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_mode="blackboard", communication_range = 40, behavior_to_use = "random"):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, communication_mode=communication_mode, communication_range=communication_range)
         self.behavior_space = ["random", "target_djikstra"]
 
         if not( behavior_to_use in self.behavior_space) :
@@ -223,7 +266,7 @@ class Ground(Robot):
 
         self.translate(xmove, ymove)
 
-    def behavior_target_djikstra(self): #TODO: reparer
+    def behavior_target_djikstra(self): #TODO: voir en blackboard aussi.
         self.speed.x = 1
         self.speed.y = 1
 
