@@ -13,7 +13,7 @@ from mergedeep import merge
 COMMUNICATION_MODE_LIST = ["blackboard", "limited"]
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_mode="blackboard", communication_range = 40):#TODO : commenter
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_mode="blackboard", communication_range = 40):#TODO rendre abstraite
         """
         Robot class are our agents representing robots.
 
@@ -54,11 +54,13 @@ class Robot(Sprite):
         self.communication_mode = communication_mode
         self.communication_range = communication_range
 
-        
+        self.target = None
+        self.path_to_target = None
+
         #TODO, remettre ces variables plus tard
         #Metrics
         self.total_distance_made = 0.0
-        # self.target = None
+        
         # self.energy = 0
 
         # move agent object on coords
@@ -161,11 +163,15 @@ class Robot(Sprite):
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
 
+    def navigate_through_target_path(self): #TODO rendre abstraite
+        pass
+
     def sense(self):
         #TODO maybe add interest points.
         #first, get neighbors in order to see the unseen ones.
         neighbors = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
         if self.communication_mode == "blackboard":
+            print("BB updated")
             for n in neighbors:
                 self.env.agents_tools["blackboard"]["occupancy_grid"][n[0]][n[1]] = self.env.real_occupation_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
 
@@ -229,7 +235,7 @@ class Robot(Sprite):
 class Ground(Robot):
     def __init__(self, env, robot_id, size = 4, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_mode="blackboard", communication_range = 40, behavior_to_use = "random"):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, communication_mode=communication_mode, communication_range=communication_range)
-        self.behavior_space = ["random", "target_djikstra"]
+        self.behavior_space = ["random", "target_djikstra", "nearest_frontier"]
 
         if not( behavior_to_use in self.behavior_space) :
             logging.error(f"Ground robot:init -> behavior_to_use not in the behavior space.\n the behavior should be in {self.behavior_space}")
@@ -245,6 +251,8 @@ class Ground(Robot):
                 self.behavior_diff_move_random()
             case "target_djikstra":
                 self.behavior_target_djikstra()
+            case "nearest_frontier":
+                self.nearest_frontier_search_behavior()
 
         screen.blit(self.surf, self.rect)
 
@@ -313,10 +321,84 @@ class Ground(Robot):
 
                     self.translate(xmove, ymove)
 
+    def nearest_frontier_search_behavior(self):
+        """
+        compute a greedy nearest frontier algorithm with an A* path search to the nearest frontier for each agent.
+        """
+        self.sense()#first of all sense the env.
 
-    def frontier_search_behavior(self):
-        pass #TODO
+        if self.communication_mode == "blackboard":
+            # if "frontiers" in self.env.agents_tools["blackboard"]:
+            #     pass
+            # else:
+            #     self.env.agents_tools["blackboard"]["frontiers"]= []
+            if np.any(self.target):#si on a une target
+                if self.path_to_target: #If we have a path to our target, we continue this path.
+                    self.navigate_through_target_path()
+                    pass
+                else: #if we don't have any path, then compute it with our target
+                    self.path_to_target = a_star_search(self.env.agents_tools["blackboard"]["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
 
+            else: #sinon on va chercher les frontières.
+                print("aaa")
+                #frontier detection from BB
+                frontiers = find_frontier_cells(self.env.agents_tools["blackboard"]["occupancy_grid"]) #from utils
+                #then we take the closest one.
+                distance = np.inf
+                for f in frontiers:
+                    if euclidian_distance((self.transform.x, self.transform.y), (f[0], f[1])) < distance :
+                        distance = euclidian_distance((self.transform.x, self.transform.y), (f[0], f[1]))
+                        self.target = tuple(f.tolist()) #set the frontier as new target
+
+        elif self.communication_mode =="limited:":
+            pass #TODO
+            
+
+    def navigate_through_target_path(self):
+        #we should be nearby the first point of the path, else we delete it and we'll compute an other one:
+        if euclidian_distance((int(self.transform.x), int(self.transform.y)), (self.path_to_target[0][0], self.path_to_target[0][1])) <= 2:
+            print("---")
+            print(f"target{self.target}")
+            print(f"path : {self.path_to_target}")
+            
+            print(f"cond : {self.path_to_target[0] == self.target}")
+            print(f"tf:{self.transform.x},{self.transform.y}")
+            if self.path_to_target[0] == self.target:
+                print("test")
+                
+                self.target = None
+                self.path_to_target = None
+            else:
+                self.path_to_target.pop(0)
+                waypoint = self.path_to_target[0]
+
+                direction = (waypoint[0] - int(self.transform.x), waypoint[1] - int(self.transform.y)) #TODO repasser en coordonnees continues
+
+                angle = np.arctan2(direction[1], direction[0])
+                
+                #Angle to rotate to go in the neighbor direction
+                tfw = (angle - self.transform.w)%(2*np.pi)  #differance of angle
+
+                #self.speed.w = min(self.max_speed.w, tfw) #TODO regérer la limite d'angle
+                self.speed.w = tfw
+
+                self.transform.w += self.speed.w
+                #2pi modulo
+                self.transform.w = self.transform.w%(2*np.pi)
+                #self.speed.x = direction_vers_voisin
+
+                #TODO regler la speed X
+                self.speed.x = min(euclidian_distance((0,0), direction), self.max_speed.x)
+                
+                xmove = self.speed.x * np.cos(self.transform.w)
+                ymove = self.speed.x * np.sin(self.transform.w)
+
+                self.translate(xmove, ymove)
+
+                pass
+        else:
+            #Path not accurate.
+            self.path_to_target = None
 class Aerial(Robot):
     def __init__(self, env, robot_id, size = 3, color = (0, 0, 255), transform=(0,0,0)):        
         super().__init__(env, robot_id, size, color, transform=transform)
