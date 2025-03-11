@@ -15,9 +15,9 @@ SCREEN_WIDTH = 200
 SCREEN_HEIGHT = 200
 BACKGROUND_COLOR = (200, 200, 200)
 
-ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/test_200_200.png"
+ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/test.png"
 
-NB_GROUND_AGENTS = 5
+NB_GROUND_AGENTS = 2
 
 img = Image.open(ENV_IMAGE_PATH).convert("L")
 
@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.DEBUG)
 def main():
     #env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, background_color= BACKGROUND_COLOR, full_knowledge=False)
     #env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img, amount_of_agents_goal=2)
-    env = ExplorationEnvironment(background_color= BACKGROUND_COLOR, env_image=img, full_knowledge=False)
+    env = ExplorationEnvironment(render= True, background_color= BACKGROUND_COLOR, env_image=img, full_knowledge=False)
 
 
     for i in range(NB_GROUND_AGENTS):

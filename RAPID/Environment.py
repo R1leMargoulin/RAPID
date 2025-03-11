@@ -1,3 +1,5 @@
+import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
 from pygame.sprite import Sprite
 from pygame.locals import (K_ESCAPE, KEYDOWN)
@@ -13,7 +15,7 @@ import time
 
 
 class Environment():
-    def __init__(self, width:int=100, height:int=100, background_color = (200,200,200), caption = f'simulation', env_image:Image.Image = None, full_knowledge:bool=True, limit_of_steps=None):
+    def __init__(self, render = True, width:int=100, height:int=100, background_color = (200,200,200), caption = f'simulation', env_image:Image.Image = None, full_knowledge:bool=True, limit_of_steps=None):
         """
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         Params : 
@@ -24,8 +26,11 @@ class Environment():
         - env_image:PIL.Image.Image = image computed into environment (overrides the witdh and height)
         - full_knowledge:bool (default True) = If True, the full environment map will be given to the robot in it's belief space at it's init.
         """
-        #env init
+        self.render = render
+
         pygame.init()
+
+        
         self.clock = pygame.time.Clock()
         self.start_time = 0
 
@@ -51,7 +56,10 @@ class Environment():
             self.create_env_from_image(env_image)
         else:
             self.real_occupation_grid = np.zeros((self.width, self.height))
-            self.screen = pygame.display.set_mode((self.width, self.height))
+            if self.render:
+                self.screen = pygame.display.set_mode((self.width, self.height))
+            else:
+                self.screen = None
 
         
 
@@ -59,7 +67,9 @@ class Environment():
         self.obstacles_group = pygame.sprite.Group(self.obstacles)
         self.agent_group = pygame.sprite.Group()
 
-        pygame.display.set_caption(caption)
+        if self.render:
+            pygame.display.set_caption(caption)
+
         self.step = 0
         self.running = True
 
@@ -78,27 +88,37 @@ class Environment():
             #will update all agents in the self.agents object
             self.step += 1
             self.update()
-            # draw all changes to the screen
-            pygame.display.flip()
+
+            if self.render:
+                # draw all changes to the screen
+                pygame.display.flip()
             #self.clock.tick(24)         # wait until next frame (at 60 FPS)
             if self.limit_of_steps !=None and self.step >= self.limit_of_steps:
+                print(f"goal not reach in the limited number of steps. srop at {self.step}")
                 self.running = False
-        # Done! Time to quit.
+            
+            print(f"step : {self.step}", end="\r")
+        
+
+
         pygame.quit()
 
     def update(self):
         """
         will update all agents in the self.agents object
         """
-        self.screen.fill(self.background_color)
+        if self.render:
+            self.screen.fill(self.background_color)
 
         for a in self.agents:
             a.update(self.screen)
 
-        for o in self.obstacles:
-            self.screen.blit(o.image, o.rect)
+        if self.render:
+            for o in self.obstacles:
+                self.screen.blit(o.image, o.rect)
 
         if(self.goal_condition()):
+            print(f"Goal reached in {self.step} steps!")
             self.running = False
 
     def add_agent(self, agent):
@@ -108,14 +128,16 @@ class Environment():
     def create_env_from_image(self, img):
         np_img = np.array(img)
         np_img = ~np_img  # invert black and white cause (255 will be white, but we want our obstacle to be 1 and free cell be 0)
-        np_img[np_img > 0] = 1
+        np_img[np_img > 0] = 1 #all non white cells are considered as obstacles.
 
         dims = np_img.shape
         self.width = dims[1]
         self.height = dims[0]
 
-
-        self.screen = pygame.display.set_mode((self.width, self.height))
+        if self.render:
+            self.screen = pygame.display.set_mode((self.width, self.height))
+        else:
+            self.screen = None
         for l in range(len(np_img)) :
             for o in range(len(np_img[l])):
                 if np_img[l][o] == 1:
@@ -135,7 +157,7 @@ class Environment():
     
 
 class TargetPointEnvironment(Environment):
-    def __init__(self, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, target_point:tuple[int,int]=None, amount_of_agents_goal=1):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, target_point:tuple[int,int]=None, amount_of_agents_goal=1):
         """"
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         In this Environment, the Agents has to reach a target point in order to complete the mission.
@@ -149,7 +171,7 @@ class TargetPointEnvironment(Environment):
         - amount_of_agents:int (default : 1) : amount of agents that needs to reach the point in order to complete the mission.
         """
 
-        super().__init__(width, height, background_color, caption, env_image, limit_of_steps=limit_of_steps)
+        super().__init__(render, width, height, background_color, caption, env_image, limit_of_steps=limit_of_steps)
         self.interest_points.update({"target_points":[]})
         if target_point :
             self.init_target_point(x=target_point[0], y=target_point[1])
@@ -186,10 +208,10 @@ class TargetPointEnvironment(Environment):
             return False
 
 class ExplorationEnvironment(Environment):
-    def __init__(self, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = True, limit_of_steps=None):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = True, limit_of_steps=None):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
-        in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 97% of 1\\
+        in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
         
         Params :
         
@@ -201,7 +223,7 @@ class ExplorationEnvironment(Environment):
         - full_knowledge:bool (default True) = If True, the full environment map will be given to the robot in it's belief space at it's init.
         - limit_of_steps:int = steps limitation representing a time limit to explore the environment if needed.
         """
-        super().__init__(width, height, background_color, caption, env_image, full_knowledge, limit_of_steps)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps)
         #TODO : initier et placer la fog en interest point
         exp_map = np.zeros((self.width, self.height))
         self.interest_points.update({"exploration_map":exp_map})
@@ -229,7 +251,8 @@ class ExplorationEnvironment(Environment):
             neighbours = agent.get_neighbors_pixels(distance = agent.vision_range, stop_at_wall = True, self_inclusion = True)
             self.mark_explored_cells(neighbours)
         #Il faut que les agents effacent la fog autours d'eux maintenant.
-        self.draw_fog()
+        if self.render:
+            self.draw_fog()
         pass
 
 
@@ -249,7 +272,7 @@ class ExplorationEnvironment(Environment):
         # print(f"COMPLETION : {self.exploration_completion}")
         # print(f"BB completion : {np.count_nonzero(self.agents_tools["blackboard"]["occupancy_grid"]!=-1)/(self.width*self.height)}")
         # print(self.exploration_completion)
-        if (self.exploration_completion >= 0.97):
+        if (self.exploration_completion >= 0.99):
             return True
         else:
             return False

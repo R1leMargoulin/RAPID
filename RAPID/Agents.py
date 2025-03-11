@@ -8,7 +8,7 @@ from .utils import *
 import numpy as np
 import random
 import logging
-from mergedeep import merge
+# from mergedeep import merge
 
 COMMUNICATION_MODE_LIST = ["blackboard", "limited"]
 
@@ -99,20 +99,8 @@ class Robot(Sprite):
         self.is_active = True
 
     def update(self, screen):
-
-        # we can't move, just update the screen
-        if self.vmax == 0:
+        if self.env.render:
             screen.blit(self.surf, self.rect)
-            return
-
-        # eat the target if close enough
-        if self.target:
-            #squared_dist = (self.x - self.target.x) ** 2 + (self.y - self.target.y) ** 2
-            pass
-
-        self.random_move_behavior()
-        
-        screen.blit(self.surf, self.rect)
 
     def translate(self, speed_x, speed_y):
         #old positions for distance calculation
@@ -153,9 +141,9 @@ class Robot(Sprite):
         
         # ensure it stays within the screen window
         self.transform.x = max(self.transform.x, 0)
-        self.transform.x = min(self.transform.x, self.env.screen.get_width())
+        self.transform.x = min(self.transform.x, self.env.width)
         self.transform.y = max(self.transform.y, 0)
-        self.transform.y = min(self.transform.y, self.env.screen.get_height())
+        self.transform.y = min(self.transform.y, self.env.height)
 
         self.total_distance_made += np.sqrt((self.transform.x - old_tfx)**2 + (self.transform.y - old_tfy)**2)
 
@@ -202,7 +190,7 @@ class Robot(Sprite):
                         pass
                     else:
                         #if it's out of environment, we won't take it
-                        if (0 > neighbor[0] or  neighbor[0] > self.env.width -1) or (0 > neighbor[1] or  neighbor[1] > self.env.width -1):
+                        if (0 > neighbor[0] or  neighbor[0] > self.env.width -1) or (0 > neighbor[1] or  neighbor[1] > self.env.height -1):
                             pass
                         else:
                             neighbors.append(neighbor) #we add the cell to neighbors
@@ -226,7 +214,7 @@ class Robot(Sprite):
         - [True, New belief_space] If the beliefs spaces are not the same, a merge is done on the two beliefs.
         """
         if beliefs != self.belief_link:
-            merge(self.belief_space, beliefs)
+            # merge(self.belief_space, beliefs)
             return True, self.belief_space
         else :
             return False, None
@@ -252,8 +240,7 @@ class Ground(Robot):
                 self.behavior_target_djikstra()
             case "nearest_frontier":
                 self.nearest_frontier_search_behavior()
-
-        screen.blit(self.surf, self.rect)
+        super().update(screen)
 
     def behavior_diff_move_random(self):
         #set srobot speed at it's max speed
@@ -352,7 +339,6 @@ class Ground(Robot):
         elif self.communication_mode =="limited:":
             pass #TODO
             
-
     def navigate_through_target_path(self):
         #we should be nearby the first point of the path, else we delete it and we'll compute an other one:
         if euclidian_distance((int(self.transform.x), int(self.transform.y)), (self.path_to_target[0][0], self.path_to_target[0][1])) <= 2:
