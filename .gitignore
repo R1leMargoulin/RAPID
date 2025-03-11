@@ -5,3 +5,4 @@ tests/
 test.py
 experiments/
 configs/
+*.egg-info

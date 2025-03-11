@@ -5,7 +5,6 @@ from PIL import Image
 
 import logging
 import random
-import json
 
 
 SIMULATION_NAME = 'Multi-Robot-Exploration'
@@ -16,7 +15,7 @@ SCREEN_WIDTH = 200
 SCREEN_HEIGHT = 200
 BACKGROUND_COLOR = (200, 200, 200)
 
-ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/inside_100_100.png"
+ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/forest_100_100.png"# CHANGE THE PATH
 
 NB_GROUND_AGENTS = 5
 

@@ -17,7 +17,7 @@ SCREEN_WIDTH = 200
 SCREEN_HEIGHT = 200
 BACKGROUND_COLOR = (200, 200, 200)
 #if there is an environment image, it will override the screen width and height.
-ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/forest_100_100.png"
+ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/forest_100_100.png" #CHANGE THE PATH
 STEP_LIMITATION = 1500
 
 #GroundAgents

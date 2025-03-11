@@ -7,5 +7,9 @@ setup(
     description='Robotics Agent Prototyping for Intelligence Development',
     author='Erwan MARTIN',
     author_email='erwan.martin666@gmail.com',
-    install_requires=[],
+    install_requires=[
+        'numpy',
+        'pygame',
+        'pillow',
+    ],
 )
