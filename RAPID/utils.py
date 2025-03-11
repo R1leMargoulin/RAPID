@@ -87,7 +87,7 @@ def find_frontier_cells(grid):
 
 def heuristic(a, b):
     """
-    Calculate the heuristic value between two points using the Manhattan distance.
+    Manhattan distance
     This heuristic estimates the cost to reach the goal from a given point.
     """
     return abs(a[0] - b[0]) + abs(a[1] - b[1])

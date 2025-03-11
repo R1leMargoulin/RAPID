@@ -92,7 +92,7 @@ class Environment():
             if self.render:
                 # draw all changes to the screen
                 pygame.display.flip()
-            #self.clock.tick(24)         # wait until next frame (at 60 FPS)
+                self.clock.tick(24)         # wait until next frame (at 60 FPS)
             if self.limit_of_steps !=None and self.step >= self.limit_of_steps:
                 print(f"goal not reach in the limited number of steps. srop at {self.step}")
                 self.running = False
@@ -208,7 +208,7 @@ class TargetPointEnvironment(Environment):
             return False
 
 class ExplorationEnvironment(Environment):
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = True, limit_of_steps=None):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
