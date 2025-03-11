@@ -80,7 +80,7 @@ class Environment():
             self.update()
             # draw all changes to the screen
             pygame.display.flip()
-            self.clock.tick(24)         # wait until next frame (at 60 FPS)
+            #self.clock.tick(24)         # wait until next frame (at 60 FPS)
             if self.limit_of_steps !=None and self.step >= self.limit_of_steps:
                 self.running = False
         # Done! Time to quit.
@@ -246,8 +246,8 @@ class ExplorationEnvironment(Environment):
         # print(np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height))
         self.exploration_completion = np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height)
 
-        print(f"COMPLETION : {self.exploration_completion}")
-        print(f"BB completion : {np.count_nonzero(self.agents_tools["blackboard"]["occupancy_grid"]!=-1)/(self.width*self.height)}")
+        # print(f"COMPLETION : {self.exploration_completion}")
+        # print(f"BB completion : {np.count_nonzero(self.agents_tools["blackboard"]["occupancy_grid"]!=-1)/(self.width*self.height)}")
         # print(self.exploration_completion)
         if (self.exploration_completion >= 0.97):
             return True

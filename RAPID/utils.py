@@ -66,7 +66,8 @@ def find_frontier_cells(grid):
     for r in range(width):
         for c in range(height):
             # Check if the current cell is known (0 or 1)
-            if grid[r, c] == 0 or grid[r, c] == 1:
+            #if grid[r, c] == 0 or grid[r, c] == 1:
+            if grid[r, c] == 0: #test en enlevant les murs
                 # Check the neighbors of the current cell
                 for dr, dc in shifts:
                     nr, nc = r + dr, c + dc
@@ -128,7 +129,8 @@ def a_star_search(grid, start, goal):
             tentative_g_score = g_score[current] + 1
 
             # Skip obstacle cells
-            if grid[neighbor] == 1 or grid[neighbor] == -1:
+            # if grid[neighbor] == 1 or grid[neighbor] == -1:
+            if grid[neighbor] == 1:
                 continue
 
             # If the neighbor is not in g_score or the tentative g_score is lower, update the scores
@@ -194,3 +196,28 @@ def euclidian_distance(point1,point2):
     - euclidian_distance:float
     """
     return np.sqrt((point1[0]-point2[0])**2+(point1[1]-point2[1])**2)
+
+
+
+def heuristic_frontier_distance(start, goal, grid):
+    """
+    Calculate a heuristic distance by considering obstacles.
+
+    Parameters:
+    - start: Tuple (x, y) representing the start cell.
+    - goal: Tuple (x, y) representing the goal cell.
+    - grid: 2D numpy array representing the occupancy grid.
+
+    Returns:
+    - Float representing the heuristic distance.
+    """
+    # Calculate Euclidean distance
+    euclidean_dist = euclidian_distance(start, goal)
+
+    # Calculate a simple obstacle penalty
+    line = np.linspace(start, goal, num=int(euclidean_dist) + 1)
+    line = [(int(x), int(y)) for x, y in line]
+    obstacle_penalty = sum(1 for x, y in line if grid[int(x), int(y)] == 1)
+
+    # Combine Euclidean distance and obstacle penalty
+    return euclidean_dist + obstacle_penalty * 100  # Weight for obstacle penalty

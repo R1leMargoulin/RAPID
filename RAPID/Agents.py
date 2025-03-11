@@ -1,6 +1,6 @@
 from pygame.sprite import Sprite, spritecollide, collide_circle
 from pygame.draw import *
-from pygame import Surface, SRCALPHA
+from pygame import Surface, SRCALPHA, Rect
 
 from .Environment import Environment
 from .utils import *
@@ -38,9 +38,9 @@ class Robot(Sprite):
         self.robot_id = robot_id
 
         # draw agent
-        self.surf = Surface((2*size, 2*size), SRCALPHA, 32)
-        circle(self.surf, color, (size, size), size)
-        self.rect = self.surf.get_rect()
+        self.surf = Surface((4*size, 4*size), SRCALPHA, 32)
+        circle(self.surf, color, (2*size, 2*size), 4*size)
+        self.rect = Rect(0, 0, 2 * size, 2 * size)
 
         # Geometry
         self.speed = Transform2d(0,0,0)
@@ -141,13 +141,13 @@ class Robot(Sprite):
                     sides.append("bottom")
             
             if ("top" in sides):
-                self.transform.y += 1
+                self.transform.y += max(np.abs(self.speed.x), np.abs(self.speed.y))
             if ("bottom" in sides):
-                self.transform.y -= 1
+                self.transform.y -= max(np.abs(self.speed.x), np.abs(self.speed.y))
             if ("left" in sides):
-                self.transform.x -= 1
+                self.transform.x -= max(np.abs(self.speed.x), np.abs(self.speed.y))
             if ("right" in sides):
-                self.transform.x += 1
+                self.transform.x += max(np.abs(self.speed.x), np.abs(self.speed.y))
         #-----------------------------------------------------------------------------------------------------------
         
         
@@ -171,7 +171,6 @@ class Robot(Sprite):
         #first, get neighbors in order to see the unseen ones.
         neighbors = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
         if self.communication_mode == "blackboard":
-            print("BB updated")
             for n in neighbors:
                 self.env.agents_tools["blackboard"]["occupancy_grid"][n[0]][n[1]] = self.env.real_occupation_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
 
@@ -233,7 +232,7 @@ class Robot(Sprite):
             return False, None
 
 class Ground(Robot):
-    def __init__(self, env, robot_id, size = 4, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_mode="blackboard", communication_range = 40, behavior_to_use = "random"):
+    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_mode="blackboard", communication_range = 40, behavior_to_use = "random"):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, communication_mode=communication_mode, communication_range=communication_range)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier"]
 
@@ -340,14 +339,14 @@ class Ground(Robot):
                     self.path_to_target = a_star_search(self.env.agents_tools["blackboard"]["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
 
             else: #sinon on va chercher les frontières.
-                print("aaa")
                 #frontier detection from BB
                 frontiers = find_frontier_cells(self.env.agents_tools["blackboard"]["occupancy_grid"]) #from utils
                 #then we take the closest one.
                 distance = np.inf
                 for f in frontiers:
-                    if euclidian_distance((self.transform.x, self.transform.y), (f[0], f[1])) < distance :
-                        distance = euclidian_distance((self.transform.x, self.transform.y), (f[0], f[1]))
+                    hdist = heuristic_frontier_distance((self.transform.x, self.transform.y), (f[0], f[1]), self.env.agents_tools["blackboard"]["occupancy_grid"])
+                    if hdist < distance :
+                        distance = hdist
                         self.target = tuple(f.tolist()) #set the frontier as new target
 
         elif self.communication_mode =="limited:":
@@ -357,15 +356,7 @@ class Ground(Robot):
     def navigate_through_target_path(self):
         #we should be nearby the first point of the path, else we delete it and we'll compute an other one:
         if euclidian_distance((int(self.transform.x), int(self.transform.y)), (self.path_to_target[0][0], self.path_to_target[0][1])) <= 2:
-            print("---")
-            print(f"target{self.target}")
-            print(f"path : {self.path_to_target}")
-            
-            print(f"cond : {self.path_to_target[0] == self.target}")
-            print(f"tf:{self.transform.x},{self.transform.y}")
             if self.path_to_target[0] == self.target:
-                print("test")
-                
                 self.target = None
                 self.path_to_target = None
             else:
@@ -398,7 +389,9 @@ class Ground(Robot):
                 pass
         else:
             #Path not accurate.
+            self.behavior_diff_move_random() #random move to maybe select another frontier.
             self.path_to_target = None
+            self.target = None
 class Aerial(Robot):
     def __init__(self, env, robot_id, size = 3, color = (0, 0, 255), transform=(0,0,0)):        
         super().__init__(env, robot_id, size, color, transform=transform)
