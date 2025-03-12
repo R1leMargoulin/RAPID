@@ -1,5 +1,9 @@
 images_env/
 *.o
 __pycache__/
+tests/
 test.py
 experiments/
+configs/
+*.egg-info
+old_programs/
