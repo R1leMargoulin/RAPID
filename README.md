@@ -5,7 +5,7 @@ This Software is designed for rapid prototyping of multi-robots behaviors. We ca
 
 This project is made with python, using pygame library.
 
-# Quick start
+# Getting started
 ## Installation
 To begin, it is recommanded to use a virtual environment.
 
