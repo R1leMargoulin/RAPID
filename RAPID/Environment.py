@@ -15,7 +15,7 @@ import time
 
 
 class Environment():
-    def __init__(self, render = True, width:int=100, height:int=100, background_color = (200,200,200), caption = f'simulation', env_image:Image.Image = None, full_knowledge:bool=True, limit_of_steps=None):
+    def __init__(self, render = True, width:int=100, height:int=100, background_color = (200,200,200), caption = f'simulation', env_image:Image.Image = None, full_knowledge:bool=True, limit_of_steps=None, scaling_factor:int=1):
         """
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         Params : 
@@ -30,7 +30,8 @@ class Environment():
 
         pygame.init()
 
-        
+
+        self.scaling_factor = scaling_factor
         self.clock = pygame.time.Clock()
         self.start_time = 0
 
@@ -57,7 +58,8 @@ class Environment():
         else:
             self.real_occupation_grid = np.zeros((self.width, self.height))
             if self.render:
-                self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+                #self.screen = pygame.display.set_mode((self.width, self.height)) #BACKUP scaling
+                self.screen = pygame.display.set_mode((self.width * self.scaling_factor, self.height * self.scaling_factor))
             else:
                 self.screen = None
 
@@ -114,8 +116,10 @@ class Environment():
             a.update(self.screen)
 
         if self.render:
-            for o in self.obstacles:
-                self.screen.blit(o.image, o.rect)
+            for o in self.obstacles:  #BACKUP scaling
+            #     self.screen.blit(o.image, o.rect)
+                scaled_rect = pygame.Rect(o.rect.x * self.scaling_factor, o.rect.y * self.scaling_factor, o.rect.width * self.scaling_factor, o.rect.height * self.scaling_factor)
+                self.screen.blit(pygame.transform.scale(o.image, scaled_rect.size), scaled_rect)
 
         if(self.goal_condition()):
             print(f"Goal reached in {self.step} steps!")
@@ -135,7 +139,7 @@ class Environment():
         self.height = dims[0]
 
         if self.render:
-            self.screen = pygame.display.set_mode((self.width, self.height))
+            self.screen = pygame.display.set_mode((self.width * self.scaling_factor, self.height * self.scaling_factor))
         else:
             self.screen = None
         for l in range(len(np_img)) :
@@ -157,7 +161,7 @@ class Environment():
     
 
 class TargetPointEnvironment(Environment):
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, target_point:tuple[int,int]=None, amount_of_agents_goal=1):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, scaling_factor:int=1, target_point:tuple[int,int]=None, amount_of_agents_goal=1):
         """"
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         In this Environment, the Agents has to reach a target point in order to complete the mission.
@@ -171,7 +175,7 @@ class TargetPointEnvironment(Environment):
         - amount_of_agents:int (default : 1) : amount of agents that needs to reach the point in order to complete the mission.
         """
 
-        super().__init__(render, width, height, background_color, caption, env_image, limit_of_steps=limit_of_steps)
+        super().__init__(render, width, height, background_color, caption, env_image, limit_of_steps=limit_of_steps, scaling_factor=scaling_factor)
         self.interest_points.update({"target_points":[]})
         if target_point :
             self.init_target_point(x=target_point[0], y=target_point[1])
@@ -183,7 +187,10 @@ class TargetPointEnvironment(Environment):
     def update(self):
 
         super().update()
-        self.screen.blit(self.target_point.image, self.target_point.rect)
+        if self.render:
+            scaled_rect = pygame.Rect(self.target_point.rect.x * self.scaling_factor, self.target_point.rect.y * self.scaling_factor, self.target_point.rect.width * self.scaling_factor, self.target_point.rect.height * self.scaling_factor)
+            self.screen.blit(pygame.transform.scale(self.target_point.image, scaled_rect.size), scaled_rect)
+            #self.screen.blit(self.target_point.image, self.target_point.rect)BACKUP scaling
 
     def init_target_point(self, x, y):
 
@@ -208,7 +215,7 @@ class TargetPointEnvironment(Environment):
             return False
 
 class ExplorationEnvironment(Environment):
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
@@ -223,7 +230,7 @@ class ExplorationEnvironment(Environment):
         - full_knowledge:bool (default True) = If True, the full environment map will be given to the robot in it's belief space at it's init.
         - limit_of_steps:int = steps limitation representing a time limit to explore the environment if needed.
         """
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor)
         #TODO : initier et placer la fog en interest point
         exp_map = np.zeros((self.width, self.height))
         self.interest_points.update({"exploration_map":exp_map})
@@ -259,7 +266,10 @@ class ExplorationEnvironment(Environment):
     def draw_fog(self):
         unexplored_poses = np.where(self.interest_points["exploration_map"] == 0)
         for i in range(len(unexplored_poses[0])):
-            self.screen.blit(self.fog_texture, pygame.Rect(unexplored_poses[0][i], unexplored_poses[1][i], 1, 1))
+            # self.screen.blit(self.fog_texture, pygame.Rect(unexplored_poses[0][i], unexplored_poses[1][i], 1, 1)) #BACKUP scaling
+            scaled_rect = pygame.Rect(unexplored_poses[0][i] * self.scaling_factor, unexplored_poses[1][i] * self.scaling_factor, self.scaling_factor, self.scaling_factor)
+            self.screen.blit(pygame.transform.scale(self.fog_texture, scaled_rect.size), scaled_rect)
+            
         pass
 
     

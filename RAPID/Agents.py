@@ -1,4 +1,5 @@
 from pygame.sprite import Sprite, spritecollide, collide_circle
+from pygame.transform import scale
 from pygame.draw import *
 from pygame import Surface, SRCALPHA, Rect
 
@@ -104,7 +105,9 @@ class Robot(Sprite):
 
     def update(self, screen):
         if self.env.render:
-            screen.blit(self.surf, self.rect)
+            scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
+            screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
+            #screen.blit(self.surf, self.rect) BACKUP scaling
 
     def translate(self, speed_x, speed_y):
         #old positions for distance calculation

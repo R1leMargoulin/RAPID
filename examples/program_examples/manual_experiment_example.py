@@ -58,7 +58,8 @@ def main():
                                     caption= EXPERIMENT_NAME,
                                     background_color= BACKGROUND_COLOR,
                                     env_image=img,
-                                    limit_of_steps=STEP_LIMITATION
+                                    limit_of_steps=STEP_LIMITATION,
+                                    scaling_factor=1
                                     ) #example of exploration environment with rendering (there is rendering by default)
         
         #---------------------------------
