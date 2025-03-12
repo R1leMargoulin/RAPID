@@ -82,21 +82,21 @@ def main():
         #make data from the sim.
         create_simulation_data(env, s+1)
 
-def create_simulation_data(env, exp_number:int,): #TODO, passer en CSV sera plus opti si on a beaucoup de données
+def create_simulation_data(env, sim_number:int,): #TODO, passer en CSV sera plus opti si on a beaucoup de données
     result_file_path = RESULT_PATH+GROUP_EXPERIMENT_NAME+EXPERIMENT_NAME+".json"
-    if exp_number==1: #if file doesn't exists:
+    if sim_number==1: #if file doesn't exists:
         with open(result_file_path, "w") as outfile:
             outfile.write(json.dumps({})) #then we create an empty json file
 
-    exp_data = { #Here are detailed the different env metrics.
-        f"experiment{exp_number}":{ 
+    sim_data = { #Here are detailed the different env metrics.
+        f"simulation{sim_number}":{ 
         "total_steps":env.step, 
         "goal_reached":env.goal_condition(),
         "agents_data":{}
         }
     }
     for a in env.agents: #here are detailed the different agent metrics.
-        exp_data[f"experiment{exp_number}"]["agents_data"].update({
+        sim_data[f"experiment{sim_number}"]["agents_data"].update({
             f"robot_{a.robot_id}":{
                 "total_distance_made" : a.total_distance_made
             }
@@ -106,7 +106,7 @@ def create_simulation_data(env, exp_number:int,): #TODO, passer en CSV sera plus
         json_from_file = outfile.read()
     
     file_obj =  json.loads(json_from_file)
-    file_obj.update(exp_data) #adding the simulation data to the global experiment data
+    file_obj.update(sim_data) #adding the simulation data to the global experiment data
 
     json_exp_data = json.dumps(file_obj, indent=4) 
 

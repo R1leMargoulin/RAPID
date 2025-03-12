@@ -7,8 +7,6 @@ import logging
 import random
 
 
-SIMULATION_NAME = 'Multi-Robot-Exploration'
-EXPERIMENT_NAME = 'multi_robot / Example 01'
 
 # Define constants for the screen width and height
 SCREEN_WIDTH = 200
@@ -25,9 +23,10 @@ img = Image.open(ENV_IMAGE_PATH).convert("L")
 logging.basicConfig(level=logging.DEBUG)
 
 def main():
-    #env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, background_color= BACKGROUND_COLOR, full_knowledge=False)
+    
     #env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img, amount_of_agents_goal=2)
-    env = ExplorationEnvironment(render= True, background_color= BACKGROUND_COLOR, env_image=img, full_knowledge=False)
+    #env = ExplorationEnvironment(render= True, background_color= BACKGROUND_COLOR, env_image=img, full_knowledge=False)
+    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, background_color= BACKGROUND_COLOR, full_knowledge=False)
 
 
     for i in range(NB_GROUND_AGENTS):

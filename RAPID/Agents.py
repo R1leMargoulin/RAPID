@@ -13,7 +13,7 @@ import logging
 COMMUNICATION_MODE_LIST = ["blackboard", "limited"]
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_mode="blackboard", communication_range = 40):#TODO rendre abstraite
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_mode="blackboard", communication_range = 40):#TODO rendre abstrait
         """
         Robot class are our agents representing robots.
 
@@ -21,12 +21,13 @@ class Robot(Sprite):
         - env:Environment = RAPID environment the robot is in
         - robot_id:int = identifier of the robot
         - size:int = size of the robot
-        - init transform : 2D transform of the robot:
+        - color:(int,int,int) = rgb color of the robot
+        - init_transform:(float,float,float) = 2D transform of the robot:
             - x:float = x position
             - y:float = y position
             - w:float = w rotation in radian around the z axis (yaw).
-        - max speed: 2d transform vector, representing the maximum speeds for all components.
-        - vision range:int = distance a robot can sense
+        - max_speed:(float,float,float) 2d transform representation of the maximum speeds for all components.
+        - vision range:int = distance a robot can sense to
         - communication_mode:str = method of communication in ["blackboard", "limited"] :
             - "blackboard" : all robots share a blackboard in the environment, the knowledge is centralized on this blackboard
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
@@ -37,7 +38,7 @@ class Robot(Sprite):
         self.env = env
         self.robot_id = robot_id
 
-        # draw agent
+        # pygame agent components
         self.surf = Surface((4*size, 4*size), SRCALPHA, 32)
         circle(self.surf, color, (2*size, 2*size), 4*size)
         self.rect = Rect(0, 0, 2 * size, 2 * size)
@@ -54,25 +55,28 @@ class Robot(Sprite):
         self.communication_mode = communication_mode
         self.communication_range = communication_range
 
-        self.target = None
-        self.path_to_target = None
-
-        #TODO, remettre ces variables plus tard
+    
         #Metrics
         self.total_distance_made = 0.0
-        
         # self.energy = 0
 
         # move agent object on coords
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
 
-        self.behavior_space = []
 
+        #internal memory vars
+        self.target = None
+        self.path_to_target = None
+
+        self.behavior_space = [] # To fill in the init of child classes
+
+        # handling of the communication mode string
         if communication_mode not in COMMUNICATION_MODE_LIST:
             logging.error(f"unknown communication mode for robot {self.robot_id}.\n list of available communication mode : {COMMUNICATION_MODE_LIST}")
             exit()
 
+        #init of communication method and of the environment knowledge/beliefs
         if self.communication_mode == "blackboard":
             if "blackboard" in self.env.agents_tools:
                 pass
@@ -113,7 +117,7 @@ class Robot(Sprite):
         self.transform.y = self.transform.y + speed_y
 
         
-        #detect collisions-------------------------------------------------------------------------------------------
+        #detect and handle collisions------------------------------------------------------------------------------------
         collisions = spritecollide(self, self.env.obstacles_group, False, collide_circle)
 
         if (collisions): #is there collision
@@ -139,7 +143,7 @@ class Robot(Sprite):
         #-----------------------------------------------------------------------------------------------------------
         
         
-        # ensure it stays within the screen window
+        # ensure we stay within the screen window
         self.transform.x = max(self.transform.x, 0)
         self.transform.x = min(self.transform.x, self.env.width)
         self.transform.y = max(self.transform.y, 0)
@@ -147,7 +151,7 @@ class Robot(Sprite):
 
         self.total_distance_made += np.sqrt((self.transform.x - old_tfx)**2 + (self.transform.y - old_tfy)**2)
 
-        # update graphics
+        # update positions of pygame objects
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
 
@@ -158,6 +162,8 @@ class Robot(Sprite):
         #TODO maybe add interest points.
         #first, get neighbors in order to see the unseen ones.
         neighbors = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
+
+        #Depending of the communication/mode, we won't handle the data the same way
         if self.communication_mode == "blackboard":
             for n in neighbors:
                 self.env.agents_tools["blackboard"]["occupancy_grid"][n[0]][n[1]] = self.env.real_occupation_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
@@ -181,6 +187,7 @@ class Robot(Sprite):
         if self_inclusion:
             neighbors.append(todo_queue[0])
 
+        #instead of asking all cells if it's within the distance,we operate a propagation depending on the vision range.
         for i in range(distance):
             while len(todo_queue)>0:
                 for direction in DIRECTIONS:
@@ -208,10 +215,7 @@ class Robot(Sprite):
             
     def belief_transfer(self, robot_id, beliefs): #TODO, implementer le transfert des beliefs plus tard.
         """
-        Belief transmission from one agent to another. 
-        Return : 
-        - [False, None] If the beliefs space are the same for the two agents : beliefs are the same.
-        - [True, New belief_space] If the beliefs spaces are not the same, a merge is done on the two beliefs.
+        NOT IMPLEMENTED YET
         """
         if beliefs != self.belief_link:
             # merge(self.belief_space, beliefs)
@@ -224,6 +228,7 @@ class Ground(Robot):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, communication_mode=communication_mode, communication_range=communication_range)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier"]
 
+        #handle behavior space string
         if not( behavior_to_use in self.behavior_space) :
             logging.error(f"Ground robot:init -> behavior_to_use not in the behavior space.\n the behavior should be in {self.behavior_space}")
             exit()
@@ -378,7 +383,7 @@ class Ground(Robot):
             self.behavior_diff_move_random() #random move to maybe select another frontier.
             self.path_to_target = None
             self.target = None
-class Aerial(Robot):
+class Aerial(Robot): #TODO : IMPLEMETER
     def __init__(self, env, robot_id, size = 3, color = (0, 0, 255), transform=(0,0,0)):        
         super().__init__(env, robot_id, size, color, transform=transform)
         self.vmax = 2.0

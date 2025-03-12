@@ -57,7 +57,7 @@ class Environment():
         else:
             self.real_occupation_grid = np.zeros((self.width, self.height))
             if self.render:
-                self.screen = pygame.display.set_mode((self.width, self.height))
+                self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
             else:
                 self.screen = None
 
