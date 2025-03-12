@@ -19,12 +19,15 @@ class Environment():
         """
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         Params : 
-        - width:int (default 100) = width of the environment
-        - heigth:int (default 100) = height of the environment
+        - render:bool =  display the environment or not
+        - width:int = (default 100) = width of the environment
+        - heigth:int = (default 100) = height of the environment
         - background_color:(int,int,int) = rgb color of the backgroung
         - caption:str = name given to the env
         - env_image:PIL.Image.Image = image computed into environment (overrides the witdh and height)
-        - full_knowledge:bool (default True) = If True, the full environment map will be given to the robot in it's belief space at it's init.
+        - full_knowledge:bool = the agent gets a copy of the whole environment in it's own memory or in blackboard if there is one.
+        - limit_of_steps:int = step limitation in which the agent should reach it's goal.
+        - scaling_factor:int = the display (display only) size of the screen is multiply by the scaling factor.
         """
         self.render = render
 
@@ -165,12 +168,16 @@ class TargetPointEnvironment(Environment):
         """"
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         In this Environment, the Agents has to reach a target point in order to complete the mission.
-        Params : 
-        - width:int (default 100) = width of the environment
-        - heigth:int (default 100) = height of the environment
+        params : 
+        - render:bool =  display the environment or not
+        - width:int = (default 100) = width of the environment
+        - heigth:int = (default 100) = height of the environment
         - background_color:(int,int,int) = rgb color of the backgroung
         - caption:str = name given to the env
         - env_image:PIL.Image.Image = image computed into environment (overrides the witdh and height)
+        - full_knowledge:bool = the agent gets a copy of the whole environment in it's own memory or in blackboard if there is one.
+        - limit_of_steps:int = step limitation in which the agent should reach it's goal.
+        - scaling_factor:int = the display (display only) size of the screen is multiply by the scaling factor.
         - target_point:tuple:(int,int) (default : random) : target points that has to be reached by agents
         - amount_of_agents:int (default : 1) : amount of agents that needs to reach the point in order to complete the mission.
         """
@@ -222,13 +229,15 @@ class ExplorationEnvironment(Environment):
         
         Params :
         
-        - width:int (default 100) = width of the environment
-        - heigth:int (default 100) = height of the environment
+        - render:bool =  display the environment or not
+        - width:int = (default 100) = width of the environment
+        - heigth:int = (default 100) = height of the environment
         - background_color:(int,int,int) = rgb color of the backgroung
         - caption:str = name given to the env
         - env_image:PIL.Image.Image = image computed into environment (overrides the witdh and height)
-        - full_knowledge:bool (default True) = If True, the full environment map will be given to the robot in it's belief space at it's init.
-        - limit_of_steps:int = steps limitation representing a time limit to explore the environment if needed.
+        - full_knowledge:bool = the agent gets a copy of the whole environment in it's own memory or in blackboard if there is one.
+        - limit_of_steps:int = step limitation in which the agent should reach it's goal.
+        - scaling_factor:int = the display (display only) size of the screen is multiply by the scaling factor.
         """
         super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor)
         #TODO : initier et placer la fog en interest point

@@ -18,7 +18,7 @@ class Robot(Sprite):
         """
         Robot class are our agents representing robots.
 
-        Params:
+        params:
         - env:Environment = RAPID environment the robot is in
         - robot_id:int = identifier of the robot
         - size:int = size of the robot
@@ -227,6 +227,7 @@ class Robot(Sprite):
             return False, None
 
 class Ground(Robot):
+
     def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_mode="blackboard", communication_range = 40, behavior_to_use = "random"):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, communication_mode=communication_mode, communication_range=communication_range)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier"]

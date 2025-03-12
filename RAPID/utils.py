@@ -151,11 +151,11 @@ def get_direct_neighbors(cell, width, height):
 
     parameters:
     - cell: A tuple (row, col) representing the current cell.
-    - rows: The number of rows in the grid.
-    - cols: The number of columns in the grid.
+    - width of the grid.
+    - height of the grid.
 
     returns:
-    - A list of tuples representing the valid neighboring cells.
+    - A list of tuples representing the valid neighbors cells.
     """
     neighbors = []
     directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # Up, Down, Left, Right
