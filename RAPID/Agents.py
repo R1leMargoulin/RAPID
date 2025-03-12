@@ -190,7 +190,7 @@ class Robot(Sprite):
                         pass
                     else:
                         #if it's out of environment, we won't take it
-                        if (0 > neighbor[0] or  neighbor[0] > self.env.width -1) or (0 > neighbor[1] or  neighbor[1] > self.env.height -1):
+                        if (0 > neighbor[0] or  neighbor[0] > self.env.width -1) or (0 > neighbor[1] or  neighbor[1] > self.env.height-1):
                             pass
                         else:
                             neighbors.append(neighbor) #we add the cell to neighbors

@@ -3,13 +3,15 @@ from RAPID import Agents
 
 from PIL import Image
 
+import os
 import logging
 import random
 import json
 
 # PARAMS ----------------------------------------------------------------------------------------------------------------------------------
-EXPERIMENT_NAME = 'multi_robot_forest_100x100'
-RESULT_PATH = "./experiments/"#select an existing folder
+GROUP_EXPERIMENT_NAME = "empty_env_100x100/"
+EXPERIMENT_NAME = '1_robots'
+RESULT_PATH = "/home/erwan/Documents/tests_simulations/RAPID/experiments/"#select an existing folder
 NB_SIMULATION = 5
 
 # Environment setup
@@ -17,11 +19,12 @@ SCREEN_WIDTH = 200
 SCREEN_HEIGHT = 200
 BACKGROUND_COLOR = (200, 200, 200)
 #if there is an environment image, it will override the screen width and height.
-ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/forest_100_100.png" #CHANGE THE PATH
+#ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/forest_100_100.png" #CHANGE THE PATH
+ENV_IMAGE_PATH = None
 STEP_LIMITATION = 1500
 
 #GroundAgents
-NB_GROUND_AGENTS = 5
+NB_GROUND_AGENTS = 1
 GROUND_AGENTS_INIT_POSITION = (0, 0, 0) #(x,y,w) 2D transform. set it to None for random position
 GROUND_AGENTS_MAX_SPEED = (2, 0, 0.5) #(x,y,w) speeds in 2D transform. if None : default value (1,0,0.5)
 GROUND_AGENTS_BEHAVIOR = "nearest_frontier" #random behavior if commented
@@ -29,9 +32,15 @@ GROUND_AGENTS_COMMUNICATION_MODE = "blackboard" #don't touch this one, other mod
 GROUND_AGENTS_VISION_RANGE = 20 # default 20.
 
 #-------------------------------------------------------------------------------------------------------------------------------------------
+#If the path doesn't exists, we create it, be careful with permission issues.
+if not os.path.exists(RESULT_PATH+GROUP_EXPERIMENT_NAME):
+    os.mkdir(RESULT_PATH+GROUP_EXPERIMENT_NAME)
 
+if ENV_IMAGE_PATH:
+    img = Image.open(ENV_IMAGE_PATH).convert("L")
+else:
+    img = None
 
-img = Image.open(ENV_IMAGE_PATH).convert("L")
 logging.basicConfig(level=logging.INFO)
 
 def main():
@@ -45,7 +54,7 @@ def main():
         #env = ExplorationEnvironment(render= True, background_color= BACKGROUND_COLOR, env_image=img, full_knowledge=False) #example of exploration environment without rendering.
 
         
-        env = ExplorationEnvironment(render= True, 
+        env = ExplorationEnvironment(render= False, 
                                     caption= EXPERIMENT_NAME,
                                     background_color= BACKGROUND_COLOR,
                                     env_image=img,
@@ -74,7 +83,7 @@ def main():
         create_simulation_data(env, s+1)
 
 def create_simulation_data(env, exp_number:int,): #TODO, passer en CSV sera plus opti si on a beaucoup de données
-    result_file_path = RESULT_PATH+EXPERIMENT_NAME+".json"
+    result_file_path = RESULT_PATH+GROUP_EXPERIMENT_NAME+EXPERIMENT_NAME+".json"
     if exp_number==1: #if file doesn't exists:
         with open(result_file_path, "w") as outfile:
             outfile.write(json.dumps({})) #then we create an empty json file
