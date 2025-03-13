@@ -39,8 +39,8 @@ def main():
                                     robot_id=len(env.agents)+1, 
                                     init_transform=init_pos,
                                     max_speed=(2,0,0.5),
-                                    behavior_to_use="nearest_frontier", #change to target_djikstra with a target point env.
-                                    communication_mode="blackboard",    #change to limited with the target_djikstra behavior.
+                                    behavior_to_use="random", #change to target_djikstra with a target point env.
+                                    communication_mode="limited",    #change to limited with the target_djikstra behavior.
                                 ))
         
     

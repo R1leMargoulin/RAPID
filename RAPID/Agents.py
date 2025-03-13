@@ -99,6 +99,16 @@ class Robot(Sprite):
                     self.belief_space["occupancy_grid"][o.rect.centerx][o.rect.centery] = 1 #draw obstacles in the belief space occupation grid
 
                 self.belief_space["interest_points"].update(self.env.interest_points) #take knowledge of the interest points.
+            #then we need to create a communication halo object for the agent
+            self.communication_halo = Sprite()
+            self.communication_halo.rect = Rect((self.transform.x,self.transform.y), (0,0)).inflate(self.communication_range*2, self.communication_range*2)
+            halo_image = Surface(self.communication_halo.rect.size, SRCALPHA)
+            circle(halo_image, (200,200,0, 85), (self.communication_range, self.communication_range), self.communication_range)
+
+            self.communication_halo.image = halo_image
+            
+            #pygame.draw.circle(shape_surf, color, (radius, radius), radius)
+            
         
         #Ready!
         self.is_active = True
@@ -108,6 +118,10 @@ class Robot(Sprite):
             scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
             screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
             #screen.blit(self.surf, self.rect) BACKUP scaling
+
+            halo_scaled_rect = Rect(self.communication_halo.rect.x * self.env.scaling_factor, self.communication_halo.rect.y * self.env.scaling_factor, self.communication_halo.rect.width * self.env.scaling_factor, self.communication_halo.rect.height * self.env.scaling_factor)
+            screen.blit(scale(self.communication_halo.image, halo_scaled_rect.size), halo_scaled_rect)
+            
 
     def translate(self, speed_x, speed_y):
         #old positions for distance calculation
@@ -157,6 +171,9 @@ class Robot(Sprite):
         # update positions of pygame objects
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
+        #same for communication Halo
+        self.communication_halo.rect.centerx = int(self.transform.x)
+        self.communication_halo.rect.centery = int(self.transform.y)
 
     def navigate_through_target_path(self): #TODO rendre abstraite
         pass

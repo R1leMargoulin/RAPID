@@ -162,6 +162,12 @@ class Environment():
     def goal_condition(self):
         return False
     
+    def limited_communication_update(self):
+        potential_links_dict = {} #in this dict, we'll append all unidirectional links : if agent B is in the com range of agent A, then the link A->B is created.
+        for a in self.agents :
+            #TODO
+            pass
+    
 
 class TargetPointEnvironment(Environment):
     def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, scaling_factor:int=1, target_point:tuple[int,int]=None, amount_of_agents_goal=1):
