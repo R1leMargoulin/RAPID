@@ -1,7 +1,7 @@
 import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
-from pygame.sprite import Sprite
+from pygame.sprite import Sprite, spritecollide, collide_circle
 from pygame.locals import (K_ESCAPE, KEYDOWN)
 
 from .utils import *
@@ -165,8 +165,13 @@ class Environment():
     def limited_communication_update(self):
         potential_links_dict = {} #in this dict, we'll append all unidirectional links : if agent B is in the com range of agent A, then the link A->B is created.
         for a in self.agents :
-            #TODO
-            pass
+            potential_links_dict.update({a:[]})
+            in_range = spritecollide(a.communication_halo, self.agent_group, False, collide_circle) #we detect collision between communication_halo and other agents
+            for robot in in_range:
+                potential_links_dict[a].append(robot.robot_id) #we append the robot if it's in range, the link A->B is created. 
+
+        #TODO check for communication reciprocity and create links between robots.
+        pass
     
 
 class TargetPointEnvironment(Environment):
