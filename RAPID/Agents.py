@@ -11,10 +11,9 @@ import random
 import logging
 # from mergedeep import merge
 
-COMMUNICATION_MODE_LIST = ["blackboard", "limited"]
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_mode="blackboard", communication_range = 40):#TODO rendre abstrait
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40):#TODO rendre abstrait
         """
         Robot class are our agents representing robots.
 
@@ -29,9 +28,6 @@ class Robot(Sprite):
             - w:float = w rotation in radian around the z axis (yaw).
         - max_speed:(float,float,float) 2d transform representation of the maximum speeds for all components.
         - vision range:int = distance a robot can sense to
-        - communication_mode:str = method of communication in ["blackboard", "limited"] :
-            - "blackboard" : all robots share a blackboard in the environment, the knowledge is centralized on this blackboard
-            - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
         - communication_range:int =  when communication is limited, the robot can share information within robots in the communication radius.
         """
         super().__init__()
@@ -53,7 +49,7 @@ class Robot(Sprite):
         self.vision_range = vision_range
 
         #communication
-        self.communication_mode = communication_mode
+        self.communication_mode = self.env.communication_mode
         self.communication_range = communication_range
 
     
@@ -71,11 +67,6 @@ class Robot(Sprite):
         self.path_to_target = None
 
         self.behavior_space = [] # To fill in the init of child classes
-
-        # handling of the communication mode string
-        if communication_mode not in COMMUNICATION_MODE_LIST:
-            logging.error(f"unknown communication mode for robot {self.robot_id}.\n list of available communication mode : {COMMUNICATION_MODE_LIST}")
-            exit()
 
         #init of communication method and of the environment knowledge/beliefs
         if self.communication_mode == "blackboard":
@@ -106,6 +97,8 @@ class Robot(Sprite):
             circle(halo_image, (200,200,0, 85), (self.communication_range, self.communication_range), self.communication_range)
 
             self.communication_halo.image = halo_image
+
+            self.connected_robots = []
             
             #pygame.draw.circle(shape_surf, color, (radius, radius), radius)
             
@@ -246,7 +239,7 @@ class Robot(Sprite):
 class Ground(Robot):
 
     def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_mode="blackboard", communication_range = 40, behavior_to_use = "random"):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, communication_mode=communication_mode, communication_range=communication_range)
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, communication_range=communication_range)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier"]
 
         #handle behavior space string

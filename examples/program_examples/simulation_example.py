@@ -26,7 +26,7 @@ def main():
     
     #env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img, amount_of_agents_goal=2, scaling_factor=2)
     #env = ExplorationEnvironment(render= True, background_color= BACKGROUND_COLOR, env_image=img, full_knowledge=False, scaling_factor=4)
-    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=2)
+    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=2, communication_mode="limited")
 
 
     for i in range(NB_GROUND_AGENTS):
@@ -40,7 +40,6 @@ def main():
                                     init_transform=init_pos,
                                     max_speed=(2,0,0.5),
                                     behavior_to_use="random", #change to target_djikstra with a target point env.
-                                    communication_mode="limited",    #change to limited with the target_djikstra behavior.
                                 ))
         
     
