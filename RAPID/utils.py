@@ -1,6 +1,8 @@
 import numpy as np
 import heapq
 
+from .grid_variables import *
+
 
 
 class Transform2d():
@@ -67,14 +69,14 @@ def find_frontier_cells(grid):
         for c in range(height):
             # Check if the current cell is known (0 or 1)
             #if grid[r, c] == 0 or grid[r, c] == 1:
-            if grid[r, c] == 0: #test en enlevant les murs
+            if grid[r, c] == OG_FREE_CELL: #test en enlevant les murs
                 # Check the neighbors of the current cell
                 for dr, dc in shifts:
                     nr, nc = r + dr, c + dc
                     # Check if the neighbor is within the grid bounds
                     if 0 <= nr < width and 0 <= nc < height:
                         # Check if the neighbor is unknown (-1)
-                        if grid[nr, nc] == -1:
+                        if grid[nr, nc] == OG_UNKNOWN_CELL:
                             frontier_mask[r, c] = True
                             break  # No need to check other neighbors
 
@@ -130,7 +132,7 @@ def a_star_search(grid, start, goal):
 
             # Skip obstacle cells
             # if grid[neighbor] == 1 or grid[neighbor] == -1:
-            if grid[neighbor] == 1:
+            if grid[neighbor] == OG_WALL:
                 continue
 
             # If the neighbor is not in g_score or the tentative g_score is lower, update the scores
@@ -217,7 +219,7 @@ def heuristic_frontier_distance(start, goal, grid):
     # Calculate a simple obstacle penalty
     line = np.linspace(start, goal, num=int(euclidean_dist) + 1)
     line = [(int(x), int(y)) for x, y in line]
-    obstacle_penalty = sum(1 for x, y in line if grid[int(x), int(y)] == 1)
+    obstacle_penalty = sum(1 for x, y in line if grid[int(x), int(y)] == OG_WALL)
 
     # Combine Euclidean distance and obstacle penalty
     return euclidean_dist + obstacle_penalty * 100  # Weight for obstacle penalty

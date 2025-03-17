@@ -5,6 +5,7 @@ from pygame.sprite import Sprite, spritecollide, collide_circle
 from pygame.locals import (K_ESCAPE, KEYDOWN)
 
 from .utils import *
+from .grid_variables import *
 
 import numpy as np
 from PIL import Image
@@ -61,11 +62,11 @@ class Environment():
         if(env_image):
             self.width = env_image.size[0]
             self.height = env_image.size[1]
-            self.real_occupation_grid = np.zeros((self.width, self.height))
+            self.real_occupancy_grid = np.zeros((self.width, self.height))
             
             self.create_env_from_image(env_image)
         else:
-            self.real_occupation_grid = np.zeros((self.width, self.height))
+            self.real_occupancy_grid = np.zeros((self.width, self.height))
             if self.render:
                 #self.screen = pygame.display.set_mode((self.width, self.height)) #BACKUP scaling
                 self.screen = pygame.display.set_mode((self.width * self.scaling_factor, self.height * self.scaling_factor))
@@ -140,7 +141,6 @@ class Environment():
         if self.communication_mode == "limited":
             self.limited_communication_update()
             
-
     def add_agent(self, agent):
         self.agents.append(agent)
         self.agent_group.add(self.agents[-1])
@@ -164,7 +164,7 @@ class Environment():
                     self.create_wall(o,l)
 
     def create_wall(self, coord_x, coord_y):
-        self.real_occupation_grid[coord_x][coord_y] = 1
+        self.real_occupancy_grid[coord_x][coord_y] = OG_WALL
 
         sprite = pygame.sprite.Sprite()
         sprite.image = pygame.Surface((1, 1))
@@ -191,7 +191,6 @@ class Environment():
         for agent in self.agents:
             for link in potential_links_dict[str(agent.robot_id)]:
                 if str(agent.robot_id) in potential_links_dict[link] : #if reciprocity
-                    #TODO CREATE ACTUAL LINK
                     #find the linked robot and append the loop robot to it.                    
                     for r in self.agents:
                         if str(r.robot_id) == link:
@@ -200,7 +199,6 @@ class Environment():
                             break
                     potential_links_dict[link].remove(str(agent.robot_id)) #we remove the agent in the other agent's list in order to avoid double links.
 
-        #TODO if render, draw a line between connected robots.
         if self.render:
             for a in self.agents:
                 for cr in a.connected_robots:
@@ -231,7 +229,6 @@ class TargetPointEnvironment(Environment):
         """
 
         super().__init__(render, width, height, background_color, caption, env_image, limit_of_steps=limit_of_steps, scaling_factor=scaling_factor, communication_mode=communication_mode)
-        self.interest_points.update({"target_points":[]})
         if target_point :
             self.init_target_point(x=target_point[0], y=target_point[1])
         else : #s'il n'y a pas de target point, on en génère un aléatoirement:
@@ -260,7 +257,7 @@ class TargetPointEnvironment(Environment):
             logging.warning("Target point overlaps with an obstacle, reallocating it randomly.")
             self.target_point.rect.center = (randrange(0, self.width), randrange(0, self.height))
         
-        self.interest_points["target_points"].append((self.target_point.rect.centerx, self.target_point.rect.centery))
+        self.real_occupancy_grid[self.target_point.rect.centerx][self.target_point.rect.centery] = OG_TARGET_POINT
 
     def goal_condition(self):
         if len(pygame.sprite.spritecollide(self.target_point, self.agent_group, False)) >= self.amount_of_agent_goal:
@@ -291,18 +288,15 @@ class ExplorationEnvironment(Environment):
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
         """
         super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode)
-        #TODO : initier et placer la fog en interest point
         exp_map = np.zeros((self.width, self.height))
         self.interest_points.update({"exploration_map":exp_map})
         #on va pas mettre de fog sur les murs parce que la vision ne les traverse pas, si on a des murs plus épais que 2, alors il y aura toujours de la fog.
-        self.interest_points["exploration_map"] += self.real_occupation_grid
+        self.interest_points["exploration_map"] += self.real_occupancy_grid
 
         self.fog_texture = pygame.Surface((1,1))
         self.fog_texture.fill((100, 100, 100))
 
         self.exploration_completion = 0.0
-
-        
 
     def run(self):
         #remove some fog around agents before launching
@@ -313,7 +307,6 @@ class ExplorationEnvironment(Environment):
 
     def update(self):
         super().update()
-        #TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         for agent in self.agents:
             neighbours = agent.get_neighbors_pixels(distance = agent.vision_range, stop_at_wall = True, self_inclusion = True)
             self.mark_explored_cells(neighbours)
@@ -321,7 +314,6 @@ class ExplorationEnvironment(Environment):
         if self.render:
             self.draw_fog()
         pass
-
 
     def draw_fog(self):
         unexplored_poses = np.where(self.interest_points["exploration_map"] == 0)
@@ -331,7 +323,6 @@ class ExplorationEnvironment(Environment):
             self.screen.blit(pygame.transform.scale(self.fog_texture, scaled_rect.size), scaled_rect)
             
         pass
-
     
     def goal_condition(self):
         # print(np.count_nonzero(self.interest_points["exploration_map"]==1))
