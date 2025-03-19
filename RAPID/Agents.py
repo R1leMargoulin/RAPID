@@ -79,6 +79,7 @@ class Robot(Sprite):
             else:
                 self.env.agents_tools["blackboard"]={}
                 self.env.agents_tools["blackboard"]["occupancy_grid"]=np.full((self.env.width, env.height), OG_UNKNOWN_CELL)
+                self.env.agents_tools["blackboard"]["robot_positions"]={}
                 if self.env.full_knowledge:
                     self.env.agents_tools["blackboard"]["occupancy_grid"] = self.env.real_occupancy_grid
                     # self.env.agents_tools["blackboard"]["occupancy_grid"] *= OG_FREE_CELL #make all cell free
@@ -89,6 +90,7 @@ class Robot(Sprite):
 
         elif self.communication_mode == "limited":
             self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "interest_points":{}}
+            self.belief_space["robot_positions"] = {}
             if self.env.full_knowledge:
                 self.belief_space["occupancy_grid"] = self.env.real_occupancy_grid
                 #TODO clean le code en commentaire, je le farde en backup au cas ou la.
@@ -183,8 +185,11 @@ class Robot(Sprite):
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
 
+        if self.communication_mode == "blackboard":
+            self.env.agents_tools["blackboard"]["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
         if self.env.communication_mode == "limited":
             #same for communication Halo
+            self.belief_space["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
             self.communication_halo.rect.centerx = int(self.transform.x)
             self.communication_halo.rect.centery = int(self.transform.y)
 
@@ -246,7 +251,7 @@ class Robot(Sprite):
 
         return neighbors
             
-    def belief_transfer(self): #TODO, implementer le transfert des beliefs plus tard.
+    def belief_transfer(self): #TODO, faire un trnsfert de beliefs dans l blackboard, donc mettre le behavior_space aussi dans les robots en BB.
         """
         va transférer la table de beliefs (la grille d'occupation uniquement pour le moment) à tous les voisins de communiation.
         """
@@ -255,7 +260,6 @@ class Robot(Sprite):
             pass
 
     def recieve_belief(self, sender_belief_space):
-        #TODO
         #dans un premiers temps, on ne partage que la grille d'occupation.
         #en supposant que le sensing de chaque agent est correct (on y mettra des probabilités plus tard, en ajoutant un layer) on peut simplement merge les deux grilles en prennant le max de chacune
         #car -1 = unknown, 0 = free, 1 = obstacle, et quand c'est plus grand c'est des points d'interets.
@@ -265,7 +269,7 @@ class Ground(Robot):
 
     def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_mode="blackboard", communication_range = 40, communication_frequency = 10, behavior_to_use = "random"):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, communication_range=communication_range, communication_frequency=communication_frequency)
-        self.behavior_space = ["random", "target_djikstra", "nearest_frontier"]
+        self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos"]
 
         #handle behavior space string
         if not( behavior_to_use in self.behavior_space) :
@@ -276,7 +280,6 @@ class Ground(Robot):
 
     def update(self, screen):
         # self.behavior_diff_move_random()
-
         match self.behavior:
             case "random":
                 self.behavior_diff_move_random()
@@ -284,6 +287,8 @@ class Ground(Robot):
                 self.behavior_target_djikstra()
             case "nearest_frontier":
                 self.nearest_frontier_search_behavior()
+            case "minpos":
+                self.minpos_behavior()
         super().update(screen)
 
     def behavior_diff_move_random(self):
@@ -395,6 +400,39 @@ class Ground(Robot):
                     if hdist < distance :
                         distance = hdist
                         self.target = tuple(f.tolist()) #set the frontier as new target
+
+    def minpos_behavior(self):
+        """
+        Frontier based behavior where:
+        - The frontiers are grouped into clusters
+        - each cluster is given a cost depending on the distance and on robots that are closer to this frontier using the wavefront propagation algorithm (WPA)
+        - the robot chose the frontier with the lowest cost
+        """
+        #first of all, sense the environment
+        self.sense()#first of all sense the env.
+
+        if self.communication_mode == "blackboard":
+            if np.any(self.target):#si on a une target
+                if self.path_to_target: #If we have a path to our target, we continue this path.
+                    self.navigate_through_target_path()
+                    pass
+                else: #if we don't have any path, then compute it with our target
+                    self.path_to_target = a_star_search(self.env.agents_tools["blackboard"]["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
+
+            else: #sinon on va chercher les frontières.
+                #frontier detection from BB
+                frontiers = find_frontier_cells(self.env.agents_tools["blackboard"]["occupancy_grid"]) #from utils
+                cluster_centers = cluster_frontier_cells(self.env.agents_tools["blackboard"]["occupancy_grid"], frontiers, self.vision_range) #from utils : make cluster fontiers
+                #TODO faire une liste de positions des robots
+                #posdict_list = (self.env.agents_tools["blackboard"]["robot_positions"].values())
+                pos_list_float = [pos["position"] for pos in list(self.env.agents_tools["blackboard"]["robot_positions"].values())] #list of float xy position of all robots
+                pos_list_int = [(int(x), int(y)) for x,y in pos_list_float]
+                weighted_clusters = wavefront_propagation_algorithm(self.env.agents_tools["blackboard"]["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers)
+                self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
+
+        elif self.communication_mode == "limited":
+            pass
+
             
     def navigate_through_target_path(self):
         #we should be nearby the first point of the path, else we delete it and we'll compute an other one:

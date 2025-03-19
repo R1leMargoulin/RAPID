@@ -9,8 +9,8 @@ import random
 
 
 # Define constants for the screen width and height
-SCREEN_WIDTH = 200
-SCREEN_HEIGHT = 200
+SCREEN_WIDTH = 100
+SCREEN_HEIGHT = 100
 BACKGROUND_COLOR = (200, 200, 200)
 
 ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/test_200_200.png"# CHANGE THE PATH
@@ -26,7 +26,7 @@ def main():
     
     #env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img, amount_of_agents_goal=2, scaling_factor=2)
     #env = ExplorationEnvironment(render= True, background_color= BACKGROUND_COLOR, env_image=img, full_knowledge=False, scaling_factor=4)
-    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=2, communication_mode="limited")
+    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=2, communication_mode="blackboard")
 
 
     for i in range(NB_GROUND_AGENTS):
@@ -39,7 +39,10 @@ def main():
                                     robot_id=len(env.agents)+1, 
                                     init_transform=init_pos,
                                     max_speed=(2,0,0.5),
-                                    behavior_to_use="nearest_frontier", #change to target_djikstra with a target point env.
+                                    behavior_to_use="minpos", #change to target_djikstra with a target point env.
+                                    vision_range=20,
+                                    communication_range=40,
+                                    communication_frequency=10,
                                 ))
         
     
