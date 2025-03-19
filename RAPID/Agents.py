@@ -107,7 +107,6 @@ class Robot(Sprite):
         if self.env.render:
             scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
             screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
-            #screen.blit(self.surf, self.rect) BACKUP scaling
 
         self.belief_transfer()
 
@@ -165,11 +164,6 @@ class Robot(Sprite):
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
 
-        #BACKUP OLD BB WAY
-        # if self.communication_mode == "blackboard":
-        #     self.env.agents_tools["blackboard"]["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
-        # if self.env.communication_mode == "limited":
-            #same for communication Halo
         self.belief_space["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
         if self.env.communication_mode == "limited":
             self.communication_halo.rect.centerx = int(self.transform.x)
@@ -181,14 +175,6 @@ class Robot(Sprite):
     def sense(self):
         #first, get neighbors in order to see the unseen ones.
         neighbors = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
-
-        #TODO BACKUP OLD BB WAY, a enlever plus tard
-        # #Depending of the communication/mode, we won't handle the data the same way
-        # if self.communication_mode == "blackboard":
-        #     for n in neighbors:
-        #         self.env.agents_tools["blackboard"]["occupancy_grid"][n[0]][n[1]] = self.env.real_occupancy_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
-
-        # elif self.communication_mode == "limited":
 
         for n in neighbors:
             self.belief_space["occupancy_grid"][n[0]][n[1]] = self.env.real_occupancy_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
@@ -358,28 +344,6 @@ class Ground(Robot):
         compute a greedy nearest frontier algorithm with an A* path search to the nearest frontier for each agent.
         """
         self.sense()#first of all sense the env.
-
-        ##TODO BACKUP BB OLD WAY, a enlever plus tard
-        # if self.communication_mode == "blackboard":
-        #     if np.any(self.target):#si on a une target
-        #         if self.path_to_target: #If we have a path to our target, we continue this path.
-        #             self.navigate_through_target_path()
-        #             pass
-        #         else: #if we don't have any path, then compute it with our target
-        #             self.path_to_target = a_star_search(self.env.agents_tools["blackboard"]["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
-
-        #     else: #sinon on va chercher les frontières.
-        #         #frontier detection from BB
-        #         frontiers = find_frontier_cells(self.env.agents_tools["blackboard"]["occupancy_grid"]) #from utils
-        #         #then we take the closest one.
-        #         distance = np.inf
-        #         for f in frontiers:
-        #             hdist = heuristic_frontier_distance((self.transform.x, self.transform.y), (f[0], f[1]), self.env.agents_tools["blackboard"]["occupancy_grid"])
-        #             if hdist < distance :
-        #                 distance = hdist
-        #                 self.target = tuple(f.tolist()) #set the frontier as new target
-
-        # elif self.communication_mode =="limited":
 
         if np.any(self.target):#si on a une target
             if self.path_to_target: #If we have a path to our target, we continue this path.
