@@ -97,6 +97,7 @@ class Robot(Sprite):
         #creation of the belief space whatever the communication mode
         self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "interest_points":{}}
         self.belief_space["robot_positions"] = {}
+        self.belief_space["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
         if self.env.full_knowledge:
             self.belief_space["occupancy_grid"] = self.env.real_occupancy_grid
         
@@ -164,7 +165,9 @@ class Robot(Sprite):
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
 
+
         self.belief_space["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
+
         if self.env.communication_mode == "limited":
             self.communication_halo.rect.centerx = int(self.transform.x)
             self.communication_halo.rect.centery = int(self.transform.y)
@@ -249,8 +252,8 @@ class Robot(Sprite):
 
 class Ground(Robot):
 
-    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_mode="blackboard", communication_range = 40, communication_frequency = 10, behavior_to_use = "random"):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, communication_range=communication_range, communication_frequency=communication_frequency)
+    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_frequency = 10, behavior_to_use = "random"):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_frequency=communication_frequency)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos"]
 
         #handle behavior space string
