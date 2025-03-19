@@ -77,29 +77,13 @@ class Robot(Sprite):
             if "blackboard" in self.env.agents_tools:
                 pass
             else:
-                self.env.agents_tools["blackboard"]={}
-                self.env.agents_tools["blackboard"]["occupancy_grid"]=np.full((self.env.width, env.height), OG_UNKNOWN_CELL)
-                self.env.agents_tools["blackboard"]["robot_positions"]={}
+                self.env.agents_tools["blackboard"]={} #create the BB in the env.
+                self.env.agents_tools["blackboard"]["occupancy_grid"]=np.full((self.env.width, env.height), OG_UNKNOWN_CELL) #Create the occupancy grid belief in the BB
+                self.env.agents_tools["blackboard"]["robot_positions"]={} #create the robot position dict belief in the BB
                 if self.env.full_knowledge:
-                    self.env.agents_tools["blackboard"]["occupancy_grid"] = self.env.real_occupancy_grid
-                    # self.env.agents_tools["blackboard"]["occupancy_grid"] *= OG_FREE_CELL #make all cell free
-                    # for o in self.env.obstacles:
-                    #     self.env.agents_tools["blackboard"]["occupancy_grid"][o.rect.centerx][o.rect.centery] = OG_WALL #draw obstacles in the belief space occupation grid
-
-                    # self.env.agents_tools["blackboard"].update(self.env.interest_points) #take knowledge of the interest points.
+                    self.env.agents_tools["blackboard"]["occupancy_grid"] = self.env.real_occupancy_grid #make the blackboard equans to the env grid if the env is known
 
         elif self.communication_mode == "limited":
-            self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "interest_points":{}}
-            self.belief_space["robot_positions"] = {}
-            if self.env.full_knowledge:
-                self.belief_space["occupancy_grid"] = self.env.real_occupancy_grid
-                #TODO clean le code en commentaire, je le farde en backup au cas ou la.
-
-                # self.belief_space["occupancy_grid"] *= OG_FREE_CELL #make all cell free
-                # for o in self.env.obstacles:
-                #     self.belief_space["occupancy_grid"][o.rect.centerx][o.rect.centery] = OG_WALL #draw obstacles in the belief space occupation grid
-
-                # self.belief_space["interest_points"].update(self.env.interest_points) #take knowledge of the interest points.
             #then we need to create a communication halo object for the agent
             self.communication_halo = Sprite()
             self.communication_halo.rect = Rect((self.transform.x,self.transform.y), (0,0)).inflate(self.communication_range*2, self.communication_range*2)
@@ -109,9 +93,12 @@ class Robot(Sprite):
             self.communication_halo.image = halo_image
 
             self.connected_robots = []
-            
-            #pygame.draw.circle(shape_surf, color, (radius, radius), radius)
-            
+        
+        #creation of the belief space whatever the communication mode
+        self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "interest_points":{}}
+        self.belief_space["robot_positions"] = {}
+        if self.env.full_knowledge:
+            self.belief_space["occupancy_grid"] = self.env.real_occupancy_grid
         
         #Ready!
         self.is_active = True
@@ -122,17 +109,10 @@ class Robot(Sprite):
             screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
             #screen.blit(self.surf, self.rect) BACKUP scaling
 
-            if self.env.communication_mode == "limited":
-                #belief sharing handling
-                if self.time_from_last_communication < self.communication_frequency:
-                    self.time_from_last_communication +=1
+        self.belief_transfer()
 
-                elif self.connected_robots:
-                    self.belief_transfer()
-                    self.time_from_last_communication = 0
-                else:
-                    self.time_from_last_communication +=1
-
+        if self.env.communication_mode == "limited":
+            if self.env.render:
                 halo_scaled_rect = Rect(self.communication_halo.rect.x * self.env.scaling_factor, self.communication_halo.rect.y * self.env.scaling_factor, self.communication_halo.rect.width * self.env.scaling_factor, self.communication_halo.rect.height * self.env.scaling_factor)
                 screen.blit(scale(self.communication_halo.image, halo_scaled_rect.size), halo_scaled_rect)
             
@@ -185,11 +165,13 @@ class Robot(Sprite):
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
 
-        if self.communication_mode == "blackboard":
-            self.env.agents_tools["blackboard"]["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
-        if self.env.communication_mode == "limited":
+        #BACKUP OLD BB WAY
+        # if self.communication_mode == "blackboard":
+        #     self.env.agents_tools["blackboard"]["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
+        # if self.env.communication_mode == "limited":
             #same for communication Halo
-            self.belief_space["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
+        self.belief_space["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
+        if self.env.communication_mode == "limited":
             self.communication_halo.rect.centerx = int(self.transform.x)
             self.communication_halo.rect.centery = int(self.transform.y)
 
@@ -197,18 +179,19 @@ class Robot(Sprite):
         pass
 
     def sense(self):
-        #TODO maybe add interest points.
         #first, get neighbors in order to see the unseen ones.
         neighbors = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
 
-        #Depending of the communication/mode, we won't handle the data the same way
-        if self.communication_mode == "blackboard":
-            for n in neighbors:
-                self.env.agents_tools["blackboard"]["occupancy_grid"][n[0]][n[1]] = self.env.real_occupancy_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
+        #TODO BACKUP OLD BB WAY, a enlever plus tard
+        # #Depending of the communication/mode, we won't handle the data the same way
+        # if self.communication_mode == "blackboard":
+        #     for n in neighbors:
+        #         self.env.agents_tools["blackboard"]["occupancy_grid"][n[0]][n[1]] = self.env.real_occupancy_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
 
-        elif self.communication_mode == "limited":
-            for n in neighbors:
-                self.belief_space["occupancy_grid"][n[0]][n[1]] = self.env.real_occupancy_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
+        # elif self.communication_mode == "limited":
+
+        for n in neighbors:
+            self.belief_space["occupancy_grid"][n[0]][n[1]] = self.env.real_occupancy_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
 
     def get_neighbors_pixels(self, distance:int, stop_at_wall = False, self_inclusion = True):
         """
@@ -255,9 +238,22 @@ class Robot(Sprite):
         """
         va transférer la table de beliefs (la grille d'occupation uniquement pour le moment) à tous les voisins de communiation.
         """
-        for robot in self.connected_robots:
-            robot.recieve_belief(self.belief_space)
-            pass
+         #belief sharing handling
+        if self.time_from_last_communication < self.communication_frequency: #verif of the communication frequency
+            self.time_from_last_communication +=1
+        else:
+            if self.communication_mode == "limited":
+                if self.connected_robots:
+                    for robot in self.connected_robots:
+                        robot.recieve_belief(self.belief_space) #envoie des beliefs à tous les robots voisins.
+                    self.time_from_last_communication = 0
+                else:
+                    self.time_from_last_communication +=1
+
+            elif self.communication_mode == "blackboard":
+                self.env.agents_tools["blackboard"]["occupancy_grid"] = np.maximum.reduce([self.env.agents_tools["blackboard"]["occupancy_grid"], self.belief_space["occupancy_grid"]]) #Maj de la grille d'occupation
+                self.env.agents_tools["blackboard"]["robot_positions"].update({self.robot_id:self.belief_space["robot_positions"][self.robot_id]}) #Maj de la position perso du robot pour le blackboard
+                self.belief_space = self.env.agents_tools["blackboard"] #on tire le blackboard dans nos beliefs space une fois l'avoir mis a jour.
 
     def recieve_belief(self, sender_belief_space):
         #dans un premiers temps, on ne partage que la grille d'occupation.
@@ -363,43 +359,45 @@ class Ground(Robot):
         """
         self.sense()#first of all sense the env.
 
-        if self.communication_mode == "blackboard":
-            if np.any(self.target):#si on a une target
-                if self.path_to_target: #If we have a path to our target, we continue this path.
-                    self.navigate_through_target_path()
-                    pass
-                else: #if we don't have any path, then compute it with our target
-                    self.path_to_target = a_star_search(self.env.agents_tools["blackboard"]["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
+        ##TODO BACKUP BB OLD WAY, a enlever plus tard
+        # if self.communication_mode == "blackboard":
+        #     if np.any(self.target):#si on a une target
+        #         if self.path_to_target: #If we have a path to our target, we continue this path.
+        #             self.navigate_through_target_path()
+        #             pass
+        #         else: #if we don't have any path, then compute it with our target
+        #             self.path_to_target = a_star_search(self.env.agents_tools["blackboard"]["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
 
-            else: #sinon on va chercher les frontières.
-                #frontier detection from BB
-                frontiers = find_frontier_cells(self.env.agents_tools["blackboard"]["occupancy_grid"]) #from utils
-                #then we take the closest one.
-                distance = np.inf
-                for f in frontiers:
-                    hdist = heuristic_frontier_distance((self.transform.x, self.transform.y), (f[0], f[1]), self.env.agents_tools["blackboard"]["occupancy_grid"])
-                    if hdist < distance :
-                        distance = hdist
-                        self.target = tuple(f.tolist()) #set the frontier as new target
+        #     else: #sinon on va chercher les frontières.
+        #         #frontier detection from BB
+        #         frontiers = find_frontier_cells(self.env.agents_tools["blackboard"]["occupancy_grid"]) #from utils
+        #         #then we take the closest one.
+        #         distance = np.inf
+        #         for f in frontiers:
+        #             hdist = heuristic_frontier_distance((self.transform.x, self.transform.y), (f[0], f[1]), self.env.agents_tools["blackboard"]["occupancy_grid"])
+        #             if hdist < distance :
+        #                 distance = hdist
+        #                 self.target = tuple(f.tolist()) #set the frontier as new target
 
-        elif self.communication_mode =="limited":
-            if np.any(self.target):#si on a une target
-                if self.path_to_target: #If we have a path to our target, we continue this path.
-                    self.navigate_through_target_path()
-                    pass
-                else: #if we don't have any path, then compute it with A* for our target
-                    self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
+        # elif self.communication_mode =="limited":
 
-            else: #sinon on va chercher les frontières.
-                #frontier detection from belief space
-                frontiers = find_frontier_cells(self.belief_space["occupancy_grid"]) #from utils
-                #then we take the closest one.
-                distance = np.inf
-                for f in frontiers:
-                    hdist = heuristic_frontier_distance((self.transform.x, self.transform.y), (f[0], f[1]), self.belief_space["occupancy_grid"])
-                    if hdist < distance :
-                        distance = hdist
-                        self.target = tuple(f.tolist()) #set the frontier as new target
+        if np.any(self.target):#si on a une target
+            if self.path_to_target: #If we have a path to our target, we continue this path.
+                self.navigate_through_target_path()
+                pass
+            else: #if we don't have any path, then compute it with A* for our target
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
+
+        else: #sinon on va chercher les frontières.
+            #frontier detection from belief space
+            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"]) #from utils
+            #then we take the closest one.
+            distance = np.inf
+            for f in frontiers:
+                hdist = heuristic_frontier_distance((self.transform.x, self.transform.y), (f[0], f[1]), self.belief_space["occupancy_grid"])
+                if hdist < distance :
+                    distance = hdist
+                    self.target = tuple(f.tolist()) #set the frontier as new target
 
     def minpos_behavior(self):
         """
@@ -411,29 +409,24 @@ class Ground(Robot):
         #first of all, sense the environment
         self.sense()#first of all sense the env.
 
-        if self.communication_mode == "blackboard":
-            if np.any(self.target):#si on a une target
-                if self.path_to_target: #If we have a path to our target, we continue this path.
-                    self.navigate_through_target_path()
-                    pass
-                else: #if we don't have any path, then compute it with our target
-                    self.path_to_target = a_star_search(self.env.agents_tools["blackboard"]["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
+        if np.any(self.target):#si on a une target
+            if self.path_to_target: #If we have a path to our target, we continue this path.
+                self.navigate_through_target_path()
+                pass
+            else: #if we don't have any path, then compute it with our target
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
 
-            else: #sinon on va chercher les frontières.
-                #frontier detection from BB
-                frontiers = find_frontier_cells(self.env.agents_tools["blackboard"]["occupancy_grid"]) #from utils
-                cluster_centers = cluster_frontier_cells(self.env.agents_tools["blackboard"]["occupancy_grid"], frontiers, self.vision_range) #from utils : make cluster fontiers
-                #TODO faire une liste de positions des robots
-                #posdict_list = (self.env.agents_tools["blackboard"]["robot_positions"].values())
-                pos_list_float = [pos["position"] for pos in list(self.env.agents_tools["blackboard"]["robot_positions"].values())] #list of float xy position of all robots
-                pos_list_int = [(int(x), int(y)) for x,y in pos_list_float]
-                weighted_clusters = wavefront_propagation_algorithm(self.env.agents_tools["blackboard"]["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers)
-                self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
+        else: #sinon on va chercher les frontières.
+            #frontier detection from BB
+            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"]) #from utils
+            cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range) #from utils : make cluster fontiers
 
-        elif self.communication_mode == "limited":
-            pass
+            pos_list_float = [pos["position"] for pos in list(self.belief_space["robot_positions"].values())] #list of float xy position of all robots
+            pos_list_int = [(int(x), int(y)) for x,y in pos_list_float] #same list with ints.
 
-            
+            weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers)
+            self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
+         
     def navigate_through_target_path(self):
         #we should be nearby the first point of the path, else we delete it and we'll compute an other one:
         if euclidian_distance((int(self.transform.x), int(self.transform.y)), (self.path_to_target[0][0], self.path_to_target[0][1])) <= 2:
