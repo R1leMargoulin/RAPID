@@ -7,3 +7,5 @@ experiments/
 configs/
 *.egg-info
 old_programs/
+data_analysis/
+experiments_figures/
