@@ -13,9 +13,9 @@ SCREEN_WIDTH = 100
 SCREEN_HEIGHT = 100
 BACKGROUND_COLOR = (200, 200, 200)
 
-ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/test_200_200.png"# CHANGE THE PATH
+ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/forest_100_100.png"# CHANGE THE PATH
 
-NB_GROUND_AGENTS = 5
+NB_GROUND_AGENTS = 3
 
 img = Image.open(ENV_IMAGE_PATH).convert("L")
 
@@ -26,7 +26,7 @@ def main():
     
     #env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img, amount_of_agents_goal=2, scaling_factor=2)
     #env = ExplorationEnvironment(render= True, background_color= BACKGROUND_COLOR, env_image=img, full_knowledge=False, scaling_factor=4)
-    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=2, communication_mode="limited", render=False)
+    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, env_image=None, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=4, communication_mode="limited", render=True)
 
 
     for i in range(NB_GROUND_AGENTS):
@@ -40,9 +40,9 @@ def main():
                                     init_transform=init_pos,
                                     max_speed=(2,0,0.5),
                                     behavior_to_use="minpos", #change to target_djikstra with a target point env.
-                                    vision_range=20,
-                                    communication_range=40,
-                                    communication_frequency=10,
+                                    vision_range=10,
+                                    communication_range=30,
+                                    communication_period=10,
                                 ))
         
     

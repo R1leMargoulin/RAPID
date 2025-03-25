@@ -16,7 +16,7 @@ RESULT_PATH = "/home/erwan/Documents/tests_simulations/RAPID/experiments/"#selec
 NB_SIMULATION = 10
 
 
-RENDER = False #display the simulation GUI or not.
+RENDER = True #display the simulation GUI or not.
 SCALING_FACTOR = 3 #will scale the size of the window if render, by the scaling factor
 
 # Environment setupk
@@ -38,7 +38,7 @@ def main():
     GROUND_AGENTS_MAX_SPEED = (2, 0, 0.5) #(x,y,w) speeds in 2D transform. if None : default value (1,0,0.5)
     GROUND_AGENTS_BEHAVIOR = "minpos" #random behavior if commented
     GROUND_AGENTS_COMMUNICATION_RANGE = 20 #won't be taken into acccount if the com mode is "blackboard"
-    GROUND_AGENTS_COMMUNICATION_FREQUENCY = 1
+    GROUND_AGENTS_COMMUNICATION_PERIOD = 1
     GROUND_AGENTS_VISION_RANGE = 20 # default 20.
 
     #-------------------------------------------------------------------------------------------------------------------------------------------
@@ -94,7 +94,7 @@ def main():
                                         max_speed=GROUND_AGENTS_MAX_SPEED,
                                         behavior_to_use=GROUND_AGENTS_BEHAVIOR,
                                         communication_range=GROUND_AGENTS_COMMUNICATION_RANGE,
-                                        communication_frequency=GROUND_AGENTS_COMMUNICATION_FREQUENCY,
+                                        communication_period=GROUND_AGENTS_COMMUNICATION_PERIOD,
                                         vision_range=GROUND_AGENTS_VISION_RANGE,
                                     ))
         #---------------------------------
@@ -123,7 +123,7 @@ def create_simulation_data(env, sim_number:int,): #TODO, passer en CSV sera plus
                                                                         f"robot_{a.robot_id}":{
                                                                             "total_distance_made" : a.total_distance_made,
                                                                             "communication_range" : a.communication_range,
-                                                                            "communication_frequency": a.communication_frequency,
+                                                                            "communication_period": a.communication_period,
                                                                             "vision_range": a.vision_range,
                                                                             "max_speed": (a.max_speed.x, a.max_speed.y, a.max_speed.w),
                                                                         }

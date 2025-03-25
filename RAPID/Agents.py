@@ -14,7 +14,7 @@ import logging
 
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_frequency = 10):#TODO rendre abstrait
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10):#TODO rendre abstrait
         """
         Robot class are our agents representing robots.
 
@@ -30,7 +30,7 @@ class Robot(Sprite):
         - max_speed:(float,float,float) 2d transform representation of the maximum speeds for all components.
         - vision range:int = distance a robot can sense to
         - communication_range:int =  when communication is limited, the robot can share information within robots in the communication radius.
-        - communication_frequency:int = when agent share it's beliefs: number of steps the agent needs to wait before it can communicate again
+        - communication_period:int = when agent share it's beliefs: number of steps the agent needs to wait before it can communicate again
         """
         super().__init__()
         # inital values
@@ -53,7 +53,7 @@ class Robot(Sprite):
         #communication
         self.communication_mode = self.env.communication_mode
         self.communication_range = communication_range
-        self.communication_frequency = communication_frequency
+        self.communication_period = communication_period
         self.time_from_last_communication = 0
 
     
@@ -108,8 +108,6 @@ class Robot(Sprite):
         if self.env.render:
             scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
             screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
-
-        self.belief_transfer()
 
         if self.env.communication_mode == "limited":
             if self.env.render:
@@ -228,7 +226,7 @@ class Robot(Sprite):
         va transférer la table de beliefs (la grille d'occupation uniquement pour le moment) à tous les voisins de communiation.
         """
          #belief sharing handling
-        if self.time_from_last_communication < self.communication_frequency: #verif of the communication frequency
+        if self.time_from_last_communication < self.communication_period: #verif of the communication period
             self.time_from_last_communication +=1
         else:
             if self.communication_mode == "limited":
@@ -243,6 +241,7 @@ class Robot(Sprite):
                 self.env.agents_tools["blackboard"]["occupancy_grid"] = np.maximum.reduce([self.env.agents_tools["blackboard"]["occupancy_grid"], self.belief_space["occupancy_grid"]]) #Maj de la grille d'occupation
                 self.env.agents_tools["blackboard"]["robot_positions"].update({self.robot_id:self.belief_space["robot_positions"][self.robot_id]}) #Maj de la position perso du robot pour le blackboard
                 self.belief_space = self.env.agents_tools["blackboard"] #on tire le blackboard dans nos beliefs space une fois l'avoir mis a jour.
+                self.time_from_last_communication = 0
 
     def recieve_belief(self, sender_belief_space):
         #dans un premiers temps, on ne partage que la grille d'occupation.
@@ -252,8 +251,8 @@ class Robot(Sprite):
 
 class Ground(Robot):
 
-    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_frequency = 10, behavior_to_use = "random"):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_frequency=communication_frequency)
+    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random"):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos"]
 
         #handle behavior space string
@@ -347,6 +346,7 @@ class Ground(Robot):
         compute a greedy nearest frontier algorithm with an A* path search to the nearest frontier for each agent.
         """
         self.sense()#first of all sense the env.
+        self.belief_transfer()
 
         if np.any(self.target):#si on a une target
             if self.path_to_target: #If we have a path to our target, we continue this path.
@@ -375,6 +375,7 @@ class Ground(Robot):
         """
         #first of all, sense the environment
         self.sense()#first of all sense the env.
+        self.belief_transfer() #after sensing, transfer beliefs.
 
         if np.any(self.target):#si on a une target
             if self.path_to_target: #If we have a path to our target, we continue this path.

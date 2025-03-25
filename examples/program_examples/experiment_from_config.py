@@ -19,7 +19,7 @@ config =  json.loads(json_from_file)
 
 
 def main():
-    VARIABLES_TO_VARIATE = ["NB_GROUND_AGENTS", "GROUND_AGENTS_COMMUNICATION_RANGE", "GROUND_AGENTS_COMMUNICATION_FREQUENCY"] #ce sont des tableaux dans le fichier de config.
+    VARIABLES_TO_VARIATE = ["NB_GROUND_AGENTS", "GROUND_AGENTS_COMMUNICATION_PERIOD"] #ce sont des tableaux dans le fichier de config.
 
     
 
@@ -30,6 +30,10 @@ def main():
     #TODO mettre dans des variables et afficher dans la boucle
     print(f"number of experiments : {total_number_of_experiments}")
     print(f"number of simulations : {total_number_of_experiments * config["NB_SIMULATION"]}")
+    print("continue ? Y/N")
+    confirmation = input()
+    if confirmation == "N":
+        exit()
 
     total_number_of_simulations = total_number_of_experiments * config["NB_SIMULATION"]
 
@@ -40,7 +44,13 @@ def main():
 
     #create the main folder
     if not os.path.exists(config["RESULT_PATH"]+config["GROUP_EXPERIMENT_NAME"]):
-            os.mkdir(config["RESULT_PATH"]+config["GROUP_EXPERIMENT_NAME"])
+        os.mkdir(config["RESULT_PATH"]+config["GROUP_EXPERIMENT_NAME"])
+    else:
+        print("this group experiment already exists, are you sure? Y/N")
+        confirmation = input()
+        if confirmation == "N":
+            exit()
+        
 
     experiment_counter = 0
     simulation_counter = 0
@@ -112,7 +122,7 @@ def main():
                                             max_speed=config_iteration["GROUND_AGENTS_MAX_SPEED"],
                                             behavior_to_use=config_iteration["GROUND_AGENTS_BEHAVIOR"],
                                             communication_range=config_iteration["GROUND_AGENTS_COMMUNICATION_RANGE"],
-                                            communication_frequency=config_iteration["GROUND_AGENTS_COMMUNICATION_FREQUENCY"],
+                                            communication_period=config_iteration["GROUND_AGENTS_COMMUNICATION_PERIOD"],
                                             vision_range=config_iteration["GROUND_AGENTS_VISION_RANGE"],
                                         ))
             #---------------------------------
@@ -146,7 +156,7 @@ def create_simulation_data(env, sim_number:int, exp_name): #TODO, passer en CSV 
                                                                         f"robot_{a.robot_id}":{
                                                                             "total_distance_made" : a.total_distance_made,
                                                                             "communication_range" : a.communication_range,
-                                                                            "communication_frequency": a.communication_frequency,
+                                                                            "communication_period": a.communication_period,
                                                                             "vision_range": a.vision_range,
                                                                             "max_speed": (a.max_speed.x, a.max_speed.y, a.max_speed.w),
                                                                         }
