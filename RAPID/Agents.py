@@ -105,6 +105,7 @@ class Robot(Sprite):
         self.is_active = True
 
     def update(self, screen):
+        print("---")
         if self.env.render:
             scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
             screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
@@ -221,7 +222,7 @@ class Robot(Sprite):
 
         return neighbors
             
-    def belief_transfer(self): #TODO, faire un trnsfert de beliefs dans l blackboard, donc mettre le behavior_space aussi dans les robots en BB.
+    def belief_transfer(self): 
         """
         va transférer la table de beliefs (la grille d'occupation uniquement pour le moment) à tous les voisins de communiation.
         """
@@ -248,6 +249,16 @@ class Robot(Sprite):
         #en supposant que le sensing de chaque agent est correct (on y mettra des probabilités plus tard, en ajoutant un layer) on peut simplement merge les deux grilles en prennant le max de chacune
         #car -1 = unknown, 0 = free, 1 = obstacle, et quand c'est plus grand c'est des points d'interets.
         self.belief_space["occupancy_grid"] = np.maximum.reduce([self.belief_space["occupancy_grid"], sender_belief_space["occupancy_grid"]])
+        for robot_pos in sender_belief_space["robot_positions"]:
+            if not (robot_pos in self.belief_space["robot_positions"]):
+                self.belief_space["robot_positions"].update({robot_pos: sender_belief_space["robot_positions"][robot_pos]})
+
+            elif sender_belief_space["robot_positions"][robot_pos]["step"] > self.belief_space["robot_positions"][robot_pos]["step"]:
+                self.belief_space["robot_positions"].update({robot_pos: sender_belief_space["robot_positions"][robot_pos]})
+
+            else:
+                pass
+        print(self.belief_space["robot_positions"])
 
 class Ground(Robot):
 
@@ -392,7 +403,7 @@ class Ground(Robot):
             pos_list_float = [pos["position"] for pos in list(self.belief_space["robot_positions"].values())] #list of float xy position of all robots
             pos_list_int = [(int(x), int(y)) for x,y in pos_list_float] #same list with ints.
 
-            weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers)
+            weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width) #the penalty for a frontier cluster depends of the size of the env.
             self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
          
     def navigate_through_target_path(self):
