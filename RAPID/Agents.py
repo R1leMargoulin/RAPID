@@ -105,7 +105,6 @@ class Robot(Sprite):
         self.is_active = True
 
     def update(self, screen):
-        print("---")
         if self.env.render:
             scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
             screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
@@ -258,7 +257,7 @@ class Robot(Sprite):
 
             else:
                 pass
-        print(self.belief_space["robot_positions"])
+
 
 class Ground(Robot):
 
