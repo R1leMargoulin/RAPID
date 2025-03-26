@@ -10,18 +10,16 @@ import json
 import itertools
 
 
-config_file = "/home/erwan/Documents/tests_simulations/RAPID/examples/config_examples/exp_config.json"
+
+config_file = "/home/erwan/Documents/tests_simulations/RAPID/tests/config_exp_com_variation_cornerspawn.json"
 
 with open(config_file, "r") as outfile:
     json_from_file = outfile.read()
     
 config =  json.loads(json_from_file)
 
-
 def main():
-    VARIABLES_TO_VARIATE = ["NB_GROUND_AGENTS", "GROUND_AGENTS_COMMUNICATION_PERIOD"] #ce sont des tableaux dans le fichier de config.
-
-    
+    VARIABLES_TO_VARIATE = ["NB_GROUND_AGENTS", "GROUND_AGENTS_COMMUNICATION_RANGE", "GROUND_AGENTS_COMMUNICATION_PERIOD"] #ce sont des tableaux dans le fichier de config.
 
     total_number_of_experiments =  1
     for f in VARIABLES_TO_VARIATE:
@@ -110,8 +108,10 @@ def main():
             #AGENTS Definition----------------
             for i in range(config_iteration["NB_GROUND_AGENTS"]):
                 #random init position if it is not defined
-                if config_iteration["GROUND_AGENTS_INIT_POSITION"] == None:
+                if config_iteration["GROUND_AGENTS_INIT_POSITION"] == None or config_iteration["GROUND_AGENTS_INIT_POSITION"] == "random" :
                     agents_init_pos = (random.randrange(0,env.width), random.randrange(0,env.height), random.uniform(0, 2*3.14)) 
+                elif config_iteration["GROUND_AGENTS_INIT_POSITION"] == "corners":
+                    agents_init_pos = init_corner_positions(env, config_iteration["NB_GROUND_AGENTS"], i, s)
                 else:
                     agents_init_pos = config_iteration["GROUND_AGENTS_INIT_POSITION"]
 
@@ -173,6 +173,17 @@ def create_simulation_data(env, sim_number:int, exp_name): #TODO, passer en CSV 
     with open(result_file_path, "w") as outfile:
         outfile.write(json_exp_data) #save in the file
 
+
+def init_corner_positions(environment, total_nb_agent, num_agent, num_simulation, space_between_agents = 10):
+    possible_spawns = [
+        (0 + space_between_agents*total_nb_agent - space_between_agents*num_agent,0, 0), #top left
+        (0, environment.height - space_between_agents*total_nb_agent + space_between_agents*num_agent, 0), #bottom_left
+        (environment.width - space_between_agents*total_nb_agent + space_between_agents*num_agent, 0, 0),#top right
+        (environment.width - space_between_agents*total_nb_agent + space_between_agents*num_agent, environment.height -space_between_agents*total_nb_agent, 0), #bot right
+        (int(environment.width/2 + space_between_agents*num_agent), int(environment.height/2), 0), #center
+    ]
+    position = possible_spawns[num_simulation%len(possible_spawns)]
+    return position
 
 
 
