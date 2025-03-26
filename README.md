@@ -53,12 +53,15 @@ In the **examples/program_examples** directory, you can find three programs:
 - **simulation_example.py**: In this file, we simply run a simulation.
 - **manual_experiment_example.py**: In this file, we run a serie of simulations, and write some evaluation metrics in a file.
 - **data_usage.py**: This file draws figure from what's generated from the "manual_experiment_example.py" file
+- **experiment_from_config_example.py** : in this file, we use a config file in the form of files in the **examples/config_examples** directory
 
 Environment can be made with images, here are some examples:
 
-On the below images, we can see on the left a forest simulated environment used in an exploration scenario.While on the right, we can see a wall with an opening, environment, used in a target point scenario where an amount of agents needs to go near the target point (in red on the image)
+On the below images, we can see on the left a forest simulated environment used in an exploration scenario.While on the middle, we can see a wall with an opening, environment, used in a target point scenario where an amount of agents needs to go near the target point (in red on the image). On the right,
+we can see an exploration scenario with a limited range of communication
 
 ![image](./images/screen_forest_env.png)
 ![image](./images/screen_open_wall_env.png)
+![image](./images/screen_explo.png)
 
 Those images can be found in the **examples/env_images_example** directory.

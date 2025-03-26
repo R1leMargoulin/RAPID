@@ -1,0 +1,28 @@
+{
+    
+    "GROUP_EXPERIMENT_NAME": "3_robots_minpos_empty_100x100_vision10/",
+    "EXPERIMENT_NAME": "3_robots",
+    "RESULT_PATH": "/home/erwan/Documents/tests_simulations/RAPID/experiments/",
+    "NB_SIMULATION": 10,
+
+
+    "RENDER": false,
+    "SCALING_FACTOR": 3,
+
+
+    "SCREEN_WIDTH": 100,
+    "SCREEN_HEIGHT": 100,
+    "BACKGROUND_COLOR": [200, 200, 200],
+    "ENV_IMAGE_PATH": null,
+    "STEP_LIMITATION": null,
+
+    "COMMUNICATION_MODE": "limited",
+    
+    "NB_GROUND_AGENTS": [3],
+    "GROUND_AGENTS_INIT_POSITION": "corners",
+    "GROUND_AGENTS_MAX_SPEED": [2, 0, 0.5],
+    "GROUND_AGENTS_BEHAVIOR": "minpos",
+    "GROUND_AGENTS_COMMUNICATION_RANGE": [1,10,25,50,100],
+    "GROUND_AGENTS_COMMUNICATION_PERIOD": [1,10,25,50,100],
+    "GROUND_AGENTS_VISION_RANGE": 10
+}

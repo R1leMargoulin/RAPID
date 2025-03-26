@@ -1,6 +1,8 @@
 import numpy as np
 import heapq
 
+from .grid_variables import *
+
 
 
 class Transform2d():
@@ -67,14 +69,14 @@ def find_frontier_cells(grid):
         for c in range(height):
             # Check if the current cell is known (0 or 1)
             #if grid[r, c] == 0 or grid[r, c] == 1:
-            if grid[r, c] == 0: #test en enlevant les murs
+            if grid[r, c] == OG_FREE_CELL: #test en enlevant les murs
                 # Check the neighbors of the current cell
                 for dr, dc in shifts:
                     nr, nc = r + dr, c + dc
                     # Check if the neighbor is within the grid bounds
                     if 0 <= nr < width and 0 <= nc < height:
                         # Check if the neighbor is unknown (-1)
-                        if grid[nr, nc] == -1:
+                        if grid[nr, nc] == OG_UNKNOWN_CELL:
                             frontier_mask[r, c] = True
                             break  # No need to check other neighbors
 
@@ -83,7 +85,137 @@ def find_frontier_cells(grid):
 
     return frontier_cells
 
+def cluster_frontier_cells(grid, frontier_cells, vision_range):
+    """
+    Cluster frontier cells into groups considering walls and vision range.
 
+    Parameters:
+    - grid: 2D numpy array representing the grid.
+    - frontier_cells: List of frontier cell coordinates.
+    - vision_range: The vision range of the robot.
+
+    Returns:
+    - cluster_centers: List of cluster center coordinates.
+    """
+    def is_within_range(cell1, cell2, vision_range):
+        """Check if two cells are within the vision range."""
+        return np.linalg.norm(np.array(cell1) - np.array(cell2)) <= vision_range
+
+    def is_path_clear(grid, start, end):
+        """Check if there is a clear path between start and end cells."""
+        rr, cc = zip(start, end)
+        cells_between = zip(np.linspace(rr[0], rr[1], num=max(abs(rr[0]-rr[1]), abs(cc[0]-cc[1]))+1, dtype=int),
+                            np.linspace(cc[0], cc[1], num=max(abs(rr[0]-rr[1]), abs(cc[0]-cc[1]))+1, dtype=int))
+        for cell in cells_between:
+            if grid[cell] == 1:
+                return False
+        return True
+
+    def form_clusters(frontier_cells, vision_range):
+        """Form clusters based on vision range and walls."""
+        clusters = []
+        visited = set()
+
+        for cell in frontier_cells:
+            if tuple(cell) not in visited:
+                cluster = [cell]
+                visited.add(tuple(cell))
+                stack = [cell]
+
+                while stack:
+                    current_cell = stack.pop()
+                    for other_cell in frontier_cells:
+                        if tuple(other_cell) not in visited and is_within_range(current_cell, other_cell, vision_range):
+                            # Check if there is a direct path not blocked by walls
+                            if is_path_clear(grid, current_cell, other_cell):
+                                # Ensure the new cell is within vision range of all cells in the cluster
+                                if all(is_within_range(other_cell, c, vision_range) for c in cluster):
+                                    cluster.append(other_cell)
+                                    visited.add(tuple(other_cell))
+                                    stack.append(other_cell)
+
+                clusters.append(cluster)
+
+        return clusters
+
+    clusters = form_clusters(frontier_cells, vision_range)
+    cluster_centers = [np.mean(cluster, axis=0) for cluster in clusters]
+
+    return np.round(cluster_centers)
+
+def wavefront_propagation_algorithm(grid, self_position, robot_positions, frontier_clusters, weight_of_closer_robots = 10):
+    """
+    Perform wavefront propagation from frontiers clusters (also works with simple frontiers) to determine their score depending on it's distance and the robots closer to the one computing this algorithm.
+
+    parameters:
+    - grid: 2D numpy array representing the grid.
+    - self_position:(int,int) = position xy of the robot computing this algorithm.
+    - robot_positions: List of robot positions (row, col).
+    - frontier_clusters: List of frontier cluster centers (row, col).
+    - weight_of_closer_robots:int(default 10) = degree of penalty on a frontier score caused by closer robot on a frontier
+
+    returns:
+    - frontier_scores: Dictionary with frontier cluster centers as keys and scores as values.
+    """
+    def propagate(start_pos):
+        """Propagate the wavefront from the start position."""
+        width, height = grid.shape
+        wavefront_map = np.full_like(grid, -1, dtype=int)  #this keeps tracks of explored cells by the WPA, in order to avoid multiple calculations for a cell.
+        wavefront_map[start_pos] = 0
+        next_queue = [start_pos]
+        queue = []
+
+        robots_touched = 0 #keeps tracks of the closer robots to the frontier
+        frontier_distance_score = 0 #keeps track of the distance from the frontier to the robot doing this calculation
+        reached_robot = False #propagation happens until a robot is reached
+
+        # print(next_queue)
+
+        while not reached_robot:
+            
+            if(len(queue) == 0):
+                queue = next_queue
+                next_queue = []
+            #add 1 distance at each propagations
+            frontier_distance_score += 1
+
+            for i in queue:
+                current = queue.pop(0)
+                current_value = wavefront_map[current]
+                neighbours = get_direct_neighbors(current, width, height)
+
+                for n in neighbours:
+                    if 0 <= n[0] < width and 0 <= n[1] < height: #verif that the neighbor is inbound
+                        #If the neighbor is correct, we add the neighbors to the queue and we add 1 to the distance metric
+                        if wavefront_map[n[0], n[1]] == -1:  # Unvisited cell on the wavefront map
+                            if grid[n[0], n[1]] == OG_FREE_CELL or grid[n[0], n[1]] == OG_UNKNOWN_CELL:  # Free cell in real env
+                                wavefront_map[n[0], n[1]] = current_value + 1
+                                next_queue.append((n[0], n[1])) #we append the correct neighbour to the next queue.
+                            elif grid[n[0], n[1]] == OG_WALL:
+                                wavefront_map[n[0], n[1]] = current_value + 1 #we update the wavefront map but not append the wall to the next_queue
+
+                            #print(f"{(n[0], n[1])}//{self_position}") #TODO : trouver pourquoi ca y est jamais
+                            if (n[0], n[1]) == self_position: # Stop if the wavefront reaches the "main" robot (the one doing the calculations)
+                                # print("found")
+                                reached_robot = True
+                            #if a robot is touched by the propagation, we add it's coordinates to the list
+                            elif (n[0], n[1]) in robot_positions:  # Robot cell
+                                robots_touched += 1
+
+        return frontier_distance_score, robots_touched
+
+    frontier_scores = {}
+
+        #
+    
+
+    for frontier in frontier_clusters:
+        fx, fy = int(frontier[0]), int(frontier[1])
+        frontier_distance_score, robots_touched = propagate((fx, fy))
+        
+        frontier_scores[(fx, fy)] = frontier_distance_score + robots_touched * weight_of_closer_robots
+
+    return frontier_scores
 
 def heuristic(a, b):
     """
@@ -130,7 +262,7 @@ def a_star_search(grid, start, goal):
 
             # Skip obstacle cells
             # if grid[neighbor] == 1 or grid[neighbor] == -1:
-            if grid[neighbor] == 1:
+            if grid[neighbor] == OG_WALL:
                 continue
 
             # If the neighbor is not in g_score or the tentative g_score is lower, update the scores
@@ -184,7 +316,6 @@ def reconstruct_path(came_from, current):
         total_path.append(current)
     return total_path[::-1]  # Return the reversed path
 
-
 def euclidian_distance(point1,point2):
     """
     give the euclidian distance between 2 points\\
@@ -196,8 +327,6 @@ def euclidian_distance(point1,point2):
     - euclidian_distance:float
     """
     return np.sqrt((point1[0]-point2[0])**2+(point1[1]-point2[1])**2)
-
-
 
 def heuristic_frontier_distance(start, goal, grid):
     """
@@ -217,7 +346,7 @@ def heuristic_frontier_distance(start, goal, grid):
     # Calculate a simple obstacle penalty
     line = np.linspace(start, goal, num=int(euclidean_dist) + 1)
     line = [(int(x), int(y)) for x, y in line]
-    obstacle_penalty = sum(1 for x, y in line if grid[int(x), int(y)] == 1)
+    obstacle_penalty = sum(1 for x, y in line if grid[int(x), int(y)] == OG_WALL)
 
     # Combine Euclidean distance and obstacle penalty
     return euclidean_dist + obstacle_penalty * 100  # Weight for obstacle penalty
