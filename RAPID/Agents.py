@@ -133,29 +133,29 @@ class Robot(Sprite):
             for c in collisions:
                 if self.rect.midtop[1] > c.rect.midtop[1]:
                     sides.append("top")
-                elif self.rect.midleft[0] > c.rect.midleft[0]:
+                if self.rect.midleft[0] > c.rect.midleft[0]:
                     sides.append("left")
-                elif self.rect.midright[0] < c.rect.midright[0]:
+                if self.rect.midright[0] < c.rect.midright[0]:
                     sides.append("right")
-                else:
+                if self.rect.midtop[1] < c.rect.midtop[1]:
                     sides.append("bottom")
             
             if ("top" in sides):
-                self.transform.y += max(np.abs(self.speed.x), np.abs(self.speed.y))
+                self.transform.y += 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
             if ("bottom" in sides):
-                self.transform.y -= max(np.abs(self.speed.x), np.abs(self.speed.y))
+                self.transform.y -= 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
             if ("left" in sides):
-                self.transform.x -= max(np.abs(self.speed.x), np.abs(self.speed.y))
+                self.transform.x += 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
             if ("right" in sides):
-                self.transform.x += max(np.abs(self.speed.x), np.abs(self.speed.y))
+                self.transform.x -= 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
         #-----------------------------------------------------------------------------------------------------------
         
         
         # ensure we stay within the screen window
         self.transform.x = max(self.transform.x, 0)
-        self.transform.x = min(self.transform.x, self.env.width)
+        self.transform.x = min(self.transform.x, self.env.width-1)
         self.transform.y = max(self.transform.y, 0)
-        self.transform.y = min(self.transform.y, self.env.height)
+        self.transform.y = min(self.transform.y, self.env.height-1)
 
         self.total_distance_made += np.sqrt((self.transform.x - old_tfx)**2 + (self.transform.y - old_tfy)**2)
 
@@ -178,6 +178,7 @@ class Robot(Sprite):
         neighbors = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
 
         for n in neighbors:
+            print(n)
             self.belief_space["occupancy_grid"][n[0]][n[1]] = self.env.real_occupancy_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
 
     def get_neighbors_pixels(self, distance:int, stop_at_wall = False, self_inclusion = True):
