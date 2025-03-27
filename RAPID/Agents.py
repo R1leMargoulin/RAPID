@@ -40,7 +40,7 @@ class Robot(Sprite):
         # pygame agent components
         self.surf = Surface((4*size, 4*size), SRCALPHA, 32)
         circle(self.surf, color, (2*size, 2*size), 4*size)
-        self.rect = Rect(0, 0, 2 * size, 2 * size)
+        self.rect = Rect(0, 0, size, size)
 
         # Geometry
         self.speed = Transform2d(0,0,0)
@@ -178,7 +178,6 @@ class Robot(Sprite):
         neighbors = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
 
         for n in neighbors:
-            print(n)
             self.belief_space["occupancy_grid"][n[0]][n[1]] = self.env.real_occupancy_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
 
     def get_neighbors_pixels(self, distance:int, stop_at_wall = False, self_inclusion = True):
@@ -408,7 +407,7 @@ class Ground(Robot):
          
     def navigate_through_target_path(self):
         #we should be nearby the first point of the path, else we delete it and we'll compute an other one:
-        if euclidian_distance((int(self.transform.x), int(self.transform.y)), (self.path_to_target[0][0], self.path_to_target[0][1])) <= 2:
+        if euclidian_distance((int(self.transform.x), int(self.transform.y)), (self.path_to_target[0][0], self.path_to_target[0][1])) <= 5: #if we are more than 5 away from the path, we forget the target it in order to recalculate a new one
             if self.path_to_target[0] == self.target:
                 self.target = None
                 self.path_to_target = None
@@ -431,7 +430,6 @@ class Ground(Robot):
                 self.transform.w = self.transform.w%(2*np.pi)
                 #self.speed.x = direction_vers_voisin
 
-                #TODO regler la speed X
                 self.speed.x = min(euclidian_distance((0,0), direction), self.max_speed.x)
                 
                 xmove = self.speed.x * np.cos(self.transform.w)
