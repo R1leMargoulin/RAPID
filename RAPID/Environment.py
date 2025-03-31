@@ -267,7 +267,7 @@ class TargetPointEnvironment(Environment):
             return False
 
 class ExplorationEnvironment(Environment):
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard"):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", exploration_proportion_goal=0.995):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
@@ -295,7 +295,8 @@ class ExplorationEnvironment(Environment):
 
         self.fog_texture = pygame.Surface((1,1))
         self.fog_texture.fill((100, 100, 100))
-
+        
+        self.exploration_proportion_goal = exploration_proportion_goal
         self.exploration_completion = 0.0
 
     def run(self):
@@ -333,7 +334,7 @@ class ExplorationEnvironment(Environment):
         # print(f"COMPLETION : {self.exploration_completion}")
         # print(f"BB completion : {np.count_nonzero(self.agents_tools["blackboard"]["occupancy_grid"]!=-1)/(self.width*self.height)}")
         # print(self.exploration_completion)
-        if (self.exploration_completion >= 0.99):
+        if (self.exploration_completion >= self.exploration_proportion_goal):
             return True
         else:
             return False
