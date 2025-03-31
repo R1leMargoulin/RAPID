@@ -334,7 +334,7 @@ class ExplorationEnvironment(Environment):
         # print(f"COMPLETION : {self.exploration_completion}")
         # print(f"BB completion : {np.count_nonzero(self.agents_tools["blackboard"]["occupancy_grid"]!=-1)/(self.width*self.height)}")
         # print(self.exploration_completion)
-        if (self.exploration_completion >= self.exploration_proportion_goal):
+        if (self.exploration_completion > self.exploration_proportion_goal):
             return True
         else:
             return False
