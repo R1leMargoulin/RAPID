@@ -378,6 +378,7 @@ class Ground(Robot):
 
     def minpos_behavior(self):
         """
+        Adaptation from MinPos algorithm (Bautin, Simonin, Charpillet : 2012)
         Frontier based behavior where:
         - The frontiers are grouped into clusters
         - each cluster is given a cost depending on the distance and on robots that are closer to this frontier using the wavefront propagation algorithm (WPA)
@@ -404,6 +405,52 @@ class Ground(Robot):
 
             weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width) #the penalty for a frontier cluster depends of the size of the env.
             self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
+
+    def local_frontier_behavior(self):
+        """
+        adaptation from local frontier algorithm (Gauville, Charpillet : 2019)
+        """
+
+        #setup init pos if there is not.
+        if self.init_pos:
+            self.init_pos = (int(self.transform.x), int(self.transform.y))
+
+        #SENSING
+        self.sense()
+
+        #LOCAL FRONTIER DETECTION -----------------------------------------------------
+        vision_range = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=False)
+        local_frontier_list = []
+        for cell in vision_range:
+            cell_neighbors = get_direct_neighbors(cell, width=self.env.width, height=self.env.height) #improvable : pour plus de realisme on pourrait mettre la taille du belief space plutot que directement l'env.
+            is_frontier = False
+            for cn in cell_neighbors: #maximum 4 neighbors per cell
+                if self.belief_space["occupancy_grid"][cn[0]][cn[1]] == -1: #if the cell has an unknown cell as neighbor, it becomes a frontier.
+                    is_frontier = True
+                    break
+            if is_frontier:
+                local_frontier_list.append(cell) #we add the cell to the frontier list if it is a local frontier.
+        #-------------------------------------------------------------------------------
+        if local_frontier_list:
+        #go to the most far local frontier from the traces
+            max_dist_of_lf = 0
+            selected_frontier = None
+            for lf in local_frontier_list:
+                if euclidian_distance(lf, (self.transform.x, self.transform.y))> max_dist_of_lf: #if the distance (we take euclidian) of the LF from the robot is greater, then we select it
+                    max_dist_of_lf = euclidian_distance(lf, (self.transform.x, self.transform.y))
+                    selected_frontier = lf
+            self.target = selected_frontier
+        else: #else if there is no frontier:
+            if (int(self.transform.x), int(self.transform.y)) == self.init_pos: #if we are back at the init pose, the robot has finished.
+                pass #TODO : Exploration DONE
+            pass 
+            #TODO TODO TODO TODO mettre en place les traces dans le belief space
+            #TODO else go back to the oldest trace -> set it as target
+        #TODO navigate (A*) to the target if there is one (set a trace at every update even when navigating)
+        #TODO communicate (beliefs transfer)
+
+
+        pass
          
     def navigate_through_target_path(self):
         #we should be nearby the first point of the path, else we delete it and we'll compute an other one:
