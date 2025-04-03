@@ -46,6 +46,7 @@ class Robot(Sprite):
         self.speed = Transform2d(0,0,0)
         self.max_speed = Transform2d(max_speed[0], max_speed[1], max_speed[2] )
         self.transform = Transform2d(init_transform[0], init_transform[1], init_transform[2])
+        self.init_transform = Transform2d(init_transform[0], init_transform[1], init_transform[2])
 
         #vision
         self.vision_range = vision_range
@@ -263,7 +264,7 @@ class Ground(Robot):
 
     def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random"):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period)
-        self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos"]
+        self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier"]
 
         #handle behavior space string
         if not( behavior_to_use in self.behavior_space) :
@@ -283,6 +284,8 @@ class Ground(Robot):
                 self.nearest_frontier_search_behavior()
             case "minpos":
                 self.minpos_behavior()
+            case "local_frontier":
+                self.local_frontier_behavior()
         super().update(screen)
 
     def behavior_diff_move_random(self):
@@ -410,79 +413,120 @@ class Ground(Robot):
         """
         adaptation from local frontier algorithm (Gauville, Charpillet : 2019)
         """
-
+        print("-------------------------")
         #setup init pos if there is not.
-        if self.init_pos:
-            self.init_pos = (int(self.transform.x), int(self.transform.y))
+        if not ("traces" in self.belief_space): #then init the traces in belief space
+            print("init")
+            init_pos = (int(self.init_transform.x), int(self.init_transform.y))
+            self.belief_space["traces"] = {init_pos:self.env.step} #here we init the trace with a dictionarry: the key is the position the value is the timestamp (sim step)
 
         #SENSING
         self.sense()
 
-        #LOCAL FRONTIER DETECTION -----------------------------------------------------
-        vision_range = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=False)
-        local_frontier_list = []
-        for cell in vision_range:
-            cell_neighbors = get_direct_neighbors(cell, width=self.env.width, height=self.env.height) #improvable : pour plus de realisme on pourrait mettre la taille du belief space plutot que directement l'env.
-            is_frontier = False
-            for cn in cell_neighbors: #maximum 4 neighbors per cell
-                if self.belief_space["occupancy_grid"][cn[0]][cn[1]] == -1: #if the cell has an unknown cell as neighbor, it becomes a frontier.
-                    is_frontier = True
+        if np.any(self.target):#if we have a target target navigate (A*) to the target if there is one (set a trace at every update even when navigating)
+            print(f"PATH {self.path_to_target}")
+            if self.path_to_target: #If we have a path to our target, we continue this path.
+                print(f"navigation path of robot {self.robot_id} : {self.path_to_target}")
+                self.navigate_through_target_path() #continue on the target path
+                self.belief_space["traces"].update({(int(self.transform.x), int(self.transform.y)):self.env.step})#add the new current position to the traces
+
+            else: #if we don't have any path,only a target, then compute it with A* for our target                
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
+                if not self.path_to_target:
+                    print(self.env.real_occupancy_grid[self.target[0]][self.target[1]])
+                    print("pas de chemin!!!")
+                    #self.behavior_diff_move_random()
+                    self.target = None
+        else:
+            #LOCAL FRONTIER DETECTION -----------------------------------------------------
+            vision_range = self.get_neighbors_pixels(distance=self.vision_range+2, stop_at_wall=True, self_inclusion=False)
+            local_frontier_list = []
+            for cell in vision_range:
+                cell_neighbors = get_direct_neighbors(cell, width=self.env.width, height=self.env.height) #improvable : pour plus de realisme on pourrait mettre la taille du belief space plutot que directement l'env.
+                is_frontier = False
+                if self.belief_space["occupancy_grid"][cell[0]][cell[1]] == OG_WALL:
+                    #if it's a wall, we skip this cell.
                     break
-            if is_frontier:
-                local_frontier_list.append(cell) #we add the cell to the frontier list if it is a local frontier.
-        #-------------------------------------------------------------------------------
-        if local_frontier_list:
-        #go to the most far local frontier from the traces
-            max_dist_of_lf = 0
-            selected_frontier = None
-            for lf in local_frontier_list:
-                if euclidian_distance(lf, (self.transform.x, self.transform.y))> max_dist_of_lf: #if the distance (we take euclidian) of the LF from the robot is greater, then we select it
-                    max_dist_of_lf = euclidian_distance(lf, (self.transform.x, self.transform.y))
-                    selected_frontier = lf
-            self.target = selected_frontier
-        else: #else if there is no frontier:
-            if (int(self.transform.x), int(self.transform.y)) == self.init_pos: #if we are back at the init pose, the robot has finished.
-                pass #TODO : Exploration DONE
-            pass 
-            #TODO TODO TODO TODO mettre en place les traces dans le belief space
-            #TODO else go back to the oldest trace -> set it as target
-        #TODO navigate (A*) to the target if there is one (set a trace at every update even when navigating)
-        #TODO communicate (beliefs transfer)
+                for cn in cell_neighbors: #maximum 4 neighbors per cell
+                    if self.belief_space["occupancy_grid"][cn[0]][cn[1]] == OG_UNKNOWN_CELL: #if the cell has an unknown cell as neighbor, it becomes a frontier.
+                        is_frontier = True
+                        break
+                if is_frontier:
+                    local_frontier_list.append(cell) #we add the cell to the frontier list if it is a local frontier.
+            #-------------------------------------------------------------------------------
+            if local_frontier_list:
+            #go to the most far local frontier from the traces
+                max_dist_of_lf = np.inf
+                selected_frontier = None
+                for lf in local_frontier_list:
+                    if euclidian_distance(lf, (self.transform.x, self.transform.y))< max_dist_of_lf: #if the distance (we take euclidian) of the LF from the robot is greater, then we select it
+                        max_dist_of_lf = euclidian_distance(lf, (self.transform.x, self.transform.y))
+                        selected_frontier = lf
+                print("EEEEEEEEEEEEEEEE")
+                print(selected_frontier)
+                self.target = selected_frontier
+            else: #else if there is no frontier:
+                if (int(self.transform.x), int(self.transform.y)) == (int(self.init_transform.x), int(self.init_transform.y)): #if we are back at the init pose, the robot has finished.
+                    print("aaaaaaaaaa")
+                    print((int(self.transform.x), int(self.transform.y)) , (int(self.init_transform.x), int(self.init_transform.y)))
+                    pass #TODO : Exploration DONE
+                else: #else go back to the previous trace -> set it as target
+                    print("BBBBBBBBB")
+                    # pour les cases voisine de distance ou le robot à pu se déplacer sur un step de simulation (sur une periode de temps donné, on récolte les voisins)
+                    move_possible_neighbors =  self.get_neighbors_pixels(distance=int(max(4*self.max_speed.x, 4*self.max_speed.y)), stop_at_wall=True, self_inclusion=False)
+                    chosen_trace = None
+                    oldest_timestep = np.inf
+                    for cell in move_possible_neighbors : #on va prendre la trace la plus ancienne possible dans ce champs
+                        if cell in self.belief_space["traces"]: #check if the cell is registered in the traces or we would have an error
+                            print("DDDDDDDDDDDDDDDDDD")
+                            print(cell)
+                            if self.belief_space["traces"][cell] < oldest_timestep:
+                                chosen_trace = cell
+                                oldest_timestep = self.belief_space["traces"][cell]
+                    self.target = chosen_trace #on definit la trace la plus ancienne dans le rayon restreint défini.
 
+        print(f"Position of robot {self.robot_id} :  {int(self.transform.x), int(self.transform.y)})")
+        print(f"Target of robot {self.robot_id} : {self.target}")
+        self.belief_transfer() #belief transfer management.
 
-        pass
          
     def navigate_through_target_path(self):
+        def make_the_move(waypoint):
+            direction = (waypoint[0] - int(self.transform.x), waypoint[1] - int(self.transform.y)) #TODO repasser en coordonnees continues
+
+            angle = np.arctan2(direction[1], direction[0])
+            
+            #Angle to rotate to go in the neighbor direction
+            tfw = (angle - self.transform.w)%(2*np.pi)  #differance of angle
+
+            #self.speed.w = min(self.max_speed.w, tfw) #TODO regérer la limite d'angle
+            self.speed.w = tfw
+
+            self.transform.w += self.speed.w
+            #2pi modulo
+            self.transform.w = self.transform.w%(2*np.pi)
+            #self.speed.x = direction_vers_voisin
+
+            self.speed.x = min(euclidian_distance((0,0), direction), self.max_speed.x)
+            
+            xmove = self.speed.x * np.cos(self.transform.w)
+            ymove = self.speed.x * np.sin(self.transform.w)
+
+            self.translate(xmove, ymove)
+
         #we should be nearby the first point of the path, else we delete it and we'll compute an other one:
         if euclidian_distance((int(self.transform.x), int(self.transform.y)), (self.path_to_target[0][0], self.path_to_target[0][1])) <= 5: #if we are more than 5 away from the path, we forget the target it in order to recalculate a new one
             if self.path_to_target[0] == self.target:
+                waypoint = self.path_to_target[0]
+                make_the_move(waypoint)
+                
                 self.target = None
                 self.path_to_target = None
             else:
                 self.path_to_target.pop(0)
                 waypoint = self.path_to_target[0]
 
-                direction = (waypoint[0] - int(self.transform.x), waypoint[1] - int(self.transform.y)) #TODO repasser en coordonnees continues
-
-                angle = np.arctan2(direction[1], direction[0])
-                
-                #Angle to rotate to go in the neighbor direction
-                tfw = (angle - self.transform.w)%(2*np.pi)  #differance of angle
-
-                #self.speed.w = min(self.max_speed.w, tfw) #TODO regérer la limite d'angle
-                self.speed.w = tfw
-
-                self.transform.w += self.speed.w
-                #2pi modulo
-                self.transform.w = self.transform.w%(2*np.pi)
-                #self.speed.x = direction_vers_voisin
-
-                self.speed.x = min(euclidian_distance((0,0), direction), self.max_speed.x)
-                
-                xmove = self.speed.x * np.cos(self.transform.w)
-                ymove = self.speed.x * np.sin(self.transform.w)
-
-                self.translate(xmove, ymove)
+                make_the_move(waypoint)
 
                 pass
         else:

@@ -302,7 +302,7 @@ class ExplorationEnvironment(Environment):
     def run(self):
         #remove some fog around agents before launching
         for agent in self.agents:
-            neighbours = agent.get_neighbors_pixels(distance = 20, stop_at_wall = True, self_inclusion = True)
+            neighbours = agent.get_neighbors_pixels(distance = agent.vision_range, stop_at_wall = True, self_inclusion = True)
             self.mark_explored_cells(neighbours)
         super().run()
 
