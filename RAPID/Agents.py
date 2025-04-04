@@ -413,80 +413,86 @@ class Ground(Robot):
         """
         adaptation from local frontier algorithm (Gauville, Charpillet : 2019)
         """
-        print("-------------------------")
         #setup init pos if there is not.
         if not ("traces" in self.belief_space): #then init the traces in belief space
-            print("init")
             init_pos = (int(self.init_transform.x), int(self.init_transform.y))
             self.belief_space["traces"] = {init_pos:self.env.step} #here we init the trace with a dictionarry: the key is the position the value is the timestamp (sim step)
+
+            #init second chance used as False
+            self.belief_space["second_chance_usage"] = False
 
         #SENSING
         self.sense()
 
         if np.any(self.target):#if we have a target target navigate (A*) to the target if there is one (set a trace at every update even when navigating)
-            print(f"PATH {self.path_to_target}")
             if self.path_to_target: #If we have a path to our target, we continue this path.
-                print(f"navigation path of robot {self.robot_id} : {self.path_to_target}")
                 self.navigate_through_target_path() #continue on the target path
-                self.belief_space["traces"].update({(int(self.transform.x), int(self.transform.y)):self.env.step})#add the new current position to the traces
+                if (int(self.transform.x), int(self.transform.y)) not in self.belief_space["traces"].keys():
+                    self.belief_space["traces"].update({(int(self.transform.x), int(self.transform.y)):self.env.step})#add the new current position to the traces
 
             else: #if we don't have any path,only a target, then compute it with A* for our target                
                 self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
                 if not self.path_to_target:
-                    print(self.env.real_occupancy_grid[self.target[0]][self.target[1]])
-                    print("pas de chemin!!!")
                     #self.behavior_diff_move_random()
                     self.target = None
         else:
             #LOCAL FRONTIER DETECTION -----------------------------------------------------
-            vision_range = self.get_neighbors_pixels(distance=self.vision_range+2, stop_at_wall=True, self_inclusion=False)
+            vision_range = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
             local_frontier_list = []
             for cell in vision_range:
-                cell_neighbors = get_direct_neighbors(cell, width=self.env.width, height=self.env.height) #improvable : pour plus de realisme on pourrait mettre la taille du belief space plutot que directement l'env.
-                is_frontier = False
                 if self.belief_space["occupancy_grid"][cell[0]][cell[1]] == OG_WALL:
                     #if it's a wall, we skip this cell.
-                    break
+                    continue
+
+                cell_neighbors = get_direct_neighbors(cell, width=self.env.width, height=self.env.height) #improvable : pour plus de realisme on pourrait mettre la taille du belief space plutot que directement l'env.
+
                 for cn in cell_neighbors: #maximum 4 neighbors per cell
                     if self.belief_space["occupancy_grid"][cn[0]][cn[1]] == OG_UNKNOWN_CELL: #if the cell has an unknown cell as neighbor, it becomes a frontier.
-                        is_frontier = True
+                        #we add the cell to the frontier list if it is a local frontier.
+                        local_frontier_list.append(cell)
                         break
-                if is_frontier:
-                    local_frontier_list.append(cell) #we add the cell to the frontier list if it is a local frontier.
+                        
             #-------------------------------------------------------------------------------
             if local_frontier_list:
             #go to the most far local frontier from the traces
-                max_dist_of_lf = np.inf
+                max_dist_of_lf = 0
                 selected_frontier = None
+                mean_traces_coordinates = (int(np.mean([c[0] for c in self.belief_space["traces"].keys()])), int(np.mean([c[1] for c in self.belief_space["traces"].keys()]))) #mean coordinates of all the traces.
                 for lf in local_frontier_list:
-                    if euclidian_distance(lf, (self.transform.x, self.transform.y))< max_dist_of_lf: #if the distance (we take euclidian) of the LF from the robot is greater, then we select it
-                        max_dist_of_lf = euclidian_distance(lf, (self.transform.x, self.transform.y))
+                    if euclidian_distance(lf, mean_traces_coordinates)> max_dist_of_lf: #if the distance (we take euclidian) of the LF from the robot is greater, then we select it
+                        max_dist_of_lf = euclidian_distance(lf, mean_traces_coordinates)
                         selected_frontier = lf
-                print("EEEEEEEEEEEEEEEE")
-                print(selected_frontier)
                 self.target = selected_frontier
             else: #else if there is no frontier:
                 if (int(self.transform.x), int(self.transform.y)) == (int(self.init_transform.x), int(self.init_transform.y)): #if we are back at the init pose, the robot has finished.
-                    print("aaaaaaaaaa")
-                    print((int(self.transform.x), int(self.transform.y)) , (int(self.init_transform.x), int(self.init_transform.y)))
-                    pass #TODO : Exploration DONE
+                    if self.belief_space["second_chance_usage"] == True:
+                        pass #TODO : Exploration DONE
+                    else:
+                        #we use a second chance:
+                        self.belief_space["second_chance_usage"] = True
+                        
+                        mean_traces_coordinates = (int(np.mean([c[0] for c in self.belief_space["traces"].keys()])), int(np.mean([c[1] for c in self.belief_space["traces"].keys()]))) #mean coordinates of all the traces.
+                        max_dist = 0
+                        second_chance_target = None
+                        for cell in vision_range:
+                            if self.belief_space["occupancy_grid"][cell[0]][cell[1]] != OG_WALL:
+                                if euclidian_distance(cell, mean_traces_coordinates)> max_dist:
+                                    max_dist = euclidian_distance(cell, mean_traces_coordinates)
+                                    second_chance_target = cell
+                        self.target = second_chance_target
+
                 else: #else go back to the previous trace -> set it as target
-                    print("BBBBBBBBB")
                     # pour les cases voisine de distance ou le robot à pu se déplacer sur un step de simulation (sur une periode de temps donné, on récolte les voisins)
                     move_possible_neighbors =  self.get_neighbors_pixels(distance=int(max(4*self.max_speed.x, 4*self.max_speed.y)), stop_at_wall=True, self_inclusion=False)
                     chosen_trace = None
                     oldest_timestep = np.inf
                     for cell in move_possible_neighbors : #on va prendre la trace la plus ancienne possible dans ce champs
                         if cell in self.belief_space["traces"]: #check if the cell is registered in the traces or we would have an error
-                            print("DDDDDDDDDDDDDDDDDD")
-                            print(cell)
                             if self.belief_space["traces"][cell] < oldest_timestep:
                                 chosen_trace = cell
                                 oldest_timestep = self.belief_space["traces"][cell]
                     self.target = chosen_trace #on definit la trace la plus ancienne dans le rayon restreint défini.
 
-        print(f"Position of robot {self.robot_id} :  {int(self.transform.x), int(self.transform.y)})")
-        print(f"Target of robot {self.robot_id} : {self.target}")
         self.belief_transfer() #belief transfer management.
 
          
