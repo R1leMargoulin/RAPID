@@ -101,11 +101,15 @@ class Robot(Sprite):
         self.belief_space["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
         if self.env.full_knowledge:
             self.belief_space["occupancy_grid"] = self.env.real_occupancy_grid
+
+        
+        self.imdone = False #if true, the robot will consider it's mission is over, it stops its activity.
         
         #Ready!
         self.is_active = True
 
     def update(self, screen):
+        
         if self.env.render:
             scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
             screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
@@ -275,17 +279,18 @@ class Ground(Robot):
 
     def update(self, screen):
         # self.behavior_diff_move_random()
-        match self.behavior:
-            case "random":
-                self.behavior_diff_move_random()
-            case "target_djikstra":
-                self.behavior_target_djikstra()
-            case "nearest_frontier":
-                self.nearest_frontier_search_behavior()
-            case "minpos":
-                self.minpos_behavior()
-            case "local_frontier":
-                self.local_frontier_behavior()
+        if not self.imdone:
+            match self.behavior:
+                case "random":
+                    self.behavior_diff_move_random()
+                case "target_djikstra":
+                    self.behavior_target_djikstra()
+                case "nearest_frontier":
+                    self.nearest_frontier_search_behavior()
+                case "minpos":
+                    self.minpos_behavior()
+                case "local_frontier":
+                    self.local_frontier_behavior()
         super().update(screen)
 
     def behavior_diff_move_random(self):
@@ -371,14 +376,21 @@ class Ground(Robot):
         else: #sinon on va chercher les frontières.
             #frontier detection from belief space
             frontiers = find_frontier_cells(self.belief_space["occupancy_grid"]) #from utils
-            #then we take the closest one.
-            distance = np.inf
-            for f in frontiers:
-                hdist = heuristic_frontier_distance((self.transform.x, self.transform.y), (f[0], f[1]), self.belief_space["occupancy_grid"])
-                if hdist < distance :
-                    distance = hdist
-                    self.target = tuple(f.tolist()) #set the frontier as new target
 
+            if not frontiers: #si on a pas de frontieres explo finie?
+                if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
+                    self.target = (int(self.init_transform.x),int(self.init_transform.y))
+                else:
+                    self.imdone = True
+            else:
+                #then we take the closest one.
+                distance = np.inf
+                for f in frontiers:
+                    hdist = heuristic_frontier_distance((self.transform.x, self.transform.y), (f[0], f[1]), self.belief_space["occupancy_grid"])
+                    if hdist < distance :
+                        distance = hdist
+                        self.target = tuple(f.tolist()) #set the frontier as new target
+            
     def minpos_behavior(self):
         """
         Adaptation from MinPos algorithm (Bautin, Simonin, Charpillet : 2012)
@@ -399,15 +411,22 @@ class Ground(Robot):
                 self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
 
         else: #sinon on va chercher les frontières.
-            #frontier detection from BB
+            #frontier detection
             frontiers = find_frontier_cells(self.belief_space["occupancy_grid"]) #from utils
-            cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range) #from utils : make cluster fontiers
 
-            pos_list_float = [pos["position"] for pos in list(self.belief_space["robot_positions"].values())] #list of float xy position of all robots
-            pos_list_int = [(int(x), int(y)) for x,y in pos_list_float] #same list with ints.
+            if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
+                if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
+                    self.target = (int(self.init_transform.x),int(self.init_transform.y))
+                else:
+                    self.imdone = True
+            else:
+                cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range) #from utils : make cluster fontiers
 
-            weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width) #the penalty for a frontier cluster depends of the size of the env.
-            self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
+                pos_list_float = [pos["position"] for pos in list(self.belief_space["robot_positions"].values())] #list of float xy position of all robots
+                pos_list_int = [(int(x), int(y)) for x,y in pos_list_float] #same list with ints.
+
+                weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width) #the penalty for a frontier cluster depends of the size of the env.
+                self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
 
     def local_frontier_behavior(self):
         """
@@ -466,7 +485,8 @@ class Ground(Robot):
             else: #else if there is no frontier:
                 if (int(self.transform.x), int(self.transform.y)) == (int(self.init_transform.x), int(self.init_transform.y)): #if we are back at the init pose, the robot has finished.
                     if self.belief_space["second_chance_usage"] == True:
-                        pass #TODO : Exploration DONE
+                        self.imdone = True
+                        #pass #TODO : Exploration DONE
                     else:
                         #we use a second chance:
                         self.belief_space["second_chance_usage"] = True
@@ -494,8 +514,7 @@ class Ground(Robot):
                     self.target = chosen_trace #on definit la trace la plus ancienne dans le rayon restreint défini.
 
         self.belief_transfer() #belief transfer management.
-
-         
+    
     def navigate_through_target_path(self):
         def make_the_move(waypoint):
             direction = (waypoint[0] - int(self.transform.x), waypoint[1] - int(self.transform.y)) #TODO repasser en coordonnees continues

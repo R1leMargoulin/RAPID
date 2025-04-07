@@ -13,9 +13,9 @@ SCREEN_WIDTH = 100
 SCREEN_HEIGHT = 100
 BACKGROUND_COLOR = (200, 200, 200)
 
-ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/examples/env_images_example/forest_100_100.png"# CHANGE THE PATH
+ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/examples/env_images_example/cross_100_100.png"# CHANGE THE PATH
 
-NB_GROUND_AGENTS = 3
+NB_GROUND_AGENTS = 4
 
 img = Image.open(ENV_IMAGE_PATH).convert("L")
 
@@ -26,7 +26,7 @@ def main():
     
     #env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img, amount_of_agents_goal=2, scaling_factor=2)
     #env = ExplorationEnvironment(render= True, background_color= BACKGROUND_COLOR, env_image=img, full_knowledge=False, scaling_factor=4)
-    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, env_image=img, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=4, communication_mode="limited", render=True)
+    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, env_image=img, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=4, communication_mode="limited", render=True, end_at_full_exploation=True)
 
 
     for i in range(NB_GROUND_AGENTS):
