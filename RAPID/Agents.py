@@ -131,7 +131,8 @@ class Robot(Sprite):
 
         
         #detect and handle collisions------------------------------------------------------------------------------------
-        collisions = spritecollide(self, self.env.obstacles_group, False, collide_circle)
+        #TODO: remake collision
+        collisions = spritecollide(self, self.env.cell_feature_groups["obstacles"], False, collide_circle)
 
         if (collisions): #is there collision
             sides = []
@@ -311,7 +312,7 @@ class Ground(Robot):
 
         self.translate(xmove, ymove)
 
-    def behavior_target_djikstra(self): #TODO: voir en blackboard aussi.
+    def behavior_target_djikstra(self):
         self.speed.x = 1
         self.speed.y = 1
 
@@ -321,7 +322,7 @@ class Ground(Robot):
                 self.belief_space.update({"djikstra": djikstra(self.belief_space["occupancy_grid"],(tp_coords[0][0], tp_coords[1][0]))}) #fonctionne en full knowledge de la map.
             else : 
                 #determination de la cellule discrete de la belief base sur laquelle on est:
-                position_actuelle = (int(self.transform.x), int(self.transform.y)) #TODO changer si on decide de varier la taille de la belief map.
+                position_actuelle = (int(self.transform.x), int(self.transform.y)) 
 
                 # Directions possibles (4-connectées)
                 directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
@@ -346,7 +347,7 @@ class Ground(Robot):
                     #Angle to rotate to go in the neighbor direction
                     tfw = (angle - self.transform.w)%(2*np.pi)  #differance of angle
 
-                    #self.speed.w = min(self.max_speed.w, tfw) #TODO regérer la limite d'angle
+                    #self.speed.w = min(self.max_speed.w, tfw)
                     self.speed.w = tfw
 
                     self.transform.w += self.speed.w
@@ -486,7 +487,6 @@ class Ground(Robot):
                 if (int(self.transform.x), int(self.transform.y)) == (int(self.init_transform.x), int(self.init_transform.y)): #if we are back at the init pose, the robot has finished.
                     if self.belief_space["second_chance_usage"] == True:
                         self.imdone = True
-                        #pass #TODO : Exploration DONE
                     else:
                         #we use a second chance:
                         self.belief_space["second_chance_usage"] = True
@@ -517,7 +517,7 @@ class Ground(Robot):
     
     def navigate_through_target_path(self):
         def make_the_move(waypoint):
-            direction = (waypoint[0] - int(self.transform.x), waypoint[1] - int(self.transform.y)) #TODO repasser en coordonnees continues
+            direction = (waypoint[0] - int(self.transform.x), waypoint[1] - int(self.transform.y))
 
             angle = np.arctan2(direction[1], direction[0])
             

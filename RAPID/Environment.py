@@ -49,6 +49,7 @@ class Environment():
 
         self.agents = []
         self.obstacles = []
+        self.cell_feature_groups = {}
         self.interest_points = {}
         self.agents_tools = {}
 
@@ -58,6 +59,8 @@ class Environment():
 
         self.communication_mode = communication_mode
 
+        self.obstacles_group = pygame.sprite.Group()
+        self.agent_group = pygame.sprite.Group()
 
         if(env_image):
             self.width = env_image.size[0]
@@ -73,9 +76,6 @@ class Environment():
             else:
                 self.screen = None
 
-        
-        self.obstacles_group = pygame.sprite.Group(self.obstacles)
-        self.agent_group = pygame.sprite.Group()
 
         # handling of the communication mode string
         if self.communication_mode not in COMMUNICATION_MODE_LIST:
@@ -129,7 +129,7 @@ class Environment():
             a.update(self.screen)
 
         if self.render:
-            for o in self.obstacles:  #BACKUP scaling
+            for o in self.cell_feature_groups["obstacles"]:  #BACKUP scaling
             #     self.screen.blit(o.image, o.rect)
                 scaled_rect = pygame.Rect(o.rect.x * self.scaling_factor, o.rect.y * self.scaling_factor, o.rect.width * self.scaling_factor, o.rect.height * self.scaling_factor)
                 self.screen.blit(pygame.transform.scale(o.image, scaled_rect.size), scaled_rect)
@@ -147,8 +147,9 @@ class Environment():
 
     def create_env_from_image(self, img):
         np_img = np.array(img)
-        np_img = ~np_img  # invert black and white cause (255 will be white, but we want our obstacle to be 1 and free cell be 0)
-        np_img[np_img > 0] = 1 #all non white cells are considered as obstacles.
+        #TODO verifier le format de l'image
+        #np_img = ~np_img  # invert black and white cause (255 will be white, but we want our obstacle to be 1 and free cell be 0)
+        #np_img[np_img > 0] = 1 #all non white cells are considered as obstacles.
 
         dims = np_img.shape
         self.width = dims[1]
@@ -160,17 +161,35 @@ class Environment():
             self.screen = None
         for l in range(len(np_img)) :
             for o in range(len(np_img[l])):
-                if np_img[l][o] == 1:
-                    self.create_wall(o,l)
+                #TODO traiter la couleur des pixels
+                r,g,b = np_img[l][o]
+                if r < 10 and g<10 and b<10: #black = wall
+                    self.create_cell(o,l, type=OG_WALL, group_name="obstacles", color=(r,g,b))
+                elif r>180 and g<100 and b<100: #red = high obstacle
+                    self.create_cell(o,l, type=OG_HIGH_WALL, group_name="high_obstacles", color=(r,g,b))
+                elif r>180 and g>180 and b<100: #yellow = sand
+                    self.create_cell(o,l, type=OG_SAND, group_name="sand", color=(r,g,b))
+                elif r<100 and g<100 and b>180: #blue = water
+                    self.create_cell(o,l, type=OG_WATER, group_name="water", color=(r,g,b))
+                elif r<100 and g>180 and b<100: #green = grass
+                   self.create_cell(o,l, type=OG_GRASS, group_name="grass", color=(r,g,b))
 
-    def create_wall(self, coord_x, coord_y):
-        self.real_occupancy_grid[coord_x][coord_y] = OG_WALL
+
+
+    def create_cell(self, coord_x, coord_y, type, group_name:str, color):
+        self.real_occupancy_grid[coord_x][coord_y] = type
 
         sprite = pygame.sprite.Sprite()
         sprite.image = pygame.Surface((1, 1))
-        sprite.image.fill((0, 0, 0))
+        sprite.image.fill((color[0], color[1], color[2]))
         sprite.rect = pygame.Rect(coord_x,coord_y, 1,1)
-        self.obstacles.append(sprite)
+        #self.obstacles.append(sprite)
+
+        if group_name in self.cell_feature_groups:
+            self.cell_feature_groups[group_name].add(sprite)
+        else:
+            self.cell_feature_groups.update({group_name: pygame.sprite.Group()})
+        #self.obstacles_group.add(sprite) #old way
     
     def goal_condition(self):
         return False
@@ -253,7 +272,7 @@ class TargetPointEnvironment(Environment):
         self.target_point = sprite
 
 
-        while pygame.sprite.spritecollide(self.target_point, self.obstacles_group, False):
+        while pygame.sprite.spritecollide(self.target_point, self.cell_feature_groups["obstacles"], False):
             logging.warning("Target point overlaps with an obstacle, reallocating it randomly.")
             self.target_point.rect.center = (randrange(0, self.width), randrange(0, self.height))
         

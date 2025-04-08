@@ -17,7 +17,7 @@ ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/examples/env_ima
 
 NB_GROUND_AGENTS = 4
 
-img = Image.open(ENV_IMAGE_PATH).convert("L")
+img = Image.open(ENV_IMAGE_PATH)
 
 
 logging.basicConfig(level=logging.DEBUG)
