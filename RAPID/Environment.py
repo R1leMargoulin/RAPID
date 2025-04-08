@@ -267,7 +267,7 @@ class TargetPointEnvironment(Environment):
             return False
 
 class ExplorationEnvironment(Environment):
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard"):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", exploration_proportion_goal=0.995, end_at_full_exploation=True):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
@@ -286,6 +286,7 @@ class ExplorationEnvironment(Environment):
         - communication_mode:str = method of communication in ["blackboard", "limited"] :
             - "blackboard" : all robots share a blackboard in the environment, the knowledge is centralized on this blackboard
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
+        - end_at_full_exploation:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when the exploration proportion goal is reached.
         """
         super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode)
         exp_map = np.zeros((self.width, self.height))
@@ -295,13 +296,16 @@ class ExplorationEnvironment(Environment):
 
         self.fog_texture = pygame.Surface((1,1))
         self.fog_texture.fill((100, 100, 100))
-
+        
+        self.exploration_proportion_goal = exploration_proportion_goal
         self.exploration_completion = 0.0
+
+        self.end_at_full_exploation = end_at_full_exploation
 
     def run(self):
         #remove some fog around agents before launching
         for agent in self.agents:
-            neighbours = agent.get_neighbors_pixels(distance = 20, stop_at_wall = True, self_inclusion = True)
+            neighbours = agent.get_neighbors_pixels(distance = agent.vision_range, stop_at_wall = True, self_inclusion = True)
             self.mark_explored_cells(neighbours)
         super().run()
 
@@ -328,15 +332,22 @@ class ExplorationEnvironment(Environment):
         # print(np.count_nonzero(self.interest_points["exploration_map"]==1))
         # print(self.width*self.height)
         # print(np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height))
-        self.exploration_completion = np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height)
 
-        # print(f"COMPLETION : {self.exploration_completion}")
-        # print(f"BB completion : {np.count_nonzero(self.agents_tools["blackboard"]["occupancy_grid"]!=-1)/(self.width*self.height)}")
-        # print(self.exploration_completion)
-        if (self.exploration_completion >= 0.99):
-            return True
+        if self.end_at_full_exploation:
+            self.exploration_completion = np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height)
+            # print(f"COMPLETION : {self.exploration_completion}")
+            # print(f"BB completion : {np.count_nonzero(self.agents_tools["blackboard"]["occupancy_grid"]!=-1)/(self.width*self.height)}")
+            # print(self.exploration_completion)
+            if (self.exploration_completion >= self.exploration_proportion_goal):
+                return True
+            else:
+                return False
         else:
-            return False
+            has_to_stop = True
+            for a in self.agents:
+                if not a.imdone:
+                    has_to_stop = False
+            return has_to_stop
 
     def mark_explored_cells(self, cells):
         for cell in cells:

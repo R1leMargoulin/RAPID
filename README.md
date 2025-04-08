@@ -57,6 +57,10 @@ In the **examples/program_examples** directory, you can find three programs:
 
 Environment can be made with images, here are some examples:
 
+Here is an example of exploration in a "forest" environment using the minpos behavior.
+![image](./images/expl_foret_3robots.gif)
+
+
 On the below images, we can see on the left a forest simulated environment used in an exploration scenario.While on the middle, we can see a wall with an opening, environment, used in a target point scenario where an amount of agents needs to go near the target point (in red on the image). On the right,
 we can see an exploration scenario with a limited range of communication
 
