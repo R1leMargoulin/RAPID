@@ -57,6 +57,17 @@ class Robot(Sprite):
         self.communication_period = communication_period
         self.time_from_last_communication = 0
 
+        #capabilities of ease in the env by default, will be as a classical ground robot:
+        self.env_ease = {
+            OG_FREE_CELL_GROUP_NAME:1,
+            OG_WALL_GROUP_NAME:0,
+            OG_HIGH_WALL_GROUP_NAME:0,
+            OG_SAND_GROUP_NAME:0.4,
+            OG_WATER_GROUP_NAME:0,
+            OG_GRASS_GROUP_NAME:0.6
+        }
+
+
     
         #Metrics
         self.total_distance_made = 0.0
@@ -125,35 +136,40 @@ class Robot(Sprite):
         old_tfy = self.transform.y
 
 
-        # update position based on delta x/y
-        self.transform.x = self.transform.x + speed_x
-        self.transform.y = self.transform.y + speed_y
+        current_cell_type  = self.env.real_occupancy_grid[int(self.transform.x)][int(self.transform.y)]# get the current cell type in order to adapt the speed depending of the traversability ease of the robot
+        current_cell_type_name = list(ENV_CELL_TYPES.keys())[list(ENV_CELL_TYPES.values()).index(int(current_cell_type))]
+        movement_ease = self.env_ease[current_cell_type_name]
+
+        # update position based on delta x/y and the movement ease depending of the type of the cell we are on
+        self.transform.x = self.transform.x + speed_x * movement_ease
+        self.transform.y = self.transform.y + speed_y * movement_ease
 
         
         #detect and handle collisions------------------------------------------------------------------------------------
         #TODO: remake collision
-        collisions = spritecollide(self, self.env.cell_feature_groups["obstacles"], False, collide_circle)
+        for cell_type in filter(lambda k: self.env_ease[k] == 0, self.env_ease): #for all cells type with a traversability ease of 0 (obstacles)
+            collisions = spritecollide(self, self.env.cell_feature_groups[cell_type], False, collide_circle)
 
-        if (collisions): #is there collision
-            sides = []
-            for c in collisions:
-                if self.rect.midtop[1] > c.rect.midtop[1]:
-                    sides.append("top")
-                if self.rect.midleft[0] > c.rect.midleft[0]:
-                    sides.append("left")
-                if self.rect.midright[0] < c.rect.midright[0]:
-                    sides.append("right")
-                if self.rect.midtop[1] < c.rect.midtop[1]:
-                    sides.append("bottom")
-            
-            if ("top" in sides):
-                self.transform.y += 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
-            if ("bottom" in sides):
-                self.transform.y -= 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
-            if ("left" in sides):
-                self.transform.x += 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
-            if ("right" in sides):
-                self.transform.x -= 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
+            if (collisions): #is there collision
+                sides = []
+                for c in collisions:
+                    if self.rect.midtop[1] > c.rect.midtop[1]:
+                        sides.append("top")
+                    if self.rect.midleft[0] > c.rect.midleft[0]:
+                        sides.append("left")
+                    if self.rect.midright[0] < c.rect.midright[0]:
+                        sides.append("right")
+                    if self.rect.midtop[1] < c.rect.midtop[1]:
+                        sides.append("bottom")
+                
+                if ("top" in sides):
+                    self.transform.y += 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
+                if ("bottom" in sides):
+                    self.transform.y -= 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
+                if ("left" in sides):
+                    self.transform.x += 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
+                if ("right" in sides):
+                    self.transform.x -= 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
         #-----------------------------------------------------------------------------------------------------------
         
         
@@ -364,6 +380,11 @@ class Ground(Robot):
         """
         compute a greedy nearest frontier algorithm with an A* path search to the nearest frontier for each agent.
         """
+        traversable_types = list(filter(lambda k: self.env_ease[k] != 0, self.env_ease)) #find the cells that the robot can eventually traverse
+        for i in range(len(traversable_types)):#we have the string name of the cells types, lets get the int values
+            traversable_types[i] = ENV_CELL_TYPES[traversable_types[i]]
+
+
         self.sense()#first of all sense the env.
         self.belief_transfer()
 
@@ -372,13 +393,14 @@ class Ground(Robot):
                 self.navigate_through_target_path()
                 pass
             else: #if we don't have any path, then compute it with A* for our target
-                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=traversable_types) #from utils : A* Path calculation
 
         else: #sinon on va chercher les frontières.
             #frontier detection from belief space
-            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"]) #from utils
 
-            if not frontiers: #si on a pas de frontieres explo finie?
+            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=traversable_types) #from utils
+
+            if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
                 if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
                     self.target = (int(self.init_transform.x),int(self.init_transform.y))
                 else:
@@ -387,7 +409,7 @@ class Ground(Robot):
                 #then we take the closest one.
                 distance = np.inf
                 for f in frontiers:
-                    hdist = heuristic_frontier_distance((self.transform.x, self.transform.y), (f[0], f[1]), self.belief_space["occupancy_grid"])
+                    hdist = heuristic_frontier_distance((self.transform.x, self.transform.y), (f[0], f[1]), self.belief_space["occupancy_grid"], traversable_types=traversable_types)
                     if hdist < distance :
                         distance = hdist
                         self.target = tuple(f.tolist()) #set the frontier as new target
@@ -400,6 +422,10 @@ class Ground(Robot):
         - each cluster is given a cost depending on the distance and on robots that are closer to this frontier using the wavefront propagation algorithm (WPA)
         - the robot chose the frontier with the lowest cost
         """
+        traversable_types = list(filter(lambda k: self.env_ease[k] != 0, self.env_ease)) #find the cells that the robot can eventually traverse
+        for i in range(len(traversable_types)):#we have the string name of the cells types, lets get the int values
+            traversable_types[i] = ENV_CELL_TYPES[traversable_types[i]]
+
         #first of all, sense the environment
         self.sense()#first of all sense the env.
         self.belief_transfer() #after sensing, transfer beliefs.
@@ -409,11 +435,11 @@ class Ground(Robot):
                 self.navigate_through_target_path()
                 pass
             else: #if we don't have any path, then compute it with our target
-                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=traversable_types) #from utils : A* Path calculation
 
         else: #sinon on va chercher les frontières.
             #frontier detection
-            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"]) #from utils
+            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=traversable_types) #from utils
 
             if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
                 if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
@@ -421,12 +447,12 @@ class Ground(Robot):
                 else:
                     self.imdone = True
             else:
-                cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range) #from utils : make cluster fontiers
+                cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range, traversable_types=traversable_types) #from utils : make cluster fontiers
 
                 pos_list_float = [pos["position"] for pos in list(self.belief_space["robot_positions"].values())] #list of float xy position of all robots
                 pos_list_int = [(int(x), int(y)) for x,y in pos_list_float] #same list with ints.
 
-                weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width) #the penalty for a frontier cluster depends of the size of the env.
+                weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width, traversable_types=traversable_types) #the penalty for a frontier cluster depends of the size of the env.
                 self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
 
     def local_frontier_behavior(self):
@@ -440,6 +466,10 @@ class Ground(Robot):
 
             #init second chance used as False
             self.belief_space["second_chance_usage"] = False
+        
+        traversable_types = list(filter(lambda k: self.env_ease[k] != 0, self.env_ease)) #find the cells that the robot can eventually traverse
+        for i in range(len(traversable_types)):#we have the string name of the cells types, lets get the int values
+            traversable_types[i] = ENV_CELL_TYPES[traversable_types[i]]
 
         #SENSING
         self.sense()
@@ -451,7 +481,7 @@ class Ground(Robot):
                     self.belief_space["traces"].update({(int(self.transform.x), int(self.transform.y)):self.env.step})#add the new current position to the traces
 
             else: #if we don't have any path,only a target, then compute it with A* for our target                
-                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1])) #from utils : A* Path calculation
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=traversable_types) #from utils : A* Path calculation
                 if not self.path_to_target:
                     #self.behavior_diff_move_random()
                     self.target = None
@@ -460,7 +490,7 @@ class Ground(Robot):
             vision_range = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
             local_frontier_list = []
             for cell in vision_range:
-                if self.belief_space["occupancy_grid"][cell[0]][cell[1]] == OG_WALL:
+                if not(self.belief_space["occupancy_grid"][cell[0]][cell[1]] in traversable_types):
                     #if it's a wall, we skip this cell.
                     continue
 

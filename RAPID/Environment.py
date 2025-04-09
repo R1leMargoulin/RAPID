@@ -164,17 +164,15 @@ class Environment():
                 #TODO traiter la couleur des pixels
                 r,g,b = np_img[l][o]
                 if r < 10 and g<10 and b<10: #black = wall
-                    self.create_cell(o,l, type=OG_WALL, group_name="obstacles", color=(r,g,b))
+                    self.create_cell(o,l, type=OG_WALL, group_name=OG_WALL_GROUP_NAME, color=(r,g,b))
                 elif r>180 and g<100 and b<100: #red = high obstacle
-                    self.create_cell(o,l, type=OG_HIGH_WALL, group_name="high_obstacles", color=(r,g,b))
+                    self.create_cell(o,l, type=OG_HIGH_WALL, group_name=OG_HIGH_WALL_GROUP_NAME, color=(r,g,b))
                 elif r>180 and g>180 and b<100: #yellow = sand
-                    self.create_cell(o,l, type=OG_SAND, group_name="sand", color=(r,g,b), visibility=0.5)
+                    self.create_cell(o,l, type=OG_SAND, group_name=OG_SAND, color=(r,g,b), visibility=0.5)
                 elif r<100 and g<100 and b>180: #blue = water
-                    self.create_cell(o,l, type=OG_WATER, group_name="water", color=(r,g,b), visibility=0.5)
+                    self.create_cell(o,l, type=OG_WATER, group_name=OG_WATER_GROUP_NAME, color=(r,g,b), visibility=0.5)
                 elif r<100 and g>180 and b<100: #green = grass
-                   self.create_cell(o,l, type=OG_GRASS, group_name="grass", color=(r,g,b), visibility=0.5)
-
-
+                   self.create_cell(o,l, type=OG_GRASS, group_name=OG_GRASS_GROUP_NAME, color=(r,g,b), visibility=0.5)
 
     def create_cell(self, coord_x, coord_y, type, group_name:str, color, visibility = 1):
         byte_visibility = int(visibility * 255)

@@ -48,7 +48,7 @@ def djikstra(occupancy_grid:np.ndarray, target_coord:tuple[int,int]):
 
     return djikstra
 
-def find_frontier_cells(grid):
+def find_frontier_cells(grid, traversable_types = [OG_FREE_CELL]):
     """
     Find frontier cells in a (-1/0/1) array where:
     - -1 is an unknown cell
@@ -69,7 +69,7 @@ def find_frontier_cells(grid):
         for c in range(height):
             # Check if the current cell is known (0 or 1)
             #if grid[r, c] == 0 or grid[r, c] == 1:
-            if grid[r, c] == OG_FREE_CELL: #test en enlevant les murs
+            if grid[r, c] in traversable_types: #la case peut elle etre traversee?
                 # Check the neighbors of the current cell
                 for dr, dc in shifts:
                     nr, nc = r + dr, c + dc
@@ -85,7 +85,7 @@ def find_frontier_cells(grid):
 
     return frontier_cells
 
-def cluster_frontier_cells(grid, frontier_cells, vision_range):
+def cluster_frontier_cells(grid, frontier_cells, vision_range, traversable_types = [OG_FREE_CELL]):
     """
     Cluster frontier cells into groups considering walls and vision range.
 
@@ -107,7 +107,7 @@ def cluster_frontier_cells(grid, frontier_cells, vision_range):
         cells_between = zip(np.linspace(rr[0], rr[1], num=max(abs(rr[0]-rr[1]), abs(cc[0]-cc[1]))+1, dtype=int),
                             np.linspace(cc[0], cc[1], num=max(abs(rr[0]-rr[1]), abs(cc[0]-cc[1]))+1, dtype=int))
         for cell in cells_between:
-            if grid[cell] == 1:
+            if not (grid[cell] in traversable_types):
                 return False
         return True
 
@@ -143,7 +143,7 @@ def cluster_frontier_cells(grid, frontier_cells, vision_range):
 
     return np.round(cluster_centers)
 
-def wavefront_propagation_algorithm(grid, self_position, robot_positions, frontier_clusters, weight_of_closer_robots = 10):
+def wavefront_propagation_algorithm(grid, self_position, robot_positions, frontier_clusters, weight_of_closer_robots = 10, traversable_types = [OG_FREE_CELL]):
     """
     Perform wavefront propagation from frontiers clusters (also works with simple frontiers) to determine their score depending on it's distance and the robots closer to the one computing this algorithm.
 
@@ -188,10 +188,10 @@ def wavefront_propagation_algorithm(grid, self_position, robot_positions, fronti
                     if 0 <= n[0] < width and 0 <= n[1] < height: #verif that the neighbor is inbound
                         #If the neighbor is correct, we add the neighbors to the queue and we add 1 to the distance metric
                         if wavefront_map[n[0], n[1]] == -1:  # Unvisited cell on the wavefront map
-                            if grid[n[0], n[1]] == OG_FREE_CELL or grid[n[0], n[1]] == OG_UNKNOWN_CELL:  # Free cell in real env
+                            if grid[n[0], n[1]] in traversable_types or grid[n[0], n[1]] == OG_UNKNOWN_CELL:  # Free cell in real env
                                 wavefront_map[n[0], n[1]] = current_value + 1
                                 next_queue.append((n[0], n[1])) #we append the correct neighbour to the next queue.
-                            elif grid[n[0], n[1]] == OG_WALL:
+                            else:
                                 wavefront_map[n[0], n[1]] = current_value + 1 #we update the wavefront map but not append the wall to the next_queue
 
                             #print(f"{(n[0], n[1])}//{self_position}") #TODO : trouver pourquoi ca y est jamais
@@ -224,7 +224,7 @@ def heuristic(a, b):
     """
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
-def a_star_search(grid, start, goal):
+def a_star_search(grid, start, goal, traversable_types = [OG_FREE_CELL]):
     """
     A star search algorithm\\
     parameters:
@@ -262,7 +262,7 @@ def a_star_search(grid, start, goal):
 
             # Skip obstacle cells
             # if grid[neighbor] == 1 or grid[neighbor] == -1:
-            if grid[neighbor] == OG_WALL:
+            if not (grid[neighbor] in traversable_types or grid[neighbor]==OG_UNKNOWN_CELL): #if it's an obstacle:
                 continue
 
             # If the neighbor is not in g_score or the tentative g_score is lower, update the scores
@@ -328,7 +328,7 @@ def euclidian_distance(point1,point2):
     """
     return np.sqrt((point1[0]-point2[0])**2+(point1[1]-point2[1])**2)
 
-def heuristic_frontier_distance(start, goal, grid):
+def heuristic_frontier_distance(start, goal, grid, traversable_types = [OG_FREE_CELL]):
     """
     Calculate a heuristic distance by considering obstacles.
 
@@ -346,7 +346,7 @@ def heuristic_frontier_distance(start, goal, grid):
     # Calculate a simple obstacle penalty
     line = np.linspace(start, goal, num=int(euclidean_dist) + 1)
     line = [(int(x), int(y)) for x, y in line]
-    obstacle_penalty = sum(1 for x, y in line if grid[int(x), int(y)] == OG_WALL)
+    obstacle_penalty = sum(1 for x, y in line if not(grid[int(x), int(y)] in traversable_types))
 
     # Combine Euclidean distance and obstacle penalty
     return euclidean_dist + obstacle_penalty * 100  # Weight for obstacle penalty
