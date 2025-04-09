@@ -12,6 +12,7 @@ import random
 import logging
 # from mergedeep import merge
 
+#TODO : les comportements sont EXACTEMENT les memes dans ground ou Aerial, je pourrais tout mettre dans robot...
 
 class Robot(Sprite):
     def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10):#TODO rendre abstrait
@@ -66,6 +67,9 @@ class Robot(Sprite):
             OG_WATER_GROUP_NAME:0,
             OG_GRASS_GROUP_NAME:0.6
         }
+        self.traversable_types = list(filter(lambda k: self.env_ease[k] != 0, self.env_ease)) #find the cells that the robot can eventually traverse
+        for i in range(len(self.traversable_types)):#we have the string name of the cells types, lets get the int values
+            self.traversable_types[i] = ENV_CELL_TYPES[self.traversable_types[i]]
 
 
     
@@ -232,7 +236,7 @@ class Robot(Sprite):
                         else:
                             neighbors.append(neighbor) #we add the cell to neighbors
                             #if we have to stop at a wall and the cells corresponds to the one of a wall, we stop the propagation.
-                            if stop_at_wall and (self.env.real_occupancy_grid[neighbor[0]][neighbor[1]]==1):
+                            if stop_at_wall and not(self.env.real_occupancy_grid[neighbor[0]][neighbor[1]] in self.traversable_types) and self.env.real_occupancy_grid[neighbor[0]][neighbor[1]] in BLOCKING_SENSOR_TYPES:
                                 pass
                             else:
                                 next_queue.append(neighbor)
@@ -280,7 +284,7 @@ class Robot(Sprite):
             else:
                 pass
 
-    def move(self):
+    def move(self, vector_x, vector_y):
         print("move has to be implemented in the class.")
 
 class Ground(Robot):
@@ -298,6 +302,10 @@ class Ground(Robot):
             OG_WATER_GROUP_NAME:0,
             OG_GRASS_GROUP_NAME:0.6
         }
+
+        self.traversable_types = list(filter(lambda k: self.env_ease[k] != 0, self.env_ease)) #find the cells that the robot can eventually traverse
+        for i in range(len(self.traversable_types)):#we have the string name of the cells types, lets get the int values
+            self.traversable_types[i] = ENV_CELL_TYPES[self.traversable_types[i]]
 
 
         #handle behavior space string
@@ -372,10 +380,6 @@ class Ground(Robot):
         self.speed.x = 1
         self.speed.y = 1
 
-        traversable_types = list(filter(lambda k: self.env_ease[k] != 0, self.env_ease)) #find the cells that the robot can eventually traverse
-        for i in range(len(traversable_types)):#we have the string name of the cells types, lets get the int values
-            traversable_types[i] = ENV_CELL_TYPES[traversable_types[i]]
-
         if OG_TARGET_POINT in self.belief_space["occupancy_grid"]:
             tp_coords = np.where(self.belief_space["occupancy_grid"] == OG_TARGET_POINT)
             if not "djikstra" in self.belief_space:
@@ -392,7 +396,7 @@ class Ground(Robot):
                     voisin = (position_actuelle[0] + direction[0], position_actuelle[1] + direction[1])
 
                     # Vérifier si le voisin est valide (pas d'obstacle et a l'inerieur de l'env)
-                    if 0 <= voisin[0] < self.belief_space["occupancy_grid"].shape[0] and 0 <= voisin[1] < self.belief_space["occupancy_grid"].shape[1] and self.belief_space["occupancy_grid"][voisin] in traversable_types:
+                    if 0 <= voisin[0] < self.belief_space["occupancy_grid"].shape[0] and 0 <= voisin[1] < self.belief_space["occupancy_grid"].shape[1] and self.belief_space["occupancy_grid"][voisin] in self.traversable_types:
                         voisins.append(voisin)
                         
                 # Trouver le voisin avec le coût le plus bas dans la distance_map
@@ -407,10 +411,6 @@ class Ground(Robot):
         """
         compute a greedy nearest frontier algorithm with an A* path search to the nearest frontier for each agent.
         """
-        traversable_types = list(filter(lambda k: self.env_ease[k] != 0, self.env_ease)) #find the cells that the robot can eventually traverse
-        for i in range(len(traversable_types)):#we have the string name of the cells types, lets get the int values
-            traversable_types[i] = ENV_CELL_TYPES[traversable_types[i]]
-
 
         self.sense()#first of all sense the env.
         self.belief_transfer()
@@ -420,12 +420,12 @@ class Ground(Robot):
                 self.navigate_through_target_path()
                 pass
             else: #if we don't have any path, then compute it with A* for our target
-                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=traversable_types) #from utils : A* Path calculation
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
 
         else: #sinon on va chercher les frontières.
             #frontier detection from belief space
 
-            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=traversable_types) #from utils
+            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=self.traversable_types) #from utils
 
             if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
                 if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
@@ -436,7 +436,7 @@ class Ground(Robot):
                 #then we take the closest one.
                 distance = np.inf
                 for f in frontiers:
-                    hdist = heuristic_frontier_distance((self.transform.x, self.transform.y), (f[0], f[1]), self.belief_space["occupancy_grid"], traversable_types=traversable_types)
+                    hdist = heuristic_frontier_distance((self.transform.x, self.transform.y), (f[0], f[1]), self.belief_space["occupancy_grid"], traversable_types=self.traversable_types)
                     if hdist < distance :
                         distance = hdist
                         self.target = tuple(f.tolist()) #set the frontier as new target
@@ -449,9 +449,6 @@ class Ground(Robot):
         - each cluster is given a cost depending on the distance and on robots that are closer to this frontier using the wavefront propagation algorithm (WPA)
         - the robot chose the frontier with the lowest cost
         """
-        traversable_types = list(filter(lambda k: self.env_ease[k] != 0, self.env_ease)) #find the cells that the robot can eventually traverse
-        for i in range(len(traversable_types)):#we have the string name of the cells types, lets get the int values
-            traversable_types[i] = ENV_CELL_TYPES[traversable_types[i]]
 
         #first of all, sense the environment
         self.sense()#first of all sense the env.
@@ -462,11 +459,11 @@ class Ground(Robot):
                 self.navigate_through_target_path()
                 pass
             else: #if we don't have any path, then compute it with our target
-                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=traversable_types) #from utils : A* Path calculation
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
 
         else: #sinon on va chercher les frontières.
             #frontier detection
-            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=traversable_types) #from utils
+            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=self.traversable_types) #from utils
 
             if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
                 if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
@@ -474,12 +471,12 @@ class Ground(Robot):
                 else:
                     self.imdone = True
             else:
-                cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range, traversable_types=traversable_types) #from utils : make cluster fontiers
+                cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range, traversable_types=self.traversable_types) #from utils : make cluster fontiers
 
                 pos_list_float = [pos["position"] for pos in list(self.belief_space["robot_positions"].values())] #list of float xy position of all robots
                 pos_list_int = [(int(x), int(y)) for x,y in pos_list_float] #same list with ints.
 
-                weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width, traversable_types=traversable_types) #the penalty for a frontier cluster depends of the size of the env.
+                weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width, traversable_types=self.traversable_types) #the penalty for a frontier cluster depends of the size of the env.
                 self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
 
     def local_frontier_behavior(self):
@@ -493,10 +490,6 @@ class Ground(Robot):
 
             #init second chance used as False
             self.belief_space["second_chance_usage"] = False
-        
-        traversable_types = list(filter(lambda k: self.env_ease[k] != 0, self.env_ease)) #find the cells that the robot can eventually traverse
-        for i in range(len(traversable_types)):#we have the string name of the cells types, lets get the int values
-            traversable_types[i] = ENV_CELL_TYPES[traversable_types[i]]
 
         #SENSING
         self.sense()
@@ -508,7 +501,7 @@ class Ground(Robot):
                     self.belief_space["traces"].update({(int(self.transform.x), int(self.transform.y)):self.env.step})#add the new current position to the traces
 
             else: #if we don't have any path,only a target, then compute it with A* for our target                
-                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=traversable_types) #from utils : A* Path calculation
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
                 if not self.path_to_target:
                     #self.behavior_diff_move_random()
                     self.target = None
@@ -517,7 +510,7 @@ class Ground(Robot):
             vision_range = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
             local_frontier_list = []
             for cell in vision_range:
-                if not(self.belief_space["occupancy_grid"][cell[0]][cell[1]] in traversable_types):
+                if not(self.belief_space["occupancy_grid"][cell[0]][cell[1]] in self.traversable_types):
                     #if it's a wall, we skip this cell.
                     continue
 
@@ -598,8 +591,10 @@ class Ground(Robot):
             self.behavior_diff_move_random() #random move to maybe select another frontier.
             self.path_to_target = None
             self.target = None
+
+
 class Aerial(Robot): #TODO : IMPLEMETER
-    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random"):
+    def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random"):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier"]
 
@@ -613,6 +608,9 @@ class Aerial(Robot): #TODO : IMPLEMETER
             OG_GRASS_GROUP_NAME:1
         }
 
+        self.traversable_types = list(filter(lambda k: self.env_ease[k] != 0, self.env_ease)) #find the cells that the robot can eventually traverse
+        for i in range(len(self.traversable_types)):#we have the string name of the cells types, lets get the int values
+            self.traversable_types[i] = ENV_CELL_TYPES[self.traversable_types[i]]
 
         #handle behavior space string
         if not( behavior_to_use in self.behavior_space) :
@@ -636,3 +634,249 @@ class Aerial(Robot): #TODO : IMPLEMETER
                 case "local_frontier":
                     self.local_frontier_behavior()
         super().update(screen)
+
+    def move(self, vector_x, vector_y):
+        """
+        move in the vector direction
+        params:
+        - vector_x: x coordinate of the direction vector
+        - vector_y: y coordinate of the direction vector
+        """
+        self.speed.x = min(self.max_speed.x, vector_x)
+        self.speed.y = min(self.max_speed.y, vector_y)
+
+        self.translate(self.speed.x, self.speed.y)
+
+    def behavior_diff_move_random(self):
+        #set srobot speed at it's max speed
+        self.speed.x = self.max_speed.x
+        self.speed.y = self.max_speed.y
+
+        #random rotation
+        self.speed.w = random.uniform(-self.max_speed.w ,self.max_speed.w)
+        self.transform.w += self.speed.w
+
+        #2pi modulo
+        self.transform.w = self.transform.w%(2*np.pi)
+        #TODO refaire ce diff drive dégueu
+        #calculation of the x and y movement depending of the x direction speed and the w orientation.
+        xmove = self.speed.x * np.cos(self.transform.w)
+        ymove = self.speed.x * np.sin(self.transform.w)
+
+        self.translate(xmove, ymove)
+
+    def behavior_target_djikstra(self):
+        self.speed.x = 1
+        self.speed.y = 1
+
+        if OG_TARGET_POINT in self.belief_space["occupancy_grid"]:
+            tp_coords = np.where(self.belief_space["occupancy_grid"] == OG_TARGET_POINT)
+            if not "djikstra" in self.belief_space:
+                self.belief_space.update({"djikstra": djikstra(self.belief_space["occupancy_grid"],(tp_coords[0][0], tp_coords[1][0]))}) #fonctionne en full knowledge de la map.
+            else : 
+                #determination de la cellule discrete de la belief base sur laquelle on est:
+                position_actuelle = (int(self.transform.x), int(self.transform.y)) 
+
+                # Directions possibles (4-connectées)
+                directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+                voisins = []
+
+                for direction in directions: # voisins potentiels
+                    voisin = (position_actuelle[0] + direction[0], position_actuelle[1] + direction[1])
+
+                    # Vérifier si le voisin est valide (pas d'obstacle et a l'inerieur de l'env)
+                    if 0 <= voisin[0] < self.belief_space["occupancy_grid"].shape[0] and 0 <= voisin[1] < self.belief_space["occupancy_grid"].shape[1] and self.belief_space["occupancy_grid"][voisin] in self.traversable_types:
+                        voisins.append(voisin)
+                        
+                # Trouver le voisin avec le coût le plus bas dans la distance_map
+                if voisins:
+                    meilleur_voisin = min(voisins, key=lambda v: self.belief_space["djikstra"][v])
+                    #meilleur_voisin = (meilleur_voisin[1], meilleur_voisin [0]) #repassage des coords numpy à mes coordonnees d'environment
+                    direction_vers_voisin = (meilleur_voisin[0] - position_actuelle[0], meilleur_voisin[1] - position_actuelle[1]) #TODO repasser en coordonnees continues
+
+                    self.move(direction_vers_voisin[0], direction_vers_voisin[1])
+
+    def nearest_frontier_search_behavior(self):
+        """
+        compute a greedy nearest frontier algorithm with an A* path search to the nearest frontier for each agent.
+        """
+
+        self.sense()#first of all sense the env.
+        self.belief_transfer()
+
+        if np.any(self.target):#si on a une target
+            if self.path_to_target: #If we have a path to our target, we continue this path.
+                self.navigate_through_target_path()
+                pass
+            else: #if we don't have any path, then compute it with A* for our target
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
+
+        else: #sinon on va chercher les frontières.
+            #frontier detection from belief space
+
+            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=self.traversable_types) #from utils
+
+            if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
+                if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
+                    self.target = (int(self.init_transform.x),int(self.init_transform.y))
+                else:
+                    self.imdone = True
+            else:
+                #then we take the closest one.
+                distance = np.inf
+                for f in frontiers:
+                    hdist = heuristic_frontier_distance((self.transform.x, self.transform.y), (f[0], f[1]), self.belief_space["occupancy_grid"], traversable_types=self.traversable_types)
+                    if hdist < distance :
+                        distance = hdist
+                        self.target = tuple(f.tolist()) #set the frontier as new target
+            
+    def minpos_behavior(self):
+        """
+        Adaptation from MinPos algorithm (Bautin, Simonin, Charpillet : 2012)
+        Frontier based behavior where:
+        - The frontiers are grouped into clusters
+        - each cluster is given a cost depending on the distance and on robots that are closer to this frontier using the wavefront propagation algorithm (WPA)
+        - the robot chose the frontier with the lowest cost
+        """
+
+        #first of all, sense the environment
+        self.sense()#first of all sense the env.
+        self.belief_transfer() #after sensing, transfer beliefs.
+
+        if np.any(self.target):#si on a une target
+            if self.path_to_target: #If we have a path to our target, we continue this path.
+                self.navigate_through_target_path()
+                pass
+            else: #if we don't have any path, then compute it with our target
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
+
+        else: #sinon on va chercher les frontières.
+            #frontier detection
+            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=self.traversable_types) #from utils
+
+            if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
+                if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
+                    self.target = (int(self.init_transform.x),int(self.init_transform.y))
+                else:
+                    self.imdone = True
+            else:
+                cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range, traversable_types=self.traversable_types) #from utils : make cluster fontiers
+
+                pos_list_float = [pos["position"] for pos in list(self.belief_space["robot_positions"].values())] #list of float xy position of all robots
+                pos_list_int = [(int(x), int(y)) for x,y in pos_list_float] #same list with ints.
+
+                weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width, traversable_types=self.traversable_types) #the penalty for a frontier cluster depends of the size of the env.
+                self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
+
+    def local_frontier_behavior(self):
+        """
+        adaptation from local frontier algorithm (Gauville, Charpillet : 2019)
+        """
+        #setup init pos if there is not.
+        if not ("traces" in self.belief_space): #then init the traces in belief space
+            init_pos = (int(self.init_transform.x), int(self.init_transform.y))
+            self.belief_space["traces"] = {init_pos:self.env.step} #here we init the trace with a dictionarry: the key is the position the value is the timestamp (sim step)
+
+            #init second chance used as False
+            self.belief_space["second_chance_usage"] = False
+
+        #SENSING
+        self.sense()
+
+        if np.any(self.target):#if we have a target target navigate (A*) to the target if there is one (set a trace at every update even when navigating)
+            if self.path_to_target: #If we have a path to our target, we continue this path.
+                self.navigate_through_target_path() #continue on the target path
+                if (int(self.transform.x), int(self.transform.y)) not in self.belief_space["traces"].keys():
+                    self.belief_space["traces"].update({(int(self.transform.x), int(self.transform.y)):self.env.step})#add the new current position to the traces
+
+            else: #if we don't have any path,only a target, then compute it with A* for our target                
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
+                if not self.path_to_target:
+                    #self.behavior_diff_move_random()
+                    self.target = None
+        else:
+            #LOCAL FRONTIER DETECTION -----------------------------------------------------
+            vision_range = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
+            local_frontier_list = []
+            for cell in vision_range:
+                if not(self.belief_space["occupancy_grid"][cell[0]][cell[1]] in self.traversable_types):
+                    #if it's a wall, we skip this cell.
+                    continue
+
+                cell_neighbors = get_direct_neighbors(cell, width=self.env.width, height=self.env.height) #improvable : pour plus de realisme on pourrait mettre la taille du belief space plutot que directement l'env.
+
+                for cn in cell_neighbors: #maximum 4 neighbors per cell
+                    if self.belief_space["occupancy_grid"][cn[0]][cn[1]] == OG_UNKNOWN_CELL: #if the cell has an unknown cell as neighbor, it becomes a frontier.
+                        #we add the cell to the frontier list if it is a local frontier.
+                        local_frontier_list.append(cell)
+                        break
+                        
+            #-------------------------------------------------------------------------------
+            if local_frontier_list:
+            #go to the most far local frontier from the traces
+                max_dist_of_lf = 0
+                selected_frontier = None
+                mean_traces_coordinates = (int(np.mean([c[0] for c in self.belief_space["traces"].keys()])), int(np.mean([c[1] for c in self.belief_space["traces"].keys()]))) #mean coordinates of all the traces.
+                for lf in local_frontier_list:
+                    if euclidian_distance(lf, mean_traces_coordinates)> max_dist_of_lf: #if the distance (we take euclidian) of the LF from the robot is greater, then we select it
+                        max_dist_of_lf = euclidian_distance(lf, mean_traces_coordinates)
+                        selected_frontier = lf
+                self.target = selected_frontier
+            else: #else if there is no frontier:
+                if (int(self.transform.x), int(self.transform.y)) == (int(self.init_transform.x), int(self.init_transform.y)): #if we are back at the init pose, the robot has finished.
+                    if self.belief_space["second_chance_usage"] == True:
+                        self.imdone = True
+                    else:
+                        #we use a second chance:
+                        self.belief_space["second_chance_usage"] = True
+                        
+                        mean_traces_coordinates = (int(np.mean([c[0] for c in self.belief_space["traces"].keys()])), int(np.mean([c[1] for c in self.belief_space["traces"].keys()]))) #mean coordinates of all the traces.
+                        max_dist = 0
+                        second_chance_target = None
+                        for cell in vision_range:
+                            if self.belief_space["occupancy_grid"][cell[0]][cell[1]] != OG_WALL:
+                                if euclidian_distance(cell, mean_traces_coordinates)> max_dist:
+                                    max_dist = euclidian_distance(cell, mean_traces_coordinates)
+                                    second_chance_target = cell
+                        self.target = second_chance_target
+
+                else: #else go back to the previous trace -> set it as target
+                    # pour les cases voisine de distance ou le robot à pu se déplacer sur un step de simulation (sur une periode de temps donné, on récolte les voisins)
+                    move_possible_neighbors =  self.get_neighbors_pixels(distance=int(max(4*self.max_speed.x, 4*self.max_speed.y)), stop_at_wall=True, self_inclusion=False)
+                    chosen_trace = None
+                    oldest_timestep = np.inf
+                    for cell in move_possible_neighbors : #on va prendre la trace la plus ancienne possible dans ce champs
+                        if cell in self.belief_space["traces"]: #check if the cell is registered in the traces or we would have an error
+                            if self.belief_space["traces"][cell] < oldest_timestep:
+                                chosen_trace = cell
+                                oldest_timestep = self.belief_space["traces"][cell]
+                    self.target = chosen_trace #on definit la trace la plus ancienne dans le rayon restreint défini.
+
+        self.belief_transfer() #belief transfer management.
+    
+    def navigate_through_target_path(self):
+        def make_the_move(waypoint):
+            direction = (waypoint[0] - int(self.transform.x), waypoint[1] - int(self.transform.y))
+
+            self.move(direction[0], direction[1])
+
+        #we should be nearby the first point of the path, else we delete it and we'll compute an other one:
+        if euclidian_distance((int(self.transform.x), int(self.transform.y)), (self.path_to_target[0][0], self.path_to_target[0][1])) <= 5: #if we are more than 5 away from the path, we forget the target it in order to recalculate a new one
+            if self.path_to_target[0] == self.target:
+                waypoint = self.path_to_target[0]
+                make_the_move(waypoint)
+                
+                self.target = None
+                self.path_to_target = None
+            else:
+                self.path_to_target.pop(0)
+                waypoint = self.path_to_target[0]
+
+                make_the_move(waypoint)
+
+                pass
+        else:
+            #Path not accurate.
+            self.behavior_diff_move_random() #random move to maybe select another frontier.
+            self.path_to_target = None
+            self.target = None

@@ -34,11 +34,11 @@ def main():
         init_pos = (random.randrange(0,env.width), random.randrange(0,env.height), random.uniform(0, 2*3.14)) 
 
 
-        env.add_agent(Agents.Ground(
+        env.add_agent(Agents.Aerial(
                                     env, 
                                     robot_id=len(env.agents)+1, 
                                     init_transform=init_pos,
-                                    max_speed=(1,0,0.5),
+                                    max_speed=(1,1,0.5), #warning : adapt max speeds if you use aerial or ground robots
                                     behavior_to_use="local_frontier", #change to target_djikstra with a target point env.
                                     vision_range=10,
                                     communication_range=30,

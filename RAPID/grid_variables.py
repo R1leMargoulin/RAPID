@@ -31,3 +31,6 @@ ENV_CELL_TYPES[OG_GRASS_GROUP_NAME] = OG_GRASS
 OG_TARGET_POINT = 100
 
 OG_UNKNOWN_CELL = -1
+
+
+BLOCKING_SENSOR_TYPES = [OG_WALL, OG_HIGH_WALL] #those kind of cell block sensors if it's an obstacle (for exemple, low wall won't block sensor for drone but will for ground robot.)
