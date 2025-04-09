@@ -125,14 +125,15 @@ class Environment():
         if self.render:
             self.screen.fill(self.background_color)
 
+        if self.render:
+            for group in self.cell_feature_groups:
+                for o in self.cell_feature_groups[group]:
+                    #TODO voir comment mettre ca en background pour que ce soit plus joli.
+                    scaled_rect = pygame.Rect(o.rect.x * self.scaling_factor, o.rect.y * self.scaling_factor, o.rect.width * self.scaling_factor, o.rect.height * self.scaling_factor)
+                    self.screen.blit(pygame.transform.scale(o.image, scaled_rect.size), scaled_rect)
+
         for a in self.agents:
             a.update(self.screen)
-
-        if self.render:
-            for o in self.cell_feature_groups["obstacles"]:  #BACKUP scaling
-            #     self.screen.blit(o.image, o.rect)
-                scaled_rect = pygame.Rect(o.rect.x * self.scaling_factor, o.rect.y * self.scaling_factor, o.rect.width * self.scaling_factor, o.rect.height * self.scaling_factor)
-                self.screen.blit(pygame.transform.scale(o.image, scaled_rect.size), scaled_rect)
 
         if(self.goal_condition()):
             print(f"Goal reached in {self.step} steps!")
@@ -147,7 +148,6 @@ class Environment():
 
     def create_env_from_image(self, img):
         np_img = np.array(img)
-        #TODO verifier le format de l'image
         #np_img = ~np_img  # invert black and white cause (255 will be white, but we want our obstacle to be 1 and free cell be 0)
         #np_img[np_img > 0] = 1 #all non white cells are considered as obstacles.
 
@@ -168,20 +168,23 @@ class Environment():
                 elif r>180 and g<100 and b<100: #red = high obstacle
                     self.create_cell(o,l, type=OG_HIGH_WALL, group_name="high_obstacles", color=(r,g,b))
                 elif r>180 and g>180 and b<100: #yellow = sand
-                    self.create_cell(o,l, type=OG_SAND, group_name="sand", color=(r,g,b))
+                    self.create_cell(o,l, type=OG_SAND, group_name="sand", color=(r,g,b), visibility=0.5)
                 elif r<100 and g<100 and b>180: #blue = water
-                    self.create_cell(o,l, type=OG_WATER, group_name="water", color=(r,g,b))
+                    self.create_cell(o,l, type=OG_WATER, group_name="water", color=(r,g,b), visibility=0.5)
                 elif r<100 and g>180 and b<100: #green = grass
-                   self.create_cell(o,l, type=OG_GRASS, group_name="grass", color=(r,g,b))
+                   self.create_cell(o,l, type=OG_GRASS, group_name="grass", color=(r,g,b), visibility=0.5)
 
 
 
-    def create_cell(self, coord_x, coord_y, type, group_name:str, color):
+    def create_cell(self, coord_x, coord_y, type, group_name:str, color, visibility = 1):
+        byte_visibility = int(visibility * 255)
         self.real_occupancy_grid[coord_x][coord_y] = type
 
+        
+
         sprite = pygame.sprite.Sprite()
-        sprite.image = pygame.Surface((1, 1))
-        sprite.image.fill((color[0], color[1], color[2]))
+        sprite.image = pygame.Surface((1, 1), pygame.SRCALPHA)
+        sprite.image.fill((color[0], color[1], color[2], byte_visibility))
         sprite.rect = pygame.Rect(coord_x,coord_y, 1,1)
         #self.obstacles.append(sprite)
 
@@ -313,8 +316,10 @@ class ExplorationEnvironment(Environment):
         #on va pas mettre de fog sur les murs parce que la vision ne les traverse pas, si on a des murs plus épais que 2, alors il y aura toujours de la fog.
         self.interest_points["exploration_map"] += self.real_occupancy_grid
 
-        self.fog_texture = pygame.Surface((1,1))
-        self.fog_texture.fill((100, 100, 100))
+        self.explorable_zone_types = [OG_FREE_CELL, OG_GRASS, OG_SAND, OG_WATER]
+
+        self.fog_texture = pygame.Surface((1,1), pygame.SRCALPHA)
+        self.fog_texture.fill((100, 100, 100, 150))
         
         self.exploration_proportion_goal = exploration_proportion_goal
         self.exploration_completion = 0.0
@@ -339,7 +344,7 @@ class ExplorationEnvironment(Environment):
         pass
 
     def draw_fog(self):
-        unexplored_poses = np.where(self.interest_points["exploration_map"] == 0)
+        unexplored_poses = np.where(np.isin(self.interest_points["exploration_map"], self.explorable_zone_types))#check for each element of the Occ grid if it's an explorable zone.
         for i in range(len(unexplored_poses[0])):
             # self.screen.blit(self.fog_texture, pygame.Rect(unexplored_poses[0][i], unexplored_poses[1][i], 1, 1)) #BACKUP scaling
             scaled_rect = pygame.Rect(unexplored_poses[0][i] * self.scaling_factor, unexplored_poses[1][i] * self.scaling_factor, self.scaling_factor, self.scaling_factor)

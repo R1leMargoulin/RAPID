@@ -13,7 +13,7 @@ SCREEN_WIDTH = 100
 SCREEN_HEIGHT = 100
 BACKGROUND_COLOR = (200, 200, 200)
 
-ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/examples/env_images_example/cross_100_100.png"# CHANGE THE PATH
+ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/multitype_100_100.png"# CHANGE THE PATH
 
 NB_GROUND_AGENTS = 4
 
@@ -39,7 +39,7 @@ def main():
                                     robot_id=len(env.agents)+1, 
                                     init_transform=init_pos,
                                     max_speed=(1,0,0.5),
-                                    behavior_to_use="local_frontier", #change to target_djikstra with a target point env.
+                                    behavior_to_use="random", #change to target_djikstra with a target point env.
                                     vision_range=10,
                                     communication_range=30,
                                     communication_period=10,
