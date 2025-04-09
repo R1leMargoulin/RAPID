@@ -280,12 +280,25 @@ class Robot(Sprite):
             else:
                 pass
 
+    def move(self):
+        print("move has to be implemented in the class.")
 
 class Ground(Robot):
 
     def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random"):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier"]
+
+        #traversability ease in the env 
+        self.env_ease = {
+            OG_FREE_CELL_GROUP_NAME:1,
+            OG_WALL_GROUP_NAME:0,
+            OG_HIGH_WALL_GROUP_NAME:0,
+            OG_SAND_GROUP_NAME:0.4,
+            OG_WATER_GROUP_NAME:0,
+            OG_GRASS_GROUP_NAME:0.6
+        }
+
 
         #handle behavior space string
         if not( behavior_to_use in self.behavior_space) :
@@ -310,6 +323,33 @@ class Ground(Robot):
                     self.local_frontier_behavior()
         super().update(screen)
 
+    def move(self, vector_x, vector_y):
+        """
+        move in the vector direction
+        params:
+        - vector_x: x coordinate of the direction vector
+        - vector_y: y coordinate of the direction vector
+        """
+        angle = np.arctan2(vector_y, vector_x)
+            
+        #Angle to rotate to go in the neighbor direction
+        tfw = (angle - self.transform.w)%(2*np.pi)  #differance of angle
+
+        #self.speed.w = min(self.max_speed.w, tfw) #TODO regérer la limite d'angle
+        self.speed.w = tfw
+
+        self.transform.w += self.speed.w
+        #2pi modulo
+        self.transform.w = self.transform.w%(2*np.pi)
+        #self.speed.x = direction_vers_voisin
+
+        self.speed.x = min(euclidian_distance((0,0), (vector_x,vector_y)), self.max_speed.x)
+        
+        xmove = self.speed.x * np.cos(self.transform.w)
+        ymove = self.speed.x * np.sin(self.transform.w)
+
+        self.translate(xmove, ymove)
+
     def behavior_diff_move_random(self):
         #set srobot speed at it's max speed
         self.speed.x = self.max_speed.x
@@ -332,6 +372,10 @@ class Ground(Robot):
         self.speed.x = 1
         self.speed.y = 1
 
+        traversable_types = list(filter(lambda k: self.env_ease[k] != 0, self.env_ease)) #find the cells that the robot can eventually traverse
+        for i in range(len(traversable_types)):#we have the string name of the cells types, lets get the int values
+            traversable_types[i] = ENV_CELL_TYPES[traversable_types[i]]
+
         if OG_TARGET_POINT in self.belief_space["occupancy_grid"]:
             tp_coords = np.where(self.belief_space["occupancy_grid"] == OG_TARGET_POINT)
             if not "djikstra" in self.belief_space:
@@ -348,7 +392,7 @@ class Ground(Robot):
                     voisin = (position_actuelle[0] + direction[0], position_actuelle[1] + direction[1])
 
                     # Vérifier si le voisin est valide (pas d'obstacle et a l'inerieur de l'env)
-                    if 0 <= voisin[0] < self.belief_space["occupancy_grid"].shape[0] and 0 <= voisin[1] < self.belief_space["occupancy_grid"].shape[1] and self.belief_space["occupancy_grid"][voisin] == OG_FREE_CELL:
+                    if 0 <= voisin[0] < self.belief_space["occupancy_grid"].shape[0] and 0 <= voisin[1] < self.belief_space["occupancy_grid"].shape[1] and self.belief_space["occupancy_grid"][voisin] in traversable_types:
                         voisins.append(voisin)
                         
                 # Trouver le voisin avec le coût le plus bas dans la distance_map
@@ -357,24 +401,7 @@ class Ground(Robot):
                     #meilleur_voisin = (meilleur_voisin[1], meilleur_voisin [0]) #repassage des coords numpy à mes coordonnees d'environment
                     direction_vers_voisin = (meilleur_voisin[0] - position_actuelle[0], meilleur_voisin[1] - position_actuelle[1]) #TODO repasser en coordonnees continues
 
-                    angle = np.arctan2(direction_vers_voisin[1], direction_vers_voisin[0])
-                    
-
-                    #Angle to rotate to go in the neighbor direction
-                    tfw = (angle - self.transform.w)%(2*np.pi)  #differance of angle
-
-                    #self.speed.w = min(self.max_speed.w, tfw)
-                    self.speed.w = tfw
-
-                    self.transform.w += self.speed.w
-                    #2pi modulo
-                    self.transform.w = self.transform.w%(2*np.pi)
-                    #self.speed.x = direction_vers_voisin
-                    
-                    xmove = self.speed.x * np.cos(self.transform.w)
-                    ymove = self.speed.x * np.sin(self.transform.w)
-
-                    self.translate(xmove, ymove)
+                    self.move(direction_vers_voisin[0], direction_vers_voisin[1])
 
     def nearest_frontier_search_behavior(self):
         """
@@ -549,25 +576,7 @@ class Ground(Robot):
         def make_the_move(waypoint):
             direction = (waypoint[0] - int(self.transform.x), waypoint[1] - int(self.transform.y))
 
-            angle = np.arctan2(direction[1], direction[0])
-            
-            #Angle to rotate to go in the neighbor direction
-            tfw = (angle - self.transform.w)%(2*np.pi)  #differance of angle
-
-            #self.speed.w = min(self.max_speed.w, tfw) #TODO regérer la limite d'angle
-            self.speed.w = tfw
-
-            self.transform.w += self.speed.w
-            #2pi modulo
-            self.transform.w = self.transform.w%(2*np.pi)
-            #self.speed.x = direction_vers_voisin
-
-            self.speed.x = min(euclidian_distance((0,0), direction), self.max_speed.x)
-            
-            xmove = self.speed.x * np.cos(self.transform.w)
-            ymove = self.speed.x * np.sin(self.transform.w)
-
-            self.translate(xmove, ymove)
+            self.move(direction[0], direction[1])
 
         #we should be nearby the first point of the path, else we delete it and we'll compute an other one:
         if euclidian_distance((int(self.transform.x), int(self.transform.y)), (self.path_to_target[0][0], self.path_to_target[0][1])) <= 5: #if we are more than 5 away from the path, we forget the target it in order to recalculate a new one
@@ -590,6 +599,40 @@ class Ground(Robot):
             self.path_to_target = None
             self.target = None
 class Aerial(Robot): #TODO : IMPLEMETER
-    def __init__(self, env, robot_id, size = 3, color = (0, 0, 255), transform=(0,0,0)):        
-        super().__init__(env, robot_id, size, color, transform=transform)
-        self.vmax = 2.0
+    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random"):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period)
+        self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier"]
+
+        #traversability ease in the env 
+        self.env_ease = {
+            OG_FREE_CELL_GROUP_NAME:1,
+            OG_WALL_GROUP_NAME:1,
+            OG_HIGH_WALL_GROUP_NAME:0,
+            OG_SAND_GROUP_NAME:1,
+            OG_WATER_GROUP_NAME:1,
+            OG_GRASS_GROUP_NAME:1
+        }
+
+
+        #handle behavior space string
+        if not( behavior_to_use in self.behavior_space) :
+            logging.error(f"Ground robot:init -> behavior_to_use not in the behavior space.\n the behavior should be in {self.behavior_space}")
+            exit()
+        else : 
+            self.behavior = behavior_to_use
+    
+    def update(self, screen):
+        # self.behavior_diff_move_random()
+        if not self.imdone:
+            match self.behavior:
+                case "random":
+                    self.behavior_diff_move_random()
+                case "target_djikstra":
+                    self.behavior_target_djikstra()
+                case "nearest_frontier":
+                    self.nearest_frontier_search_behavior()
+                case "minpos":
+                    self.minpos_behavior()
+                case "local_frontier":
+                    self.local_frontier_behavior()
+        super().update(screen)
