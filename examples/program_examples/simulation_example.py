@@ -15,7 +15,7 @@ BACKGROUND_COLOR = (200, 200, 200)
 
 ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/multitype_100_100.png"# CHANGE THE PATH
 
-NB_GROUND_AGENTS = 4
+NB_GROUND_AGENTS = 3
 
 img = Image.open(ENV_IMAGE_PATH)
 
