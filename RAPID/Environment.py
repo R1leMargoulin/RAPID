@@ -135,8 +135,8 @@ class Environment():
         for a in self.agents:
             a.update(self.screen)
 
-        if(self.goal_condition()):
-            print(f"Goal reached in {self.step} steps!")
+        if(self.end_condition()):
+            print(f"Simulation done in {self.step} steps! \n Goal Reached : {self.goal_condition()}")
             self.running = False
 
         if self.communication_mode == "limited":
@@ -193,6 +193,9 @@ class Environment():
         #self.obstacles_group.add(sprite) #old way
     
     def goal_condition(self):
+        return False
+    
+    def end_condition(self):
         return False
     
     def limited_communication_update(self):
@@ -285,6 +288,16 @@ class TargetPointEnvironment(Environment):
             return True
         else:
             return False
+        
+    def end_condition(self):
+        if self.end_at_full_exploation:
+           return self.goal_condition()
+        else:
+            has_to_stop = True
+            for a in self.agents:
+                if not a.imdone:
+                    has_to_stop = False
+            return has_to_stop
 
 class ExplorationEnvironment(Environment):
     def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", exploration_proportion_goal=0.995, end_at_full_exploation=True):
@@ -355,15 +368,18 @@ class ExplorationEnvironment(Environment):
         # print(self.width*self.height)
         # print(np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height))
 
+        self.exploration_completion = np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height)
+        # print(f"COMPLETION : {self.exploration_completion}")
+        # print(f"BB completion : {np.count_nonzero(self.agents_tools["blackboard"]["occupancy_grid"]!=-1)/(self.width*self.height)}")
+        # print(self.exploration_completion)
+        if (self.exploration_completion >= self.exploration_proportion_goal):
+            return True
+        else:
+            return False
+
+    def end_condition(self):
         if self.end_at_full_exploation:
-            self.exploration_completion = np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height)
-            # print(f"COMPLETION : {self.exploration_completion}")
-            # print(f"BB completion : {np.count_nonzero(self.agents_tools["blackboard"]["occupancy_grid"]!=-1)/(self.width*self.height)}")
-            # print(self.exploration_completion)
-            if (self.exploration_completion >= self.exploration_proportion_goal):
-                return True
-            else:
-                return False
+           return self.goal_condition()
         else:
             has_to_stop = True
             for a in self.agents:
