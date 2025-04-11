@@ -11,34 +11,50 @@ import itertools
 
 
 
-config_file = "/home/erwan/Documents/tests_simulations/RAPID/tests/config_exp_com_variation_cornerspawn.json"
+config_file = "/home/erwan/Documents/tests_simulations/RAPID/examples/config_examples/config_variation_heterogeneous.json"
 
 with open(config_file, "r") as outfile:
     json_from_file = outfile.read()
     
 config =  json.loads(json_from_file)
 
-def main():
-    VARIABLES_TO_VARIATE = ["NB_GROUND_AGENTS", "GROUND_AGENTS_COMMUNICATION_RANGE", "GROUND_AGENTS_COMMUNICATION_PERIOD"] #ce sont des tableaux dans le fichier de config.
+def get_param_values(config, param_path):
+    keys = param_path.split('/')
+    value = config
+    for key in keys:
+        value = value[key]
+    return value
 
-    total_number_of_experiments =  1
-    for f in VARIABLES_TO_VARIATE:
-        total_number_of_experiments *= len(config[f])
+def set_param_value(config, param_path, value):
+    keys = param_path.split('/')
+    current = config
+    for key in keys[:-1]:
+        current = current[key]
+    current[keys[-1]] = value
+
+
+def main():
+    PARAM_VARIATION = config["PARAM_VARIATION"]
+
+    param_values = [get_param_values(config, param) for param in PARAM_VARIATION]
+
+    total_number_of_experiments = 1
+    for values in param_values:
+        total_number_of_experiments *= len(values)
 
     #TODO mettre dans des variables et afficher dans la boucle
     print(f"number of experiments : {total_number_of_experiments}")
     print(f"number of simulations : {total_number_of_experiments * config["NB_SIMULATION"]}")
     print("continue ? Y/N")
     confirmation = input()
-    if confirmation == "N":
+    if confirmation != "Y" and confirmation != "y":
         exit()
 
     total_number_of_simulations = total_number_of_experiments * config["NB_SIMULATION"]
 
     # Générer toutes les combinaisons d'expériences
-    experiment_combinations = list(itertools.product(*[config[var] for var in VARIABLES_TO_VARIATE]))
+    experiment_combinations = list(itertools.product(*param_values))
 
-    #print(experiment_combinations)
 
     #create the main folder
     if not os.path.exists(config["RESULT_PATH"]+config["GROUP_EXPERIMENT_NAME"]):
@@ -52,21 +68,17 @@ def main():
 
     experiment_counter = 0
     simulation_counter = 0
-    # Afficher chaque combinaison d'expérience
-    for i, combination in enumerate(experiment_combinations):
+    # Afficher chaque combinaison d'expérience    
+    for combination in experiment_combinations:
         experiment_counter += 1
         config_iteration = config.copy()
-        config_iteration.update(dict(zip(VARIABLES_TO_VARIATE, combination)))
-        # print(f"Experiment {i+1}: {dict(zip(VARIABLES_TO_VARIATE, combination))}")
+        for param, value in zip(PARAM_VARIATION, combination):
+            set_param_value(config_iteration, param, value)
         
-        #FILE MAKING
 
-        #EXPERIMENT NAME SPECIFICITY
-        exp_specificity = ""
-        for f in list(zip(VARIABLES_TO_VARIATE, combination)):
-            exp_specificity += str(f[0])+str(f[1]) + "_"
-        
-        exp_specificity = exp_specificity.removesuffix("_")
+
+
+        exp_specificity = "_".join([f"{param.replace('/', '_')}{value}" for param, value in zip(PARAM_VARIATION, combination)]) #genere le nom de l'experience
 
         #create the experiment folder
         if not os.path.exists(config_iteration["RESULT_PATH"]+config_iteration["GROUP_EXPERIMENT_NAME"]):
@@ -74,12 +86,21 @@ def main():
 
         #env Image loading
         if config_iteration["ENV_IMAGE_PATH"]:
-            img = Image.open(config_iteration["ENV_IMAGE_PATH"]).convert("L")
+            img = Image.open(config_iteration["ENV_IMAGE_PATH"])
         else:
             img = None
 
         logging.basicConfig(level=logging.INFO)
         #print(config_iteration)
+
+        #check init_pose for agents
+        for group in config_iteration["AGENTS_GROUPS"]:
+            if config_iteration["AGENTS_GROUPS"][group]["NB_AGENTS"] == len(config_iteration["AGENTS_GROUPS"][group]["INIT_POSITION"]):
+                continue
+            else:
+                print(f"wrong initialisation of the init positions for group {group}. there should be as many init position as there is agents in the group")
+
+
 
         #run loop of the experiments, you can change the environment type in the environment definition.
         for s in range(config_iteration["NB_SIMULATION"]):
@@ -95,36 +116,32 @@ def main():
             env = ExplorationEnvironment(width=config_iteration["SCREEN_WIDTH"],
                                         height=config_iteration["SCREEN_HEIGHT"],
                                         render= config_iteration["RENDER"], 
-                                        caption= config_iteration["EXPERIMENT_NAME"],
                                         background_color= config_iteration["BACKGROUND_COLOR"],
                                         env_image=img,
                                         limit_of_steps=config_iteration["STEP_LIMITATION"],
                                         scaling_factor=config_iteration["SCALING_FACTOR"],
                                         communication_mode=config_iteration["COMMUNICATION_MODE"],
+                                        end_at_full_exploation= config_iteration["END_AT_FULL_EXPLORATION"]
                                         ) #example of exploration environment with rendering (there is rendering by default)
             
             #---------------------------------
 
             #AGENTS Definition----------------
-            for i in range(config_iteration["NB_GROUND_AGENTS"]):
-                #random init position if it is not defined
-                if config_iteration["GROUND_AGENTS_INIT_POSITION"] == None or config_iteration["GROUND_AGENTS_INIT_POSITION"] == "random" :
-                    agents_init_pos = (random.randrange(0,env.width), random.randrange(0,env.height), random.uniform(0, 2*3.14)) 
-                elif config_iteration["GROUND_AGENTS_INIT_POSITION"] == "corners":
-                    agents_init_pos = init_corner_positions(env, config_iteration["NB_GROUND_AGENTS"], i, s)
-                else:
-                    agents_init_pos = config_iteration["GROUND_AGENTS_INIT_POSITION"]
-
-                env.add_agent(Agents.Ground(
-                                            env, 
-                                            robot_id=len(env.agents)+1, 
-                                            init_transform=agents_init_pos,
-                                            max_speed=config_iteration["GROUND_AGENTS_MAX_SPEED"],
-                                            behavior_to_use=config_iteration["GROUND_AGENTS_BEHAVIOR"],
-                                            communication_range=config_iteration["GROUND_AGENTS_COMMUNICATION_RANGE"],
-                                            communication_period=config_iteration["GROUND_AGENTS_COMMUNICATION_PERIOD"],
-                                            vision_range=config_iteration["GROUND_AGENTS_VISION_RANGE"],
-                                        ))
+            # AGENTS Definition
+            for group_name, group_config in config_iteration["AGENTS_GROUPS"].items():
+                for i in range(group_config["NB_AGENTS"]):
+                    agents_init_pos = group_config["INIT_POSITION"][i] if group_config["INIT_POSITION"] else (random.randrange(0, env.width), random.randrange(0, env.height), random.uniform(0, 2 * 3.14))
+                    agent_class = getattr(Agents, group_config["AGENTS_TYPE"])
+                    env.add_agent(agent_class(
+                        env,
+                        robot_id=len(env.agents) + 1,
+                        init_transform=agents_init_pos,
+                        max_speed=group_config["MAX_SPEED"],
+                        behavior_to_use=group_config["BEHAVIOR"],
+                        communication_range=group_config["COMMUNICATION_RANGE"],
+                        communication_period=group_config["COMMUNICATION_PERIOD"],
+                        vision_range=group_config["VISION_RANGE"],
+                    ))
             #---------------------------------
 
             env.run()
