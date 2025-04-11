@@ -11,7 +11,7 @@ import itertools
 
 
 
-config_file = "/home/erwan/Documents/tests_simulations/RAPID/examples/config_examples/config_variation_heterogeneous.json"
+config_file = "/home/erwan/Documents/tests_simulations/RAPID/examples/config_examples/config_variation_heterogeneous_example.json"
 
 with open(config_file, "r") as outfile:
     json_from_file = outfile.read()
@@ -98,7 +98,8 @@ def main():
             if config_iteration["AGENTS_GROUPS"][group]["NB_AGENTS"] == len(config_iteration["AGENTS_GROUPS"][group]["INIT_POSITION"]):
                 continue
             else:
-                print(f"wrong initialisation of the init positions for group {group}. there should be as many init position as there is agents in the group")
+                print(f"wrong initialisation of the init positions for group {group}. there should be the same number of init position as there is agents in the group")
+                exit()
 
 
 
