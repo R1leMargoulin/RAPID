@@ -337,6 +337,8 @@ class ExplorationEnvironment(Environment):
 
         self.end_at_full_exploation = end_at_full_exploation
 
+        self.explorable_cell_number = np.count_nonzero(np.isin(self.real_occupancy_grid, self.explorable_zone_types))
+
     def run(self):
         #remove some fog around agents before launching
         for agent in self.agents:
@@ -368,7 +370,7 @@ class ExplorationEnvironment(Environment):
         # print(self.width*self.height)
         # print(np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height))
 
-        self.exploration_completion = np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height)
+        self.exploration_completion = np.count_nonzero(self.interest_points["exploration_map"]==1)/self.explorable_cell_number
         # print(f"COMPLETION : {self.exploration_completion}")
         # print(f"BB completion : {np.count_nonzero(self.agents_tools["blackboard"]["occupancy_grid"]!=-1)/(self.width*self.height)}")
         # print(self.exploration_completion)
