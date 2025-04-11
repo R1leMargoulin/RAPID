@@ -39,7 +39,7 @@ class Robot(Sprite):
         self.robot_id = robot_id
 
         # pygame agent components
-        self.surf = Surface((2*size, 2*size), SRCALPHA, 32)
+        self.surf = Surface((4*size, 4*size), SRCALPHA, 32)
         circle(self.surf, color, (2*size, 2*size), 4*size)
         self.rect = Rect(0, 0, size, size)
 
@@ -153,28 +153,33 @@ class Robot(Sprite):
         #TODO: remake collision
         for cell_type in filter(lambda k: self.env_ease[k] == 0, self.env_ease): #for all cells type with a traversability ease of 0 (obstacles)
             if cell_type in self.env.cell_feature_groups:
-                collisions = spritecollide(self, self.env.cell_feature_groups[cell_type], False)
-
+                #collisions = spritecollide(self, self.env.cell_feature_groups[cell_type], False)
+                collisions = not(int(self.env.real_occupancy_grid[int(self.transform.x)][int(self.transform.y)]) in self.traversable_types)
                 if (collisions): #is there collision
                     sides = []
-                    for c in collisions:
-                        if self.rect.midtop[1] > c.rect.midtop[1]:
-                            sides.append("top")
-                        if self.rect.midleft[0] > c.rect.midleft[0]:
-                            sides.append("left")
-                        if self.rect.midright[0] < c.rect.midright[0]:
-                            sides.append("right")
-                        if self.rect.midtop[1] < c.rect.midtop[1]:
-                            sides.append("bottom")
+                    self.transform.x = old_tfx
+                    self.transform.y = old_tfy
+                    # for c in collisions:
+                    #     if self.rect.midtop[1] > c.rect.midtop[1]:
+                    #         sides.append("top")
+                    #     if self.rect.midleft[0] > c.rect.midleft[0]:
+                    #         sides.append("left")
+                    #     if self.rect.midright[0] < c.rect.midright[0]:
+                    #         sides.append("right")
+                    #     if self.rect.midtop[1] < c.rect.midtop[1]:
+                    #         sides.append("bottom")
                     
-                    if ("top" in sides):
-                        self.transform.y += 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
-                    if ("bottom" in sides):
-                        self.transform.y -= 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
-                    if ("left" in sides):
-                        self.transform.x += 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
-                    if ("right" in sides):
-                        self.transform.x -= 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
+                    # if ("top" in sides):
+                    #     self.transform.y += 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
+                    # if ("bottom" in sides):
+                    #     self.transform.y -= 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
+                    #     int(self.transform.y)
+                    # if ("left" in sides):
+                    #     self.transform.x += 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
+                    #     int(self.transform.x)
+                    # if ("right" in sides):
+                    #     self.transform.x -= 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
+                    #     int(self.transform.x)
         #-----------------------------------------------------------------------------------------------------------
         
         
