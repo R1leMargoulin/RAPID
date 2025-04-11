@@ -25,7 +25,7 @@
                 "AGENTS_TYPE": ["Ground", "Aerial"],
                 "NB_AGENTS": 1,
                 "INIT_POSITION": [[1, 99, 0]],
-                "MAX_SPEED": [2, 0, 0.5],
+                "MAX_SPEED": [1, 1, 0.5],
                 "BEHAVIOR": "minpos",
                 "COMMUNICATION_RANGE": 25,
                 "COMMUNICATION_PERIOD": 25,
