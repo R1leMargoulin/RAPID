@@ -26,20 +26,21 @@ def main():
     
     #env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img, amount_of_agents_goal=2, scaling_factor=2)
     #env = ExplorationEnvironment(render= True, background_color= BACKGROUND_COLOR, env_image=img, full_knowledge=False, scaling_factor=4)
-    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, env_image=None, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=4, communication_mode="limited", render=True, end_at_full_exploation=False)
+    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, env_image=img, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=4, communication_mode="limited", render=True, end_at_full_exploation=False)
 
 
     for i in range(NB_GROUND_AGENTS):
         #random init position
-        init_pos = (random.randrange(0,env.width), random.randrange(0,env.height), random.uniform(0, 2*3.14)) 
+        #init_pos = (random.randrange(0,env.width), random.randrange(0,env.height), random.uniform(0, 2*3.14)) 
+        init_pos = (1, 99, 0)
 
 
-        env.add_agent(Agents.Ground(
+        env.add_agent(Agents.Aerial(
                                     env, 
                                     robot_id=len(env.agents)+1, 
                                     init_transform=init_pos,
                                     max_speed=(1,1,0.5), #warning : adapt max speeds if you use aerial or ground robots
-                                    behavior_to_use="local_frontier", #change to target_djikstra with a target point env.
+                                    behavior_to_use="minpos", #change to target_djikstra with a target point env.
                                     vision_range=10,
                                     communication_range=30,
                                     communication_period=10,

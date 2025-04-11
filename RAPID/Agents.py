@@ -605,7 +605,7 @@ class Aerial(Robot):
             OG_WALL_GROUP_NAME:1,
             OG_HIGH_WALL_GROUP_NAME:0,
             OG_SAND_GROUP_NAME:1,
-            OG_WATER_GROUP_NAME:0.5,
+            OG_WATER_GROUP_NAME:1,
             OG_GRASS_GROUP_NAME:1
         }
 
