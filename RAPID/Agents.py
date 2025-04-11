@@ -592,32 +592,6 @@ class Ground(Robot):
 
         self.translate(xmove, ymove)
 
-        def make_the_move(waypoint):
-            direction = (waypoint[0] - int(self.transform.x), waypoint[1] - int(self.transform.y))
-
-            self.move(direction[0], direction[1])
-
-        #we should be nearby the first point of the path, else we delete it and we'll compute an other one:
-        if euclidian_distance((int(self.transform.x), int(self.transform.y)), (self.path_to_target[0][0], self.path_to_target[0][1])) <= 5: #if we are more than 5 away from the path, we forget the target it in order to recalculate a new one
-            if self.path_to_target[0] == self.target:
-                waypoint = self.path_to_target[0]
-                make_the_move(waypoint)
-                
-                self.target = None
-                self.path_to_target = None
-            else:
-                self.path_to_target.pop(0)
-                waypoint = self.path_to_target[0]
-
-                make_the_move(waypoint)
-
-                pass
-        else:
-            #Path not accurate.
-            self.behavior_diff_move_random() #random move to maybe select another frontier.
-            self.path_to_target = None
-            self.target = None
-
 
 class Aerial(Robot):
     def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random"):
@@ -630,7 +604,7 @@ class Aerial(Robot):
             OG_WALL_GROUP_NAME:1,
             OG_HIGH_WALL_GROUP_NAME:0,
             OG_SAND_GROUP_NAME:1,
-            OG_WATER_GROUP_NAME:1,
+            OG_WATER_GROUP_NAME:0.5,
             OG_GRASS_GROUP_NAME:1
         }
 
