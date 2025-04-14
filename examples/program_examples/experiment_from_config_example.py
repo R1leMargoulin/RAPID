@@ -172,6 +172,7 @@ def create_simulation_data(env, sim_number:int, exp_name): #TODO, passer en CSV 
     for a in env.agents: #here are detailed the different agent metrics.
         sim_data[f"simulation{sim_number}"]["agents_data"].update({
                                                                         f"robot_{a.robot_id}":{
+                                                                            "type":a.__class__.__name__,
                                                                             "total_distance_made" : a.total_distance_made,
                                                                             "communication_range" : a.communication_range,
                                                                             "communication_period": a.communication_period,
