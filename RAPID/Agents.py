@@ -15,7 +15,7 @@ import logging
 #TODO : les comportements sont EXACTEMENT les memes dans ground ou Aerial, je pourrais tout mettre dans robot...
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10):#TODO rendre abstrait
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10, energy_amount = 1000, energy_cost_per_cell = 1):#TODO rendre abstrait
         """
         Robot class are our agents representing robots.
 
@@ -57,6 +57,10 @@ class Robot(Sprite):
         self.communication_range = communication_range
         self.communication_period = communication_period
         self.time_from_last_communication = 0
+
+        #energy
+        self.energy_amount = energy_amount
+        self.energy_cost_per_cell = energy_cost_per_cell
 
         #capabilities of ease in the env by default, will be as a classical ground robot:
         self.env_ease = {
@@ -124,7 +128,7 @@ class Robot(Sprite):
         self.is_active = True
 
     def update(self, screen):
-        
+        print(self.energy_amount)
         if self.env.render:
             scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
             screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
@@ -189,7 +193,15 @@ class Robot(Sprite):
         self.transform.y = max(self.transform.y, 0)
         self.transform.y = min(self.transform.y, self.env.height-1)
 
-        self.total_distance_made += np.sqrt((self.transform.x - old_tfx)**2 + (self.transform.y - old_tfy)**2)
+        distance_made = np.sqrt((self.transform.x - old_tfx)**2 + (self.transform.y - old_tfy)**2)
+
+        energy_consumption =self.energy_cost_per_cell * distance_made
+
+        #energy transition
+        self.energy_amount -= energy_consumption
+
+
+        self.total_distance_made += distance_made
 
         # update positions of pygame objects
         self.rect.centerx = int(self.transform.x)

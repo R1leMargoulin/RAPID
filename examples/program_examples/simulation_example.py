@@ -31,8 +31,8 @@ def main():
 
     for i in range(NB_GROUND_AGENTS):
         #random init position
-        #init_pos = (random.randrange(0,env.width), random.randrange(0,env.height), random.uniform(0, 2*3.14)) 
-        init_pos = (1, 99, 0)
+        init_pos = (random.randrange(0,env.width), random.randrange(0,env.height), random.uniform(0, 2*3.14)) 
+        #init_pos = (1, 99, 0)
 
 
         env.add_agent(Agents.Aerial(
