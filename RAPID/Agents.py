@@ -59,6 +59,7 @@ class Robot(Sprite):
         self.time_from_last_communication = 0
 
         #energy
+        self.energy_max_amount = energy_amount
         self.energy_amount = energy_amount
         self.energy_cost_per_cell = energy_cost_per_cell
 
@@ -128,7 +129,6 @@ class Robot(Sprite):
         self.is_active = True
 
     def update(self, screen):
-        print(self.energy_amount)
         if self.env.render:
             scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
             screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
@@ -137,11 +137,17 @@ class Robot(Sprite):
             if self.env.render:
                 halo_scaled_rect = Rect(self.communication_halo.rect.x * self.env.scaling_factor, self.communication_halo.rect.y * self.env.scaling_factor, self.communication_halo.rect.width * self.env.scaling_factor, self.communication_halo.rect.height * self.env.scaling_factor)
                 screen.blit(scale(self.communication_halo.image, halo_scaled_rect.size), halo_scaled_rect)
+
+        if (self.energy_amount / self.energy_max_amount) <= 0:
+            self.imdone = True
             
     def translate(self, speed_x, speed_y):
         #old positions for distance calculation
         old_tfx = self.transform.x
         old_tfy = self.transform.y
+
+
+        energy_consumption =self.energy_cost_per_cell * np.sqrt((speed_x)**2+(speed_y)**2)
 
 
         current_cell_type  = self.env.real_occupancy_grid[int(self.transform.x)][int(self.transform.y)]# get the current cell type in order to adapt the speed depending of the traversability ease of the robot
@@ -194,8 +200,6 @@ class Robot(Sprite):
         self.transform.y = min(self.transform.y, self.env.height-1)
 
         distance_made = np.sqrt((self.transform.x - old_tfx)**2 + (self.transform.y - old_tfy)**2)
-
-        energy_consumption =self.energy_cost_per_cell * distance_made
 
         #energy transition
         self.energy_amount -= energy_consumption

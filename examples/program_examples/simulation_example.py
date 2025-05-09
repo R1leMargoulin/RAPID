@@ -35,7 +35,7 @@ def main():
         #init_pos = (1, 99, 0)
 
 
-        env.add_agent(Agents.Aerial(
+        env.add_agent(Agents.Ground(
                                     env, 
                                     robot_id=len(env.agents)+1, 
                                     init_transform=init_pos,
