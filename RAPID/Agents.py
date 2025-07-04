@@ -33,6 +33,7 @@ class Robot(Sprite):
         - communication_range:int =  when communication is limited, the robot can share information within robots in the communication radius.
         - communication_period:int = when agent share it's beliefs: number of steps the agent needs to wait before it can communicate again
         """
+        self.status = "init"
         super().__init__()
         # inital values
         self.env = env
@@ -116,8 +117,7 @@ class Robot(Sprite):
             self.connected_robots = []
         
         #creation of the belief space whatever the communication mode
-        self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "interest_points":{}}
-        self.belief_space["robot_positions"] = {}
+        self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "artifacts":{}, "robot_positions":{}}
         self.belief_space["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
         if self.env.full_knowledge:
             self.belief_space["occupancy_grid"] = self.env.real_occupancy_grid
@@ -126,20 +126,26 @@ class Robot(Sprite):
         self.imdone = False #if true, the robot will consider it's mission is over, it stops its activity.
         
         #Ready!
+        self.status = "ready"
         self.is_active = True
 
     def update(self, screen):
-        if self.env.render:
-            scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
-            screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
+        if not(self.imdone):
 
-        if self.env.communication_mode == "limited":
             if self.env.render:
-                halo_scaled_rect = Rect(self.communication_halo.rect.x * self.env.scaling_factor, self.communication_halo.rect.y * self.env.scaling_factor, self.communication_halo.rect.width * self.env.scaling_factor, self.communication_halo.rect.height * self.env.scaling_factor)
-                screen.blit(scale(self.communication_halo.image, halo_scaled_rect.size), halo_scaled_rect)
+                scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
+                screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
 
-        if (self.energy_amount / self.energy_max_amount) <= 0:
-            self.imdone = True
+            if self.env.communication_mode == "limited":
+                if self.env.render:
+                    halo_scaled_rect = Rect(self.communication_halo.rect.x * self.env.scaling_factor, self.communication_halo.rect.y * self.env.scaling_factor, self.communication_halo.rect.width * self.env.scaling_factor, self.communication_halo.rect.height * self.env.scaling_factor)
+                    screen.blit(scale(self.communication_halo.image, halo_scaled_rect.size), halo_scaled_rect)
+
+            if (self.energy_amount / self.energy_max_amount) <= 0:
+                self.imdone = True
+
+            if self.status == "destroyed":
+                self.imdone = True
             
     def translate(self, speed_x, speed_y):
         #old positions for distance calculation
@@ -218,15 +224,18 @@ class Robot(Sprite):
             self.communication_halo.rect.centerx = int(self.transform.x)
             self.communication_halo.rect.centery = int(self.transform.y)
 
-    def navigate_through_target_path(self): #TODO rendre abstraite
-        pass
-
     def sense(self):
         #first, get neighbors in order to see the unseen ones.
         neighbors = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
 
         for n in neighbors:
             self.belief_space["occupancy_grid"][n[0]][n[1]] = self.env.real_occupancy_grid[n[0]][n[1]] #get the real value (simulates sensing, note that we could add noise.)
+
+        #artifact detection
+        for a in self.env.interest_points["artifacts"]:
+            if a.coordinates in neighbors:
+                self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step}}) #TODO : Update with belief propagation as well
+                pass
 
     def get_neighbors_pixels(self, distance:int, stop_at_wall = False, self_inclusion = True):
         """
@@ -296,15 +305,21 @@ class Robot(Sprite):
         #en supposant que le sensing de chaque agent est correct (on y mettra des probabilités plus tard, en ajoutant un layer) on peut simplement merge les deux grilles en prennant le max de chacune
         #car -1 = unknown, 0 = free, 1 = obstacle, et quand c'est plus grand c'est des points d'interets.
         self.belief_space["occupancy_grid"] = np.maximum.reduce([self.belief_space["occupancy_grid"], sender_belief_space["occupancy_grid"]])
-        for robot_pos in sender_belief_space["robot_positions"]:
+        for robot_pos in sender_belief_space["robot_positions"]: #robot positions update based on the newest timestamp
             if not (robot_pos in self.belief_space["robot_positions"]):
                 self.belief_space["robot_positions"].update({robot_pos: sender_belief_space["robot_positions"][robot_pos]})
 
             elif sender_belief_space["robot_positions"][robot_pos]["step"] > self.belief_space["robot_positions"][robot_pos]["step"]:
                 self.belief_space["robot_positions"].update({robot_pos: sender_belief_space["robot_positions"][robot_pos]})
 
-            else:
-                pass
+        for artifact in sender_belief_space["artifacts"]: #artifact update based on the newest timestamp
+            if not (artifact in self.belief_space["artifacts"]):
+                self.belief_space["artifacts"].update({artifact: sender_belief_space["artifacts"][artifact]})
+            
+            elif sender_belief_space["artifacts"][artifact]["step"] > self.belief_space["artifacts"][artifact]["step"]:
+                self.belief_space["artifacts"].update({artifact: sender_belief_space["artifacts"][artifact]})
+
+        #TODO : RESET LE TargetPoint et le path pour recalculer les goals????
 
     def move(self, vector_x, vector_y):
         print("move has to be implemented in the class.")
@@ -528,7 +543,7 @@ class Robot(Sprite):
                 waypoint = self.path_to_target[0]
                 make_the_move(waypoint)
                 
-                self.target = None
+                self.target = None #forget the target and the path
                 self.path_to_target = None
             else:
                 self.path_to_target.pop(0)
@@ -540,13 +555,13 @@ class Robot(Sprite):
         else:
             #Path not accurate.
             self.behavior_diff_move_random() #random move to maybe select another frontier.
-            self.path_to_target = None
+            self.path_to_target = None #forget the target and the path
             self.target = None
 
-class Ground(Robot):
+class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
 
-    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random"):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period)
+    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier"]
 
         #traversability ease in the env 
@@ -615,9 +630,9 @@ class Ground(Robot):
         self.translate(xmove, ymove)
 
 
-class Aerial(Robot):
-    def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random"):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period)
+class Aerial(Robot): #TODO UPDATE ENERGY AMOUNT
+    def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier"]
 
         #traversability ease in the env 

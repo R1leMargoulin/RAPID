@@ -13,7 +13,7 @@ SCREEN_WIDTH = 100
 SCREEN_HEIGHT = 100
 BACKGROUND_COLOR = (200, 200, 200)
 
-ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/multitype_100_100.png"# CHANGE THE PATH
+ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/examples/env_images_example/cross_100_100.png"# CHANGE THE PATH
 
 NB_GROUND_AGENTS = 1
 
@@ -44,6 +44,7 @@ def main():
                                     vision_range=10,
                                     communication_range=30,
                                     communication_period=10,
+                                    energy_amount=1e6 #place a huge amount for no energy limitations 
                                 ))
         
     
