@@ -15,7 +15,7 @@ BACKGROUND_COLOR = (200, 200, 200)
 
 ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/examples/env_images_example/cross_100_100.png"# CHANGE THE PATH
 
-NB_GROUND_AGENTS = 1
+NB_GROUND_AGENTS = 5
 
 img = Image.open(ENV_IMAGE_PATH)
 

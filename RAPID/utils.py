@@ -350,3 +350,37 @@ def heuristic_frontier_distance(start, goal, grid, traversable_types = [OG_FREE_
 
     # Combine Euclidean distance and obstacle penalty
     return euclidean_dist + obstacle_penalty * 100  # Weight for obstacle penalty
+
+def simple_clustering(coordinates, max_distance):
+    coords = np.array(coordinates)
+    unvisited = set(range(len(coords)))
+    clusters = []
+
+    while unvisited:
+        # Commencer avec un point non visité
+        start_point = next(iter(unvisited))
+        unvisited.remove(start_point)
+
+        # Trouver tous les points à une distance inférieure ou égale à max_distance
+        queue = [start_point]
+        cluster = []
+
+        while queue:
+            point_idx = queue.pop(0)
+            cluster.append(point_idx)
+
+            for unvisited_point in list(unvisited):
+                if euclidian_distance(coords[point_idx], coords[unvisited_point]) <= max_distance:
+                    unvisited.remove(unvisited_point)
+                    queue.append(unvisited_point)
+
+        clusters.append(cluster)
+
+    # Calculer les barycentres pour chaque cluster
+    barycenters = []
+    for cluster in clusters:
+        if cluster:
+            barycenter = np.mean(coords[cluster], axis=0)
+            barycenters.append(barycenter.tolist())
+
+    return barycenters

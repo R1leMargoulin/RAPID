@@ -558,6 +558,56 @@ class Robot(Sprite):
             self.path_to_target = None #forget the target and the path
             self.target = None
 
+    def behavior_action_selection(self): #TODO
+        #first of all, sense the environment
+        self.sense()#first of all sense the env.
+        self.belief_transfer() #after sensing, transfer beliefs if applicable
+
+        if np.any(self.target):#si on a une target
+            if self.path_to_target: #If we have a path to our target, we continue this path.
+                self.navigate_through_target_path()
+                pass
+            else: #if we don't have any path, then compute it with our target
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
+
+        else:
+            interest_points = [] #we will add all of our interest points here
+            #interest points identification -----------------------------------------------------------
+            #exploration frontiers ----------------------------
+            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=self.traversable_types) #from utils
+            if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
+                pass #TODO : retourner une liste vide ou laisser ce pass
+            else:
+                cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range, traversable_types=self.traversable_types) #from utils : make cluster of fontiers to reduce computation time
+                for cc in cluster_centers:
+                    interest_points.append({"type":"ExplorationFrontier","coordinates":cc})
+            #--------------------------------------
+
+            #barycentre de communications----------
+            #liste de toutes les positions des robots
+            robots_pos_list = [pos["position"] for pos in list(self.belief_space["robot_positions"].values())] #list of float xy position of all robots#va falloir renommer robot position en "robot_informations"
+            #TODO virer la position du robot avant de faire les clusters
+            communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
+            for cc in communication_clusters:
+                    interest_points.append({"type":"CommunicationPoint","coordinates":cc})#adding those clusters in the communication points
+            #--------------------------------------
+
+            #Artifacts ----------------------------
+            for art in self.belief_space["artifacts"]:
+                interest_points.append({"type":art.type,"coordinates":art.coordinates})#adding directly the artifacts in the interest points
+            #--------------------------------------
+            #------------------------------------------------------------------------------------------
+            #utility calculation
+            pass #TODO
+            #pour faire ca je vais devoir mettre les capacités dans chaque robots, en plus de l'aisance
+
+            #tuning params
+            pass #TODO
+            #calculation and selection
+            pass #TODO
+            #action perform
+            pass #TODO
+
 class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
 
     def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1):
