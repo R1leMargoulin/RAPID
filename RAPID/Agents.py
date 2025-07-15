@@ -64,7 +64,7 @@ class Robot(Sprite):
         self.energy_amount = energy_amount
         self.energy_cost_per_cell = energy_cost_per_cell
 
-        #capabilities of ease in the env by default, will be as a classical ground robot:
+        #ease in the env, will be as a classical ground robot by default:
         self.env_ease = {
             OG_FREE_CELL_GROUP_NAME:1,
             OG_WALL_GROUP_NAME:0,
@@ -77,7 +77,8 @@ class Robot(Sprite):
         for i in range(len(self.traversable_types)):#we have the string name of the cells types, lets get the int values
             self.traversable_types[i] = ENV_CELL_TYPES[self.traversable_types[i]]
 
-
+        self.competences = {"exploration":{"capability": 1, "importance":1},
+                            "communication":{"capability": 1, "importance":1}} #to add depending of the case and the robot
     
         #Metrics
         self.total_distance_made = 0.0
@@ -91,6 +92,7 @@ class Robot(Sprite):
         #internal memory vars
         self.target = None
         self.path_to_target = None
+        self.action_to_perform=None
 
         self.behavior_space = [] # To fill in the init of child classes
 
@@ -101,7 +103,7 @@ class Robot(Sprite):
             else:
                 self.env.agents_tools["blackboard"]={} #create the BB in the env.
                 self.env.agents_tools["blackboard"]["occupancy_grid"]=np.full((self.env.width, env.height), OG_UNKNOWN_CELL) #Create the occupancy grid belief in the BB
-                self.env.agents_tools["blackboard"]["robot_positions"]={} #create the robot position dict belief in the BB
+                self.env.agents_tools["blackboard"]["robot_informations"]={} #create the robot position dict belief in the BB
                 if self.env.full_knowledge:
                     self.env.agents_tools["blackboard"]["occupancy_grid"] = self.env.real_occupancy_grid #make the blackboard equans to the env grid if the env is known
 
@@ -117,8 +119,8 @@ class Robot(Sprite):
             self.connected_robots = []
         
         #creation of the belief space whatever the communication mode
-        self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "artifacts":{}, "robot_positions":{}}
-        self.belief_space["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
+        self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "artifacts":{}, "robot_informations":{}}
+        self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step, "competences":self.competences} }) #we add the step in order to keep the most recent known position when merging.
         if self.env.full_knowledge:
             self.belief_space["occupancy_grid"] = self.env.real_occupancy_grid
 
@@ -218,7 +220,7 @@ class Robot(Sprite):
         self.rect.centery = int(self.transform.y)
 
 
-        self.belief_space["robot_positions"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step} }) #we add the step in order to keep the most recent known position when merging.
+        self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "competences":self.competences, "step":self.env.step }}) #we add the step in order to keep the most recent known position when merging.
 
         if self.env.communication_mode == "limited":
             self.communication_halo.rect.centerx = int(self.transform.x)
@@ -289,14 +291,15 @@ class Robot(Sprite):
             if self.communication_mode == "limited":
                 if self.connected_robots:
                     for robot in self.connected_robots:
-                        robot.recieve_belief(self.belief_space) #envoie des beliefs à tous les robots voisins.
-                    self.time_from_last_communication = 0
+                        if self.robot_id != robot.robot_id:
+                            robot.recieve_belief(self.belief_space) #envoie des beliefs à tous les robots voisins.
+                            self.time_from_last_communication = 0
                 else:
                     self.time_from_last_communication +=1
 
             elif self.communication_mode == "blackboard":
                 self.env.agents_tools["blackboard"]["occupancy_grid"] = np.maximum.reduce([self.env.agents_tools["blackboard"]["occupancy_grid"], self.belief_space["occupancy_grid"]]) #Maj de la grille d'occupation
-                self.env.agents_tools["blackboard"]["robot_positions"].update({self.robot_id:self.belief_space["robot_positions"][self.robot_id]}) #Maj de la position perso du robot pour le blackboard
+                self.env.agents_tools["blackboard"]["robot_informations"].update({self.robot_id:self.belief_space["robot_informations"][self.robot_id]}) #Maj des infos perso du robot pour le blackboard
                 self.belief_space = self.env.agents_tools["blackboard"] #on tire le blackboard dans nos beliefs space une fois l'avoir mis a jour.
                 self.time_from_last_communication = 0
 
@@ -305,12 +308,12 @@ class Robot(Sprite):
         #en supposant que le sensing de chaque agent est correct (on y mettra des probabilités plus tard, en ajoutant un layer) on peut simplement merge les deux grilles en prennant le max de chacune
         #car -1 = unknown, 0 = free, 1 = obstacle, et quand c'est plus grand c'est des points d'interets.
         self.belief_space["occupancy_grid"] = np.maximum.reduce([self.belief_space["occupancy_grid"], sender_belief_space["occupancy_grid"]])
-        for robot_pos in sender_belief_space["robot_positions"]: #robot positions update based on the newest timestamp
-            if not (robot_pos in self.belief_space["robot_positions"]):
-                self.belief_space["robot_positions"].update({robot_pos: sender_belief_space["robot_positions"][robot_pos]})
+        for robot_infos in sender_belief_space["robot_informations"]: #robot positions update based on the newest timestamp
+            if not (robot_infos in self.belief_space["robot_informations"]):
+                self.belief_space["robot_informations"].update({robot_infos: sender_belief_space["robot_informations"][robot_infos]})
 
-            elif sender_belief_space["robot_positions"][robot_pos]["step"] > self.belief_space["robot_positions"][robot_pos]["step"]:
-                self.belief_space["robot_positions"].update({robot_pos: sender_belief_space["robot_positions"][robot_pos]})
+            elif sender_belief_space["robot_informations"][robot_infos]["step"] > self.belief_space["robot_informations"][robot_infos]["step"]:
+                self.belief_space["robot_informations"].update({robot_infos: sender_belief_space["robot_informations"][robot_infos]})
 
         for artifact in sender_belief_space["artifacts"]: #artifact update based on the newest timestamp
             if not (artifact in self.belief_space["artifacts"]):
@@ -323,6 +326,16 @@ class Robot(Sprite):
 
     def move(self, vector_x, vector_y):
         print("move has to be implemented in the class.")
+
+    def shape_competence(self, type, capability, importance):
+        self.competences.update({type:{"capability": capability, "importance":importance}})
+    
+    def perform_target_action(self):
+        if self.action_to_perform["type"] == "exploration":
+            self.action_to_perform = None
+            
+        else:
+            print(f"the action '{self.action_to_perform["type"]}' is not implemented in the 'perform_target_action' method. Pleas redefine it with the action")
 
     def behavior_diff_move_random(self):
         #set srobot speed at it's max speed
@@ -439,7 +452,7 @@ class Robot(Sprite):
             else:
                 cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range, traversable_types=self.traversable_types) #from utils : make cluster fontiers
 
-                pos_list_float = [pos["position"] for pos in list(self.belief_space["robot_positions"].values())] #list of float xy position of all robots
+                pos_list_float = [pos["position"] for pos in list(self.belief_space["robot_informations"].values())] #list of float xy position of all robots
                 pos_list_int = [(int(x), int(y)) for x,y in pos_list_float] #same list with ints.
 
                 weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width, traversable_types=self.traversable_types) #the penalty for a frontier cluster depends of the size of the env.
@@ -563,12 +576,15 @@ class Robot(Sprite):
         self.sense()#first of all sense the env.
         self.belief_transfer() #after sensing, transfer beliefs if applicable
 
-        if np.any(self.target):#si on a une target
+        if np.any(self.target):
             if self.path_to_target: #If we have a path to our target, we continue this path.
                 self.navigate_through_target_path()
                 pass
             else: #if we don't have any path, then compute it with our target
                 self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
+        
+        elif self.action_to_perform != None:
+            pass #TODO faire une méthode spécifique que l'user doit surcharger????
 
         else:
             interest_points = [] #we will add all of our interest points here
@@ -580,16 +596,17 @@ class Robot(Sprite):
             else:
                 cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range, traversable_types=self.traversable_types) #from utils : make cluster of fontiers to reduce computation time
                 for cc in cluster_centers:
-                    interest_points.append({"type":"ExplorationFrontier","coordinates":cc})
+                    interest_points.append({"type":"exploration","coordinates":cc})
             #--------------------------------------
 
             #barycentre de communications----------
             #liste de toutes les positions des robots
-            robots_pos_list = [pos["position"] for pos in list(self.belief_space["robot_positions"].values())] #list of float xy position of all robots#va falloir renommer robot position en "robot_informations"
+
+            robots_pos_list = [pos["position"] for pos in list(self.belief_space["robot_informations"].values())] #list of float xy position of all robots#va falloir renommer robot position en "robot_informations"
             #TODO virer la position du robot avant de faire les clusters
             communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
             for cc in communication_clusters:
-                    interest_points.append({"type":"CommunicationPoint","coordinates":cc})#adding those clusters in the communication points
+                    interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
             #--------------------------------------
 
             #Artifacts ----------------------------
@@ -597,22 +614,61 @@ class Robot(Sprite):
                 interest_points.append({"type":art.type,"coordinates":art.coordinates})#adding directly the artifacts in the interest points
             #--------------------------------------
             #------------------------------------------------------------------------------------------
-            #utility calculation
-            pass #TODO
-            #pour faire ca je vais devoir mettre les capacités dans chaque robots, en plus de l'aisance
+            #utility calculation-----------------------------------------------------------------------            
+            for ip in interest_points:
+                #individual utility
+                cost = euclidian_distance(ip["coordinates"], (self.transform.x, self.transform.y)) #euclidian distance for the moment (C in the model)
+                capability = self.competences[ip["type"]]["capability"] #I'll cnsider that the type of the IP will be named the same than the competence (mu in the model)
 
-            #tuning params
-            pass #TODO
-            #calculation and selection
-            pass #TODO
+                individual_utility = capability/cost
+
+                #global feasability
+                other_individual_values = np.array([])
+                for robot in self.belief_space["robot_informations"]: #the key value ofthis dict is robot id
+                    if len(self.belief_space["robot_informations"]) <=1:
+                        other_individual_values = np.append(other_individual_values, 0.0)
+                        break
+                    if robot == self.robot_id :
+                        continue
+                    else:
+                        ocost = euclidian_distance(ip["coordinates"], self.belief_space["robot_informations"][robot]["position"])
+                        ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]["capability"]]
+                        other_individual_values = np.append(other_individual_values, ocapability/ocost)
+
+                global_feasability = float(np.mean(other_individual_values))
+                #global_feasability = float(np.max(other_individual_values)) # TODO: Try with max instead of min
+
+                #collective utility
+                collective_utility = individual_utility - global_feasability
+                
+                #final utility
+                utility = individual_utility + collective_utility
+
+                ip.update({"utility":utility})
+
+            #------------------------------------------------------------------------------------------
+            best_action = None
+            best_weighted_utility = 0
+            for ip in interest_points:
+                #tuning params-----------------------------------------------------------------------------
+                pass #TODO
+                weighted_utility = ip["utility"] * self.competences[ip["type"]]["importance"]
+                print(ip)
+                print(weighted_utility)
+                if weighted_utility >= best_weighted_utility:
+                    best_weighted_utility = weighted_utility
+                    best_action = ip
             #action perform
-            pass #TODO
+            self.action_to_perform = best_action
+            print("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
+            print(self.action_to_perform)
+            self.target = self.action_to_perform["coordinates"]
 
 class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
 
     def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell)
-        self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier"]
+        self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier", "action_selection"]
 
         #traversability ease in the env 
         self.env_ease = {
@@ -650,6 +706,8 @@ class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
                     self.minpos_behavior()
                 case "local_frontier":
                     self.local_frontier_behavior()
+                case "action_selection":
+                    self.behavior_action_selection()
         super().update(screen)
 
     def move(self, vector_x, vector_y):
