@@ -34,5 +34,5 @@ class Artifact:
     def destroy(self):
         self.status = "destroyed"
         
-    def interact(self):
+    def interact(self, competence):
         pass

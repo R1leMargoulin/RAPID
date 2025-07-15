@@ -333,9 +333,16 @@ class Robot(Sprite):
     def perform_target_action(self):
         if self.action_to_perform["type"] == "exploration":
             self.action_to_perform = None
+        elif self.action_to_perform["type"] == "communication":
+            self.action_to_perform = None
             
-        else:
-            print(f"the action '{self.action_to_perform["type"]}' is not implemented in the 'perform_target_action' method. Pleas redefine it with the action")
+        else: #we'll consider than everything else is consider as an artifact
+            result = self.env.interest_points["artifacts"][self.action_to_perform["id"]].interact(self.competences[self.action_to_perform["type"]]["capability"])
+            if result :
+                self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
+                self.action_to_perform = None
+            else :
+                pass
 
     def behavior_diff_move_random(self):
         #set srobot speed at it's max speed
@@ -432,7 +439,6 @@ class Robot(Sprite):
         #first of all, sense the environment
         self.sense()#first of all sense the env.
         self.belief_transfer() #after sensing, transfer beliefs.
-
         if np.any(self.target):#si on a une target
             if self.path_to_target: #If we have a path to our target, we continue this path.
                 self.navigate_through_target_path()
@@ -454,7 +460,6 @@ class Robot(Sprite):
 
                 pos_list_float = [pos["position"] for pos in list(self.belief_space["robot_informations"].values())] #list of float xy position of all robots
                 pos_list_int = [(int(x), int(y)) for x,y in pos_list_float] #same list with ints.
-
                 weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width, traversable_types=self.traversable_types) #the penalty for a frontier cluster depends of the size of the env.
                 self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
 
@@ -584,7 +589,7 @@ class Robot(Sprite):
                 self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
         
         elif self.action_to_perform != None:
-            pass #TODO faire une méthode spécifique que l'user doit surcharger????
+            self.perform_target_action()
 
         else:
             interest_points = [] #we will add all of our interest points here
@@ -602,8 +607,11 @@ class Robot(Sprite):
             #barycentre de communications----------
             #liste de toutes les positions des robots
 
-            robots_pos_list = [pos["position"] for pos in list(self.belief_space["robot_informations"].values())] #list of float xy position of all robots#va falloir renommer robot position en "robot_informations"
-            #TODO virer la position du robot avant de faire les clusters
+            robots_pos_list = [] #list of float xy position of all robots#va falloir renommer robot position en "robot_informations"
+            for robot_id in self.belief_space["robot_informations"]:
+                if robot_id != self.robot_id:
+                    robots_pos_list.append(self.belief_space["robot_informations"][robot_id]["position"])
+
             communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
             for cc in communication_clusters:
                     interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
@@ -611,9 +619,11 @@ class Robot(Sprite):
 
             #Artifacts ----------------------------
             for art in self.belief_space["artifacts"]:
-                interest_points.append({"type":art.type,"coordinates":art.coordinates})#adding directly the artifacts in the interest points
+                if self.belief_space["artifacts"][art]["status"] != "done":
+                    interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,"coordinates":self.belief_space["artifacts"][art]["coordinates"], "id":art})#adding directly the artifacts in the interest points
             #--------------------------------------
             #------------------------------------------------------------------------------------------
+
             #utility calculation-----------------------------------------------------------------------            
             for ip in interest_points:
                 #individual utility
@@ -632,11 +642,11 @@ class Robot(Sprite):
                         continue
                     else:
                         ocost = euclidian_distance(ip["coordinates"], self.belief_space["robot_informations"][robot]["position"])
-                        ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]["capability"]]
+                        ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]]["capability"]
                         other_individual_values = np.append(other_individual_values, ocapability/ocost)
 
-                global_feasability = float(np.mean(other_individual_values))
-                #global_feasability = float(np.max(other_individual_values)) # TODO: Try with max instead of min
+                #global_feasability = float(np.mean(other_individual_values))
+                global_feasability = float(np.max(other_individual_values)) # TODO: Try with max instead of min
 
                 #collective utility
                 collective_utility = individual_utility - global_feasability
@@ -653,16 +663,15 @@ class Robot(Sprite):
                 #tuning params-----------------------------------------------------------------------------
                 pass #TODO
                 weighted_utility = ip["utility"] * self.competences[ip["type"]]["importance"]
-                print(ip)
-                print(weighted_utility)
+
                 if weighted_utility >= best_weighted_utility:
                     best_weighted_utility = weighted_utility
                     best_action = ip
             #action perform
             self.action_to_perform = best_action
-            print("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
-            print(self.action_to_perform)
-            self.target = self.action_to_perform["coordinates"]
+            
+            self.target = (int(self.action_to_perform["coordinates"][0]), int(self.action_to_perform["coordinates"][1]))
+
 
 class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
 

@@ -132,14 +132,15 @@ class Environment():
                     scaled_rect = pygame.Rect(o.rect.x * self.scaling_factor, o.rect.y * self.scaling_factor, o.rect.width * self.scaling_factor, o.rect.height * self.scaling_factor)
                     self.screen.blit(pygame.transform.scale(o.image, scaled_rect.size), scaled_rect)
 
-        for a in self.agents:
-            a.update(self.screen)
-
         for a in self.interest_points["artifacts"]:
             if a.status == "destroyed": #if the artifact is destoyed, we remove it from the list.
                 self.interest_points["artifacts"].remove(a)
                 continue
             a.update(self.screen) #will update the artifact display
+        
+
+        for a in self.agents:
+            a.update(self.screen)
 
         if(self.end_condition()):
             print(f"Simulation done in {self.step} steps! \n Goal Reached : {self.goal_condition()}")
@@ -421,17 +422,18 @@ class MineClearingEnvironment(Environment): #TODO PREPARER L ENVIRONMENT
             return dict: {"cleared":bool, "explosion":bool}
             """
             self.life_points -= 10*competence
-            if self.life_points <=0:
-                cleared = True
-            else:
-                cleared = False
 
             explosion = uniform(0,1) <=  self.explosion_proba #probability that the mine exploses
 
             if explosion:
-                self.destroy()
+                self.destroy() ##TODO REMAKE THIS
 
-            return {"cleared":cleared, "explosion":explosion}
+            if self.life_points <=0:
+                self.destroy()
+                return True
+            else:
+                return False
+
 
 
     def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", end_at_full_clear = True, fog = True):
@@ -526,3 +528,7 @@ class MineClearingEnvironment(Environment): #TODO PREPARER L ENVIRONMENT
                          )
         self.interest_points["artifacts"].append(mine)
         pass
+
+    def add_agent(self, agent):
+        agent.shape_competence("mine", 0.9, 1.0) #adding default mine competence values
+        return super().add_agent(agent)
