@@ -334,8 +334,7 @@ class Robot(Sprite):
         if self.action_to_perform["type"] == "exploration":
             self.action_to_perform = None
         elif self.action_to_perform["type"] == "communication":
-            self.action_to_perform = None
-            
+            self.action_to_perform = None     
         else: #we'll consider than everything else is consider as an artifact
             result = self.env.interest_points["artifacts"][self.action_to_perform["id"]].interact(self.competences[self.action_to_perform["type"]]["capability"])
             if result :
@@ -596,25 +595,10 @@ class Robot(Sprite):
             #interest points identification -----------------------------------------------------------
             #exploration frontiers ----------------------------
             frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=self.traversable_types) #from utils
-            if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
-                pass #TODO : retourner une liste vide ou laisser ce pass
-            else:
+            if list(frontiers) != None or len(list(frontiers))!=0:
                 cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range, traversable_types=self.traversable_types) #from utils : make cluster of fontiers to reduce computation time
                 for cc in cluster_centers:
                     interest_points.append({"type":"exploration","coordinates":cc})
-            #--------------------------------------
-
-            #barycentre de communications----------
-            #liste de toutes les positions des robots
-
-            robots_pos_list = [] #list of float xy position of all robots#va falloir renommer robot position en "robot_informations"
-            for robot_id in self.belief_space["robot_informations"]:
-                if robot_id != self.robot_id:
-                    robots_pos_list.append(self.belief_space["robot_informations"][robot_id]["position"])
-
-            communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
-            for cc in communication_clusters:
-                    interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
             #--------------------------------------
 
             #Artifacts ----------------------------
@@ -623,6 +607,28 @@ class Robot(Sprite):
                     interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,"coordinates":self.belief_space["artifacts"][art]["coordinates"], "id":art})#adding directly the artifacts in the interest points
             #--------------------------------------
             #------------------------------------------------------------------------------------------
+
+            #if we have no interest point anymore (or communication only), we consider the mission done.*
+            if len(interest_points) == 0:
+                if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
+                    self.target = (int(self.init_transform.x),int(self.init_transform.y))
+                    return None
+                else:
+                    self.imdone = True
+                    return None
+
+            #barycentre de communications----------
+            #liste de toutes les positions des robots
+
+            robots_pos_list = [] #list of float xy position of all robots
+            for robot_id in self.belief_space["robot_informations"]:
+                if robot_id != self.robot_id:
+                    robots_pos_list.append(self.belief_space["robot_informations"][robot_id]["position"])
+
+            communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
+            for cc in communication_clusters:
+                    interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
+            #--------------------------------------        
 
             #utility calculation-----------------------------------------------------------------------            
             for ip in interest_points:
@@ -658,7 +664,7 @@ class Robot(Sprite):
 
             #------------------------------------------------------------------------------------------
             best_action = None
-            best_weighted_utility = 0
+            best_weighted_utility = -np.inf
             for ip in interest_points:
                 #tuning params-----------------------------------------------------------------------------
                 pass #TODO
@@ -667,10 +673,14 @@ class Robot(Sprite):
                 if weighted_utility >= best_weighted_utility:
                     best_weighted_utility = weighted_utility
                     best_action = ip
-            #action perform
-            self.action_to_perform = best_action
+
             
-            self.target = (int(self.action_to_perform["coordinates"][0]), int(self.action_to_perform["coordinates"][1]))
+            #action perform
+            if best_action != None:
+                self.action_to_perform = best_action
+                self.target = (int(self.action_to_perform["coordinates"][0]), int(self.action_to_perform["coordinates"][1]))
+            else:
+                print("problem")
 
 
 class Ground(Robot):#TODO UPDATE ENERGY AMOUNT

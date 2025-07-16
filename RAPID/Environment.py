@@ -427,6 +427,10 @@ class MineClearingEnvironment(Environment): #TODO PREPARER L ENVIRONMENT
 
             if explosion:
                 self.destroy() ##TODO REMAKE THIS
+                for robot in self.env.agents:
+                    if euclidian_distance(self.coordinates, (robot.transform.x, robot.transform.y)) < 2.0:
+                        robot.status = "destroyed"
+                self.destroy()
 
             if self.life_points <=0:
                 self.destroy()
