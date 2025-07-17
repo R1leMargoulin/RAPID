@@ -438,8 +438,6 @@ class MineClearingEnvironment(Environment): #TODO PREPARER L ENVIRONMENT
             else:
                 return False
 
-
-
     def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", end_at_full_clear = True, fog = True):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\

@@ -634,13 +634,17 @@ class Robot(Sprite):
             for ip in interest_points:
                 #individual utility
                 cost = euclidian_distance(ip["coordinates"], (self.transform.x, self.transform.y)) #euclidian distance for the moment (C in the model)
-                capability = self.competences[ip["type"]]["capability"] #I'll cnsider that the type of the IP will be named the same than the competence (mu in the model)
 
-                individual_utility = capability/cost
+                if cost == 0:
+                    individual_utility = 1
+                else:
+                    capability = self.competences[ip["type"]]["capability"] #I'll cnsider that the type of the IP will be named the same than the competence (mu in the model)
+
+                    individual_utility = capability/cost
 
                 #global feasability
                 other_individual_values = np.array([])
-                for robot in self.belief_space["robot_informations"]: #the key value ofthis dict is robot id
+                for robot in self.belief_space["robot_informations"]: #the key value of this dict is robot id
                     if len(self.belief_space["robot_informations"]) <=1:
                         other_individual_values = np.append(other_individual_values, 0.0)
                         break
@@ -648,8 +652,11 @@ class Robot(Sprite):
                         continue
                     else:
                         ocost = euclidian_distance(ip["coordinates"], self.belief_space["robot_informations"][robot]["position"])
-                        ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]]["capability"]
-                        other_individual_values = np.append(other_individual_values, ocapability/ocost)
+                        if ocost == 0:
+                            other_individual_values = np.append(other_individual_values, 1)
+                        else:
+                            ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]]["capability"]
+                            other_individual_values = np.append(other_individual_values, ocapability/ocost)
 
                 #global_feasability = float(np.mean(other_individual_values))
                 global_feasability = float(np.max(other_individual_values)) # TODO: Try with max instead of min
