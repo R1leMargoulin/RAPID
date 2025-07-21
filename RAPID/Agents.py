@@ -580,6 +580,9 @@ class Robot(Sprite):
         self.sense()#first of all sense the env.
         self.belief_transfer() #after sensing, transfer beliefs if applicable
 
+        #reshape importance of communication depending of the time from last communication:
+        self.shape_competence("communication", self.competences["communication"]["capability"], self.time_from_last_communication*0.01)
+
         if np.any(self.target):
             if self.path_to_target: #If we have a path to our target, we continue this path.
                 self.navigate_through_target_path()
@@ -602,9 +605,10 @@ class Robot(Sprite):
             #--------------------------------------
 
             #Artifacts ----------------------------
-            for art in self.belief_space["artifacts"]:
-                if self.belief_space["artifacts"][art]["status"] != "done":
-                    interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,"coordinates":self.belief_space["artifacts"][art]["coordinates"], "id":art})#adding directly the artifacts in the interest points
+            if "artifacts" in self.belief_space:
+                for art in self.belief_space["artifacts"]:
+                    if self.belief_space["artifacts"][art]["status"] != "done":
+                        interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,"coordinates":self.belief_space["artifacts"][art]["coordinates"], "id":art})#adding directly the artifacts in the interest points
             #--------------------------------------
             #------------------------------------------------------------------------------------------
 
