@@ -77,8 +77,8 @@ class Robot(Sprite):
         for i in range(len(self.traversable_types)):#we have the string name of the cells types, lets get the int values
             self.traversable_types[i] = ENV_CELL_TYPES[self.traversable_types[i]]
 
-        self.competences = {"exploration":{"capability": 1, "importance":1},
-                            "communication":{"capability": 1, "importance":1}} #to add depending of the case and the robot
+        self.competences = {"exploration":{"capability": 1, "importance":1, "distance_treshold":0, "dispersion":1},
+                            "communication":{"capability": 1, "importance":1, "distance_treshold":self.communication_range, "dispersion":0}} #to add depending of the case and the robot
     
         #Metrics
         self.total_distance_made = 0.0
@@ -327,8 +327,8 @@ class Robot(Sprite):
     def move(self, vector_x, vector_y):
         print("move has to be implemented in the class.")
 
-    def shape_competence(self, type, capability, importance):
-        self.competences.update({type:{"capability": capability, "importance":importance}})
+    def shape_competence(self, type, capability, importance, distance_treshold = 0, dispersion = 1):
+        self.competences.update({type:{"capability": capability, "importance":importance, "distance_treshold":distance_treshold, "dispersion":dispersion}})
     
     def perform_target_action(self):
         if self.action_to_perform["type"] == "exploration":
@@ -581,7 +581,7 @@ class Robot(Sprite):
         self.belief_transfer() #after sensing, transfer beliefs if applicable
 
         #reshape importance of communication depending of the time from last communication:
-        self.shape_competence("communication", self.competences["communication"]["capability"], self.time_from_last_communication*0.01)
+        self.shape_competence("communication", self.competences["communication"]["capability"], self.time_from_last_communication*0.01, distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
 
         if np.any(self.target):
             if self.path_to_target: #If we have a path to our target, we continue this path.
@@ -608,7 +608,8 @@ class Robot(Sprite):
             if "artifacts" in self.belief_space:
                 for art in self.belief_space["artifacts"]:
                     if self.belief_space["artifacts"][art]["status"] != "done":
-                        interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,"coordinates":self.belief_space["artifacts"][art]["coordinates"], "id":art})#adding directly the artifacts in the interest points
+                        if euclidian_distance( (self.init_transform.x, self.init_transform.y) , self.belief_space["artifacts"][art]["coordinates"]) >= self.competences[self.belief_space["artifacts"][art]["type"]]["distance_treshold"]: #we verify that the treshold is respected
+                            interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,"coordinates":self.belief_space["artifacts"][art]["coordinates"], "id":art})#adding directly the artifacts in the interest points
             #--------------------------------------
             #------------------------------------------------------------------------------------------
 
@@ -631,7 +632,8 @@ class Robot(Sprite):
 
             communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
             for cc in communication_clusters:
-                    interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
+                    if euclidian_distance( (self.init_transform.x, self.init_transform.y) , cc) >= self.competences["communication"]["distance_treshold"]: #we verify that the treshold is respected
+                        interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
             #--------------------------------------        
 
             #utility calculation-----------------------------------------------------------------------            

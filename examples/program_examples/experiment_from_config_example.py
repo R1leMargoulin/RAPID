@@ -178,7 +178,8 @@ def create_simulation_data(env, sim_number:int, exp_name): #TODO, passer en CSV 
                                                                             "communication_period": a.communication_period,
                                                                             "vision_range": a.vision_range,
                                                                             "max_speed": (a.max_speed.x, a.max_speed.y, a.max_speed.w),
-                                                                            "BS_occupancy_grid": a.belief_space["occupancy_grid"].tolist()
+                                                                            "BS_occupancy_grid": a.belief_space["occupancy_grid"].tolist(),
+                                                                            "behavior": a.behavior
                                                                         }
                                                                     })
     
