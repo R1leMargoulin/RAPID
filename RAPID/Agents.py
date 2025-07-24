@@ -581,7 +581,7 @@ class Robot(Sprite):
         self.belief_transfer() #after sensing, transfer beliefs if applicable
 
         #reshape importance of communication depending of the time from last communication:
-        self.shape_competence("communication", self.competences["communication"]["capability"], self.time_from_last_communication*0.01, distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
+        self.shape_competence("communication", self.competences["communication"]["capability"], self.time_from_last_communication*0.1, distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
 
         if np.any(self.target):
             if self.path_to_target: #If we have a path to our target, we continue this path.

@@ -231,7 +231,7 @@ class Environment():
                 if str(agent.robot_id) in potential_links_dict[link] : #if reciprocity
                     #find the linked robot and append the loop robot to it.                    
                     for r in self.agents:
-                        if str(r.robot_id) == link:
+                        if str(r.robot_id) == link and r.robot_id != agent.robot_id:
                             r.connected_robots.append(agent) #append mutually the robots in their connected robot list
                             agent.connected_robots.append(r)
                             break
