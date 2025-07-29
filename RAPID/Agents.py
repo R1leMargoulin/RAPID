@@ -434,6 +434,7 @@ class Robot(Sprite):
             if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
                 if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
                     self.target = (int(self.init_transform.x),int(self.init_transform.y))
+                    self.last_plan_time = self.env.step
                 else:
                     self.imdone = True
             else:
@@ -444,6 +445,7 @@ class Robot(Sprite):
                     if hdist < distance :
                         distance = hdist
                         self.target = tuple(f.tolist()) #set the frontier as new target
+                        self.last_plan_time = self.env.step
             
     def minpos_behavior(self):
         """
@@ -471,6 +473,7 @@ class Robot(Sprite):
             if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
                 if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
                     self.target = (int(self.init_transform.x),int(self.init_transform.y))
+                    self.last_plan_time = self.env.step
                 else:
                     self.imdone = True
             else:
@@ -480,6 +483,7 @@ class Robot(Sprite):
                 pos_list_int = [(int(x), int(y)) for x,y in pos_list_float] #same list with ints.
                 weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width, traversable_types=self.traversable_types) #the penalty for a frontier cluster depends of the size of the env.
                 self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
+                self.last_plan_time = self.env.step
 
     def local_frontier_behavior(self):
         """
@@ -552,6 +556,7 @@ class Robot(Sprite):
                                     max_dist = euclidian_distance(cell, mean_traces_coordinates)
                                     second_chance_target = cell
                         self.target = second_chance_target
+                        self.last_plan_time = self.env.step
 
                 else: #else go back to the previous trace -> set it as target
                     # pour les cases voisine de distance ou le robot à pu se déplacer sur un step de simulation (sur une periode de temps donné, on récolte les voisins)
@@ -564,6 +569,7 @@ class Robot(Sprite):
                                 chosen_trace = cell
                                 oldest_timestep = self.belief_space["traces"][cell]
                     self.target = chosen_trace #on definit la trace la plus ancienne dans le rayon restreint défini.
+                    self.last_plan_time = self.env.step
 
         self.belief_transfer() #belief transfer management.
     
@@ -636,6 +642,7 @@ class Robot(Sprite):
             if len(interest_points) == 0:
                 if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
                     self.target = (int(self.init_transform.x),int(self.init_transform.y))
+                    self.last_plan_time = self.env.step
                     return None
                 else:
                     self.imdone = True

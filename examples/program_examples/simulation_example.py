@@ -40,7 +40,7 @@ def main():
                                     robot_id=len(env.agents)+1, 
                                     init_transform=init_pos,
                                     max_speed=(1,1,0.5), #warning : adapt max speeds if you use aerial or ground robots
-                                    behavior_to_use="action_selection", 
+                                    behavior_to_use="minpos", 
                                     vision_range=10,
                                     communication_range=30,
                                     communication_period=10,
