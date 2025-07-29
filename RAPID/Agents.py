@@ -15,7 +15,7 @@ import logging
 #TODO : les comportements sont EXACTEMENT les memes dans ground ou Aerial, je pourrais tout mettre dans robot...
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10, energy_amount = 1000, energy_cost_per_cell = 1):#TODO rendre abstrait
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10, energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20):#TODO rendre abstrait
         """
         Robot class are our agents representing robots.
 
@@ -58,6 +58,11 @@ class Robot(Sprite):
         self.communication_range = communication_range
         self.communication_period = communication_period
         self.time_from_last_communication = 0
+        self.new_communication = False
+
+        #replan
+        self.delta_replan = delta_replan
+        self.last_plan_time = 0
 
         #energy
         self.energy_max_amount = energy_amount
@@ -148,6 +153,15 @@ class Robot(Sprite):
 
             if self.status == "destroyed":
                 self.imdone = True
+            
+            if self.new_communication and self.last_plan_time - (self.env.step - self.time_from_last_communication) > self.delta_replan:
+                #print(f"robot {self.robot_id} : replan, step {self.env.step}, last com {self.time_from_last_communication}, last plan {self.last_plan_time}")
+                self.target = None
+                self.path_to_target = None
+                self.new_communication = False
+                self.last_plan_time = self.env.step
+                
+
             
     def translate(self, speed_x, speed_y):
         #old positions for distance calculation
@@ -321,6 +335,11 @@ class Robot(Sprite):
             
             elif sender_belief_space["artifacts"][artifact]["step"] > self.belief_space["artifacts"][artifact]["step"]:
                 self.belief_space["artifacts"].update({artifact: sender_belief_space["artifacts"][artifact]})
+        
+
+        self.new_communication = True
+        # self.target = None #TODO regler ca, mettre un delta de temps?
+        # self.path_to_target = None
 
         #TODO : RESET LE TargetPoint et le path pour recalculer les goals????
 
@@ -581,7 +600,7 @@ class Robot(Sprite):
         self.belief_transfer() #after sensing, transfer beliefs if applicable
 
         #reshape importance of communication depending of the time from last communication:
-        self.shape_competence("communication", self.competences["communication"]["capability"], self.time_from_last_communication*0.1, distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
+        self.shape_competence("communication", self.competences["communication"]["capability"], self.time_from_last_communication*0.05, distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
 
         if np.any(self.target):
             if self.path_to_target: #If we have a path to our target, we continue this path.
@@ -662,7 +681,7 @@ class Robot(Sprite):
                             other_individual_values = np.append(other_individual_values, 1)
                         else:
                             ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]]["capability"]
-                            other_individual_values = np.append(other_individual_values, ocapability/ocost)
+                            other_individual_values = np.append(other_individual_values, ocapability/np.sqrt(ocost))
 
                 #global_feasability = float(np.mean(other_individual_values))
                 global_feasability = float(np.max(other_individual_values)) # TODO: Try with max instead of min
@@ -692,6 +711,7 @@ class Robot(Sprite):
             if best_action != None:
                 self.action_to_perform = best_action
                 self.target = (int(self.action_to_perform["coordinates"][0]), int(self.action_to_perform["coordinates"][1]))
+                self.last_plan_time = self.env.step
             else:
                 print("problem")
 
