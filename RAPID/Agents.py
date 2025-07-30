@@ -606,7 +606,7 @@ class Robot(Sprite):
         self.belief_transfer() #after sensing, transfer beliefs if applicable
 
         #reshape importance of communication depending of the time from last communication:
-        self.shape_competence("communication", self.competences["communication"]["capability"], self.time_from_last_communication*0.05, distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
+        self.shape_competence("communication", self.competences["communication"]["capability"], self.time_from_last_communication*0.01, distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
 
         if np.any(self.target):
             if self.path_to_target: #If we have a path to our target, we continue this path.
@@ -691,10 +691,12 @@ class Robot(Sprite):
                             other_individual_values = np.append(other_individual_values, ocapability/np.sqrt(ocost))
 
                 #global_feasability = float(np.mean(other_individual_values))
-                global_feasability = float(np.max(other_individual_values)) # TODO: Try with max instead of min
+                global_feasability = float(np.max(other_individual_values))
 
                 #collective utility
-                collective_utility = individual_utility - global_feasability
+                #TODO : check if that works STOPPEDHERE
+                #collective_utility = individual_utility - global_feasability * self.competences[ip["type"]]["dispersion"]
+                collective_utility = individual_utility / (global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )
                 
                 #final utility
                 utility = individual_utility + collective_utility

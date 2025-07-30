@@ -13,7 +13,7 @@ SCREEN_WIDTH = 100
 SCREEN_HEIGHT = 100
 BACKGROUND_COLOR = (200, 200, 200)
 
-ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/examples/env_images_example/labyrinth_100_100.png"# CHANGE THE PATH
+ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/examples/env_images_example/cross_100_100.png"# CHANGE THE PATH
 
 NB_GROUND_AGENTS = 4
 
@@ -40,7 +40,7 @@ def main():
                                     robot_id=len(env.agents)+1, 
                                     init_transform=init_pos,
                                     max_speed=(1,1,0.5), #warning : adapt max speeds if you use aerial or ground robots
-                                    behavior_to_use="minpos", 
+                                    behavior_to_use="action_selection", 
                                     vision_range=10,
                                     communication_range=30,
                                     communication_period=10,
