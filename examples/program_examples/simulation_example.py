@@ -15,7 +15,7 @@ BACKGROUND_COLOR = (200, 200, 200)
 
 ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/examples/env_images_example/cross_100_100.png"# CHANGE THE PATH
 
-NB_GROUND_AGENTS = 4
+NB_GROUND_AGENTS = 5
 
 img = Image.open(ENV_IMAGE_PATH)
 
@@ -32,7 +32,7 @@ def main():
     for i in range(NB_GROUND_AGENTS):
         #random init position
         init_pos = (random.randrange(0,env.width), random.randrange(0,env.height), random.uniform(0, 2*3.14)) 
-        #init_pos = (1, 99, 0)
+        #init_pos = (25, 98, 0)
 
 
         env.add_agent(Agents.Ground(
@@ -40,7 +40,7 @@ def main():
                                     robot_id=len(env.agents)+1, 
                                     init_transform=init_pos,
                                     max_speed=(1,1,0.5), #warning : adapt max speeds if you use aerial or ground robots
-                                    behavior_to_use="action_selection", 
+                                    behavior_to_use="minpos", 
                                     vision_range=10,
                                     communication_range=30,
                                     communication_period=10,

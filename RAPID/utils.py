@@ -277,6 +277,29 @@ def a_star_search(grid, start, goal, traversable_types = [OG_FREE_CELL]):
     # If the open set is empty and the goal was not reached, return None
     return None
 
+
+def a_star_cost(grid, start, goal, env_ease, traversable_types=[OG_FREE_CELL]):
+    """
+    this function will calculate a a* cost from a goal point, and will then return the cost to go to this point
+    """
+    path = a_star_search(grid, start, goal, traversable_types)
+    if path:
+        costs = []
+        for p in path:
+            pvalue = int(grid[p])
+            if pvalue != -1:
+                current_cell_type_name = list(ENV_CELL_TYPES.keys())[list(ENV_CELL_TYPES.values()).index(pvalue)] #return the string name of the env type
+                costs.append( 1/env_ease[current_cell_type_name] ) #we make a cost for the cell only
+            else:
+                p = costs.append(1) #p will be equal to 1 if we don't know it's value, permitting exploration
+        #then we sum all the costs to get a final cost
+        cost = np.sum(costs) #TODO check if that works
+    else:
+        cost = np.inf
+    return cost
+    
+
+
 def get_direct_neighbors(cell, width, height):
     """
     Get the valid neighbors of a cell within the grid bounds.

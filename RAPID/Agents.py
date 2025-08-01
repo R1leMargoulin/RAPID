@@ -125,7 +125,7 @@ class Robot(Sprite):
         
         #creation of the belief space whatever the communication mode
         self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "artifacts":{}, "robot_informations":{}}
-        self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step, "competences":self.competences} }) #we add the step in order to keep the most recent known position when merging.
+        self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step, "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types} }) #we add the step in order to keep the most recent known position when merging.
         if self.env.full_knowledge:
             self.belief_space["occupancy_grid"] = self.env.real_occupancy_grid
 
@@ -160,9 +160,7 @@ class Robot(Sprite):
                 self.path_to_target = None
                 self.new_communication = False
                 self.last_plan_time = self.env.step
-                
-
-            
+                       
     def translate(self, speed_x, speed_y):
         #old positions for distance calculation
         old_tfx = self.transform.x
@@ -234,7 +232,7 @@ class Robot(Sprite):
         self.rect.centery = int(self.transform.y)
 
 
-        self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "competences":self.competences, "step":self.env.step }}) #we add the step in order to keep the most recent known position when merging.
+        self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "step":self.env.step }}) #we add the step in order to keep the most recent known position when merging.
 
         if self.env.communication_mode == "limited":
             self.communication_halo.rect.centerx = int(self.transform.x)
@@ -338,10 +336,9 @@ class Robot(Sprite):
         
 
         self.new_communication = True
-        # self.target = None #TODO regler ca, mettre un delta de temps?
+        # self.target = None
         # self.path_to_target = None
 
-        #TODO : RESET LE TargetPoint et le path pour recalculer les goals????
 
     def move(self, vector_x, vector_y):
         print("move has to be implemented in the class.")
@@ -665,8 +662,8 @@ class Robot(Sprite):
             #utility calculation-----------------------------------------------------------------------            
             for ip in interest_points:
                 #individual utility
-                cost = euclidian_distance(ip["coordinates"], (self.transform.x, self.transform.y)) #euclidian distance for the moment (C in the model)
-
+                #cost = euclidian_distance(ip["coordinates"], (self.transform.x, self.transform.y)) #euclidian distance for the moment (C in the model)
+                cost = a_star_cost(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.env_ease, traversable_types=self.traversable_types)
                 if cost == 0:
                     individual_utility = 1
                 else:
@@ -678,17 +675,22 @@ class Robot(Sprite):
                 other_individual_values = np.array([])
                 for robot in self.belief_space["robot_informations"]: #the key value of this dict is robot id
                     if len(self.belief_space["robot_informations"]) <=1:
-                        other_individual_values = np.append(other_individual_values, 0.0)
+                        other_individual_values = np.append(other_individual_values, 1.0)
                         break
                     if robot == self.robot_id :
                         continue
                     else:
                         ocost = euclidian_distance(ip["coordinates"], self.belief_space["robot_informations"][robot]["position"])
+                        #TODO TEST ICI la rapidite
+                        #ligne de l'enfer sorry
+                        other_robot_pos = (int(self.belief_space["robot_informations"][robot]["position"][0]),int(self.belief_space["robot_informations"][robot]["position"][1]))
+                        ocost = a_star_cost(self.belief_space["occupancy_grid"], other_robot_pos, (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.belief_space["robot_informations"][robot]["env_ease"], traversable_types=self.belief_space["robot_informations"][robot]["traversable_types"])
                         if ocost == 0:
                             other_individual_values = np.append(other_individual_values, 1)
                         else:
                             ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]]["capability"]
-                            other_individual_values = np.append(other_individual_values, ocapability/np.sqrt(ocost))
+                            #other_individual_values = np.append(other_individual_values, ocapability/np.sqrt(ocost))
+                            other_individual_values = np.append(other_individual_values, ocapability/ocost) #retest sans racine
 
                 #global_feasability = float(np.mean(other_individual_values))
                 global_feasability = float(np.max(other_individual_values))
@@ -714,7 +716,6 @@ class Robot(Sprite):
                 if weighted_utility >= best_weighted_utility:
                     best_weighted_utility = weighted_utility
                     best_action = ip
-
             
             #action perform
             if best_action != None:
@@ -813,10 +814,13 @@ class Aerial(Robot): #TODO UPDATE ENERGY AMOUNT
             OG_WATER_GROUP_NAME:1,
             OG_GRASS_GROUP_NAME:1
         }
+        self.belief_space["robot_informations"][self.robot_id]["env_ease"] = self.env_ease
 
         self.traversable_types = list(filter(lambda k: self.env_ease[k] != 0, self.env_ease)) #find the cells that the robot can eventually traverse
         for i in range(len(self.traversable_types)):#we have the string name of the cells types, lets get the int values
             self.traversable_types[i] = ENV_CELL_TYPES[self.traversable_types[i]]
+
+        self.belief_space["robot_informations"][self.robot_id]["traversable_types"] = self.traversable_types
 
         #handle behavior space string
         if not( behavior_to_use in self.behavior_space) :
