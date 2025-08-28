@@ -1,10 +1,10 @@
 {
-    "GROUP_EXPERIMENT_NAME": "Heterogeneous_Env_1robot",
-    "RESULT_PATH": "/home/erwan/Documents/tests_simulations/RAPID/experiments/",
+    "GROUP_EXPERIMENT_NAME": "Exploration_labyrinth_comp_5_robots",
+    "RESULT_PATH": "/home/erwan/Documents/RAPID/experiments/",
 
-    "PARAM_VARIATION": ["AGENTS_GROUPS/Group1/AGENTS_TYPE"],
+    "PARAM_VARIATION": ["AGENTS_GROUPS/Group1/BEHAVIOR"],
 
-    "NB_SIMULATION": 10,
+    "NB_SIMULATION": 3,
 
 
     "RENDER": true,
@@ -15,20 +15,20 @@
     "SCREEN_WIDTH": 100,
     "SCREEN_HEIGHT": 100,
     "BACKGROUND_COLOR": [200, 200, 200],
-    "ENV_IMAGE_PATH": "/home/erwan/Documents/tests_simulations/RAPID/examples/env_images_example/heterocross_100_100.png",
-    "STEP_LIMITATION": null,
+    "ENV_IMAGE_PATH": "/home/erwan/Documents/RAPID/examples/env_images_example/labyrinth_100_100.png",
+    "STEP_LIMITATION": 3000,
 
     "COMMUNICATION_MODE": "limited",
     
     "AGENTS_GROUPS":
         { "Group1":{
-                "AGENTS_TYPE": ["Ground", "Aerial"],
-                "NB_AGENTS": 1,
-                "INIT_POSITION": [[1, 99, 0]],
+                "AGENTS_TYPE": "Ground",
+                "NB_AGENTS": 5,
+                "INIT_POSITION": [[26,98,0], [31,98,0], [36,98,0], [27,91,0], [32,91,0]],
                 "MAX_SPEED": [1, 1, 0.5],
-                "BEHAVIOR": "minpos",
-                "COMMUNICATION_RANGE": 25,
-                "COMMUNICATION_PERIOD": 25,
+                "BEHAVIOR": ["minpos", "action_selection", "nearest_frontier"],
+                "COMMUNICATION_RANGE": 20,
+                "COMMUNICATION_PERIOD": 10,
                 "VISION_RANGE": 10
             }
         }

@@ -11,7 +11,7 @@ import itertools
 
 
 
-config_file = "/home/erwan/Documents/tests_simulations/RAPID/examples/config_examples/config_variation_heterogeneous_example.json"
+config_file = "/home/erwan/Documents/RAPID/examples/config_examples/config_variation_heterogeneous_example.json"
 
 with open(config_file, "r") as outfile:
     json_from_file = outfile.read()

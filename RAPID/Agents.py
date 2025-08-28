@@ -603,7 +603,8 @@ class Robot(Sprite):
         self.belief_transfer() #after sensing, transfer beliefs if applicable
 
         #reshape importance of communication depending of the time from last communication:
-        self.shape_competence("communication", self.competences["communication"]["capability"], self.time_from_last_communication*0.01, distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
+        print(f"robot {self.robot_id} : last com : {self.time_from_last_communication}")
+        self.shape_competence("communication", self.competences["communication"]["capability"], self.time_from_last_communication*0.3, distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
 
         if np.any(self.target):
             if self.path_to_target: #If we have a path to our target, we continue this path.
@@ -650,12 +651,13 @@ class Robot(Sprite):
 
             robots_pos_list = [] #list of float xy position of all robots
             for robot_id in self.belief_space["robot_informations"]:
-                if robot_id != self.robot_id:
-                    robots_pos_list.append(self.belief_space["robot_informations"][robot_id]["position"])
+                if robot_id != self.robot_id: #iamhere
+                    if self.env.step - self.belief_space["robot_informations"][robot_id]["step"] <= 200 : #limite arbitraire pour voir si la position n'est pas trop obsolete, sinon on ne la prendra pas en compte, TODO : mettre ca en parametrable propre
+                        robots_pos_list.append(self.belief_space["robot_informations"][robot_id]["position"])
 
             communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
             for cc in communication_clusters:
-                    if euclidian_distance( (self.init_transform.x, self.init_transform.y) , cc) >= self.competences["communication"]["distance_treshold"]: #we verify that the treshold is respected
+                    if euclidian_distance( (self.init_transform.x, self.init_transform.y) , cc) >= self.competences["communication"]["distance_treshold"]: #we verify that the distance treshold is respected
                         interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
             #--------------------------------------        
 
@@ -803,7 +805,7 @@ class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
 class Aerial(Robot): #TODO UPDATE ENERGY AMOUNT
     def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell)
-        self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier"]
+        self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier", "action_selection"]
 
         #traversability ease in the env 
         self.env_ease = {
@@ -843,6 +845,8 @@ class Aerial(Robot): #TODO UPDATE ENERGY AMOUNT
                     self.minpos_behavior()
                 case "local_frontier":
                     self.local_frontier_behavior()
+                case "action_selection":
+                    self.behavior_action_selection()
         super().update(screen)
 
     def move(self, vector_x, vector_y):
