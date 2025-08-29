@@ -15,8 +15,10 @@ BACKGROUND_COLOR = (200, 200, 200)
 
 ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/examples/env_images_example/cave_200_200.png"# CHANGE THE PATH
 
-NB_GROUND_AGENTS = 3
+NB_GROUND_AGENTS = 1
 NB_AERIAL_AGENTS = 2
+
+pos_list = [[95, 190, 0]]
 
 img = Image.open(ENV_IMAGE_PATH)
 
@@ -32,7 +34,10 @@ def main():
 
     for i in range(NB_GROUND_AGENTS):
         #random init position
-        init_pos = (random.randrange(0,env.width), random.randrange(0,env.height), random.uniform(0, 2*3.14)) 
+        if pos_list :
+            init_pos = pos_list[i]
+        else:
+            init_pos = (random.randrange(0,env.width), random.randrange(0,env.height), random.uniform(0, 2*3.14)) 
         #init_pos = (125, 190, 0)
 
 
@@ -41,7 +46,7 @@ def main():
                                     robot_id=len(env.agents)+1, 
                                     init_transform=init_pos,
                                     max_speed=(1,1,0.5), #warning : adapt max speeds if you use aerial or ground robots
-                                    behavior_to_use="action_selection", 
+                                    behavior_to_use="nearest_frontier", 
                                     vision_range=10,
                                     communication_range=30,
                                     communication_period=10,
