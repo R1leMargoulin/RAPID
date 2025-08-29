@@ -181,6 +181,7 @@ class Robot(Sprite):
         
         #detect and handle collisions------------------------------------------------------------------------------------
         #TODO: remake collision
+        #OBSTACLE COLLISION
         for cell_type in filter(lambda k: self.env_ease[k] == 0, self.env_ease): #for all cells type with a traversability ease of 0 (obstacles)
             if cell_type in self.env.cell_feature_groups:
                 #collisions = spritecollide(self, self.env.cell_feature_groups[cell_type], False)
@@ -210,6 +211,7 @@ class Robot(Sprite):
                     # if ("right" in sides):
                     #     self.transform.x -= 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
                     #     int(self.transform.x)
+
         #-----------------------------------------------------------------------------------------------------------
         
         
@@ -224,12 +226,20 @@ class Robot(Sprite):
         #energy transition
         self.energy_amount -= energy_consumption
 
-
         self.total_distance_made += distance_made
 
         # update positions of pygame objects
         self.rect.centerx = int(self.transform.x)
         self.rect.centery = int(self.transform.y)
+
+        #AGENTS COLLISION detection : 
+        agent_collision = spritecollide(self, self.env.agent_group, False) #TODO wtf ca marche pas
+        #print(agent_collision)
+        if (len(agent_collision)> 1) :
+            self.transform.x = old_tfx
+            self.transform.y = old_tfy
+            self.rect.centerx = int(self.transform.x)
+            self.rect.centery = int(self.transform.y)
 
 
         self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "step":self.env.step }}) #we add the step in order to keep the most recent known position when merging.
