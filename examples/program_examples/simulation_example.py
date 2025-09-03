@@ -15,10 +15,11 @@ BACKGROUND_COLOR = (200, 200, 200)
 
 ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/examples/env_images_example/cave_200_200.png"# CHANGE THE PATH
 
-NB_GROUND_AGENTS = 3
+NB_GROUND_AGENTS = 6
 NB_AERIAL_AGENTS = 2
 
-pos_list = [[85,190,0], [95,190,0], [105,190,0]]
+pos_list = [[85,190,0], [95,190,0], [105,190,0], [115,190,0], [125,190,0], [100,180,0]]
+#pos_list = None
 
 img = Image.open(ENV_IMAGE_PATH)
 
@@ -46,11 +47,12 @@ def main():
                                     robot_id=len(env.agents)+1, 
                                     init_transform=init_pos,
                                     max_speed=(1,1,0.5), #warning : adapt max speeds if you use aerial or ground robots
-                                    behavior_to_use="nearest_frontier", 
+                                    behavior_to_use="action_selection", 
                                     vision_range=10,
                                     communication_range=20,
                                     communication_period=10,
-                                    energy_amount=1e6 #place a huge amount for no energy limitations 
+                                    energy_amount=1e6, #place a huge amount for no energy limitations 
+                                    altruism=0.3
                                 ))
         env.agents[-1].shape_competence("exploration", 1, 1)
 

@@ -11,7 +11,7 @@ import itertools
 
 
 
-config_file = "/home/erwan/Documents/RAPID/examples/config_examples/config_variation_heterogeneous_example.json"
+config_file = "/home/erwan/Documents/RAPID/tests/config_experiments.json"
 
 with open(config_file, "r") as outfile:
     json_from_file = outfile.read()
@@ -48,7 +48,7 @@ def main():
     print("continue ? Y/N")
     confirmation = input()
     if confirmation != "Y" and confirmation != "y":
-        exit()
+        raise Exception("Arrêt de la cellule")
 
     total_number_of_simulations = total_number_of_experiments * config["NB_SIMULATION"]
 
@@ -63,8 +63,7 @@ def main():
         print("this group experiment already exists, are you sure? Y/N")
         confirmation = input()
         if confirmation == "N":
-            exit()
-        
+            raise Exception("Arrêt de la cellule")
 
     experiment_counter = 0
     simulation_counter = 0
@@ -95,11 +94,12 @@ def main():
 
         #check init_pose for agents
         for group in config_iteration["AGENTS_GROUPS"]:
-            if config_iteration["AGENTS_GROUPS"][group]["NB_AGENTS"] == len(config_iteration["AGENTS_GROUPS"][group]["INIT_POSITION"]):
-                continue
-            else:
-                print(f"wrong initialisation of the init positions for group {group}. there should be the same number of init position as there is agents in the group")
-                exit()
+            if config_iteration["AGENTS_GROUPS"][group]["INIT_POSITION"] != None:   
+                if config_iteration["AGENTS_GROUPS"][group]["NB_AGENTS"] == len(config_iteration["AGENTS_GROUPS"][group]["INIT_POSITION"]):
+                    continue
+                else:
+                    print(f"wrong initialisation of the init positions for group {group}. there should be the same number of init position as there is agents in the group")
+                    raise Exception("Arrêt de la cellule")
 
 
 
@@ -131,7 +131,10 @@ def main():
             # AGENTS Definition
             for group_name, group_config in config_iteration["AGENTS_GROUPS"].items():
                 for i in range(group_config["NB_AGENTS"]):
-                    agents_init_pos = group_config["INIT_POSITION"][i] if group_config["INIT_POSITION"] else (random.randrange(0, env.width), random.randrange(0, env.height), random.uniform(0, 2 * 3.14))
+                    if config_iteration["AGENTS_GROUPS"][group]["INIT_POSITION"] == None: #if None, we go random positions WARNING, with non empty environments, agents can spawn in walls.
+                        agents_init_pos = (random.randrange(0,env.width), random.randrange(0,env.height), random.uniform(0, 2*3.14))
+                    else:
+                        agents_init_pos = group_config["INIT_POSITION"][i] if group_config["INIT_POSITION"] else (random.randrange(0, env.width), random.randrange(0, env.height), random.uniform(0, 2 * 3.14))
                     agent_class = getattr(Agents, group_config["AGENTS_TYPE"])
                     env.add_agent(agent_class(
                         env,
@@ -142,6 +145,7 @@ def main():
                         communication_range=group_config["COMMUNICATION_RANGE"],
                         communication_period=group_config["COMMUNICATION_PERIOD"],
                         vision_range=group_config["VISION_RANGE"],
+                        energy_amount = group_config["ENERGY_AMOUNT"]
                     ))
             #---------------------------------
 
@@ -155,7 +159,7 @@ def main():
 
 
 def create_simulation_data(env, sim_number:int, exp_name): #TODO, passer en CSV sera plus opti si on a beaucoup de données
-    result_file_path = config["RESULT_PATH"]+config["GROUP_EXPERIMENT_NAME"]+exp_name+".json"
+    result_file_path = config["RESULT_PATH"]+config["GROUP_EXPERIMENT_NAME"]+"/"+exp_name+".json"
     if sim_number==1: #if file doesn't exists:
         with open(result_file_path, "w") as outfile:
             outfile.write(json.dumps({})) #then we create an empty json file

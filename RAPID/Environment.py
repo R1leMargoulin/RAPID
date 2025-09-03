@@ -126,7 +126,6 @@ class Environment():
         if self.render:
             self.screen.fill(self.background_color)
 
-        if self.render:
             for group in self.cell_feature_groups:
                 for o in self.cell_feature_groups[group]:
                     scaled_rect = pygame.Rect(o.rect.x * self.scaling_factor, o.rect.y * self.scaling_factor, o.rect.width * self.scaling_factor, o.rect.height * self.scaling_factor)

@@ -15,7 +15,7 @@ import logging
 #TODO : les comportements sont EXACTEMENT les memes dans ground ou Aerial, je pourrais tout mettre dans robot...
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10, energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20):#TODO rendre abstrait
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10, energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, altruism = 0.4):#TODO rendre abstrait
         """
         Robot class are our agents representing robots.
 
@@ -38,6 +38,8 @@ class Robot(Sprite):
         # inital values
         self.env = env
         self.robot_id = robot_id
+
+        self.altruism = altruism
 
         # pygame agent components
         self.surf = Surface((4*size, 4*size), SRCALPHA, 32)
@@ -138,6 +140,7 @@ class Robot(Sprite):
 
     def update(self, screen):
         if not(self.imdone):
+            #print(f"robot {self.robot_id}: status {self.status}, target {self.target}")
 
             if self.env.render:
                 scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
@@ -154,7 +157,7 @@ class Robot(Sprite):
             if self.status == "destroyed":
                 self.imdone = True
             
-            if self.new_communication and self.last_plan_time - (self.env.step - self.time_from_last_communication) > self.delta_replan:
+            if self.new_communication and self.env.step - self.last_plan_time > self.delta_replan:
                 #print(f"robot {self.robot_id} : replan, step {self.env.step}, last com {self.time_from_last_communication}, last plan {self.last_plan_time}")
                 self.target = None
                 self.path_to_target = None
@@ -614,7 +617,7 @@ class Robot(Sprite):
 
         #reshape importance of communication depending of the time from last communication:
         #print(f"robot {self.robot_id} : last com : {self.time_from_last_communication}")
-        self.shape_competence("communication", self.competences["communication"]["capability"], self.time_from_last_communication*0.1, distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
+        self.shape_competence("communication", self.competences["communication"]["capability"], self.time_from_last_communication*(5/self.env.width), distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
 
         if np.any(self.target):
             if self.path_to_target: #If we have a path to our target, we continue this path.
@@ -622,6 +625,9 @@ class Robot(Sprite):
                 pass
             else: #if we don't have any path, then compute it with our target
                 self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
+                if not(self.path_to_target):
+                    self.target = None
+                
         
         elif self.action_to_perform != None:
             self.perform_target_action()
@@ -662,7 +668,7 @@ class Robot(Sprite):
             robots_pos_list = [] #list of float xy position of all robots
             for robot_id in self.belief_space["robot_informations"]:
                 if robot_id != self.robot_id: #iamhere
-                    if self.env.step - self.belief_space["robot_informations"][robot_id]["step"] <= 250 : #limite arbitraire pour voir si la position n'est pas trop obsolete, sinon on ne la prendra pas en compte, TODO : mettre ca en parametrable propre
+                    if self.env.step - self.belief_space["robot_informations"][robot_id]["step"] <= (self.env.width) : #limite arbitraire pour voir si la position n'est pas trop obsolete, sinon on ne la prendra pas en compte, TODO : mettre ca en parametrable propre
                         robots_pos_list.append(self.belief_space["robot_informations"][robot_id]["position"])
 
             communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
@@ -709,13 +715,14 @@ class Robot(Sprite):
 
                 #collective utility
                 #TODO : check if that works STOPPEDHERE
-                #collective_utility = individual_utility - global_feasability * self.competences[ip["type"]]["dispersion"]
-                collective_utility = individual_utility / (global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )
-                
+                #old backup #collective_utility = individual_utility - global_feasability * self.competences[ip["type"]]["dispersion"]
+                #backup #collective_utility = individual_utility / (global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )
+                collective_utility = 1 / (np.sqrt(global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )+0.000001) #+0.000001 parce que je ne comprends pas pourquoi mais il m'arrive d'avoir des div par zero...
                 #final utility
-                utility = individual_utility + collective_utility
+                utility = individual_utility + self.altruism * collective_utility
 
                 ip.update({"utility":utility})
+                #ip.update({"utility":collective_utility})
 
             #------------------------------------------------------------------------------------------
             best_action = None
@@ -740,8 +747,8 @@ class Robot(Sprite):
 
 class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
 
-    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell)
+    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, altruism = 0.4):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, altruism=altruism)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier", "action_selection"]
 
         #traversability ease in the env 
@@ -813,8 +820,8 @@ class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
 
 
 class Aerial(Robot): #TODO UPDATE ENERGY AMOUNT
-    def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell)
+    def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, altruism = 0.4):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, altruism=altruism)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier", "action_selection"]
 
         #traversability ease in the env 
