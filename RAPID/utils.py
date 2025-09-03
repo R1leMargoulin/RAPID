@@ -1,5 +1,6 @@
 import numpy as np
 import heapq
+import random
 
 from .grid_variables import *
 
@@ -139,7 +140,15 @@ def cluster_frontier_cells(grid, frontier_cells, vision_range, traversable_types
         return clusters
 
     clusters = form_clusters(frontier_cells, vision_range)
-    cluster_centers = [np.mean(cluster, axis=0) for cluster in clusters]
+    #cluster_centers = [np.mean(cluster, axis=0) for cluster in clusters]
+    cluster_centers = []
+    for i in range(len(clusters)) :
+        cluster_center = np.round(np.mean(clusters[i], axis=0))
+        if not(grid[int(cluster_center[0]), int(cluster_center[1])] in(traversable_types)): #si le baricentre est dans un obstacle, alors on prends juste une des case frontières.
+            index = random.randint(0, len(clusters[i])-1 )
+            cluster_centers.append(clusters[i][index])
+        else:
+            cluster_centers.append(cluster_center)
 
     return np.round(cluster_centers)
 
