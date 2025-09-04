@@ -139,17 +139,17 @@ class Robot(Sprite):
         self.is_active = True
 
     def update(self, screen):
+        if self.env.communication_mode == "limited":
+            if self.env.render:
+                halo_scaled_rect = Rect(self.communication_halo.rect.x * self.env.scaling_factor, self.communication_halo.rect.y * self.env.scaling_factor, self.communication_halo.rect.width * self.env.scaling_factor, self.communication_halo.rect.height * self.env.scaling_factor)
+                screen.blit(scale(self.communication_halo.image, halo_scaled_rect.size), halo_scaled_rect)
+
         if not(self.imdone):
             #print(f"robot {self.robot_id}: status {self.status}, target {self.target}")
 
             if self.env.render:
                 scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
                 screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
-
-            if self.env.communication_mode == "limited":
-                if self.env.render:
-                    halo_scaled_rect = Rect(self.communication_halo.rect.x * self.env.scaling_factor, self.communication_halo.rect.y * self.env.scaling_factor, self.communication_halo.rect.width * self.env.scaling_factor, self.communication_halo.rect.height * self.env.scaling_factor)
-                    screen.blit(scale(self.communication_halo.image, halo_scaled_rect.size), halo_scaled_rect)
 
             if (self.energy_amount / self.energy_max_amount) <= 0:
                 self.imdone = True
@@ -163,6 +163,7 @@ class Robot(Sprite):
                 self.path_to_target = None
                 self.new_communication = False
                 self.last_plan_time = self.env.step
+            
                        
     def translate(self, speed_x, speed_y):
         #old positions for distance calculation
@@ -487,7 +488,7 @@ class Robot(Sprite):
                 else:
                     self.imdone = True
             else:
-                cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range, traversable_types=self.traversable_types) #from utils : make cluster fontiers
+                cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, int(self.vision_range/2), traversable_types=self.traversable_types) #from utils : make cluster fontiers
 
                 pos_list_float = [pos["position"] for pos in list(self.belief_space["robot_informations"].values())] #list of float xy position of all robots
                 pos_list_int = [(int(x), int(y)) for x,y in pos_list_float] #same list with ints.
@@ -638,7 +639,7 @@ class Robot(Sprite):
             #exploration frontiers ----------------------------
             frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=self.traversable_types) #from utils
             if list(frontiers) != None or len(list(frontiers))!=0:
-                cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, self.vision_range, traversable_types=self.traversable_types) #from utils : make cluster of fontiers to reduce computation time
+                cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, int(self.vision_range/2), traversable_types=self.traversable_types) #from utils : make cluster of fontiers to reduce computation time
                 for cc in cluster_centers:
                     interest_points.append({"type":"exploration","coordinates":cc})
             #--------------------------------------
