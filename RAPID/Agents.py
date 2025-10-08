@@ -163,8 +163,7 @@ class Robot(Sprite):
                 self.path_to_target = None
                 self.new_communication = False
                 self.last_plan_time = self.env.step
-            
-                       
+                                   
     def translate(self, speed_x, speed_y):
         #old positions for distance calculation
         old_tfx = self.transform.x
@@ -718,7 +717,7 @@ class Robot(Sprite):
                 #TODO : check if that works STOPPEDHERE
                 #old backup #collective_utility = individual_utility - global_feasability * self.competences[ip["type"]]["dispersion"]
                 #backup #collective_utility = individual_utility / (global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )
-                collective_utility = 1 / (np.sqrt(global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )+0.000001) #+0.000001 parce que je ne comprends pas pourquoi mais il m'arrive d'avoir des div par zero...
+                collective_utility = 1 / (4*np.sqrt(global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )+0.000001) #+0.000001 parce que je ne comprends pas pourquoi mais il m'arrive d'avoir des div par zero...
                 #final utility
                 utility = individual_utility + self.altruism * collective_utility
 

@@ -13,12 +13,13 @@ SCREEN_WIDTH = 100
 SCREEN_HEIGHT = 100
 BACKGROUND_COLOR = (200, 200, 200)
 
-ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/examples/env_images_example/cave_200_200.png"# CHANGE THE PATH
+ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/examples/env_images_example/cross_100_100.png"# CHANGE THE PATH
 
-NB_GROUND_AGENTS = 6
+NB_GROUND_AGENTS = 3
 NB_AERIAL_AGENTS = 2
 
-pos_list = [[85,190,0], [95,190,0], [105,190,0], [115,190,0], [125,190,0], [100,180,0]]
+#pos_list = [[85,190,0], [95,190,0], [105,190,0], [115,190,0], [125,190,0], [100,180,0]]
+pos_list = [[10,99, 0], [10,89,0], [15,95,0]]
 #pos_list = None
 
 img = Image.open(ENV_IMAGE_PATH)
