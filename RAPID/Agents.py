@@ -150,10 +150,10 @@ class Robot(Sprite):
                 screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
 
             if (self.energy_amount / self.energy_max_amount) <= 0:
-                self.imdone = True
+                self.finish()
 
             if self.status == "destroyed":
-                self.imdone = True
+                self.finish()
             
             if self.new_communication and self.env.step - self.last_plan_time > self.delta_replan:
                 #print(f"robot {self.robot_id} : replan, step {self.env.step}, last com {self.time_from_last_communication}, last plan {self.last_plan_time}")
@@ -161,7 +161,12 @@ class Robot(Sprite):
                 self.path_to_target = None
                 self.new_communication = False
                 self.last_plan_time = self.env.step
-                                   
+
+    def finish(self):
+        self.imdone = True
+        self.rect.centerx = -1 #tp hors de la map pour les collisions
+        self.rect.centery = -1
+
     def translate(self, speed_x, speed_y):
         #old positions for distance calculation
         old_tfx = self.transform.x
@@ -444,7 +449,7 @@ class Robot(Sprite):
                     self.target = (int(self.init_transform.x),int(self.init_transform.y))
                     self.last_plan_time = self.env.step
                 else:
-                    self.imdone = True
+                    self.finish()
             else:
                 #then we take the closest one.
                 distance = np.inf
@@ -483,7 +488,7 @@ class Robot(Sprite):
                     self.target = (int(self.init_transform.x),int(self.init_transform.y))
                     self.last_plan_time = self.env.step
                 else:
-                    self.imdone = True
+                    self.finish
             else:
                 cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, int(self.vision_range/2), traversable_types=self.traversable_types) #from utils : make cluster fontiers
 
@@ -550,7 +555,7 @@ class Robot(Sprite):
             else: #else if there is no frontier:
                 if (int(self.transform.x), int(self.transform.y)) == (int(self.init_transform.x), int(self.init_transform.y)): #if we are back at the init pose, the robot has finished.
                     if self.belief_space["second_chance_usage"] == True:
-                        self.imdone = True
+                        self.finish()
                     else:
                         #we use a second chance:
                         self.belief_space["second_chance_usage"] = True
@@ -657,7 +662,7 @@ class Robot(Sprite):
                     self.last_plan_time = self.env.step
                     return None
                 else:
-                    self.imdone = True
+                    self.finish()
                     return None
 
             #barycentre de communications----------

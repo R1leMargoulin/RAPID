@@ -22,7 +22,7 @@ NB_AERIAL_AGENTS = 2
 pos_list = [[1,5,0], [1,10,0], [5,5,0], [5,10,0]]
 #pos_list = None
 
-img = Image.open(ENV_IMAGE_PATH)
+img = None #Image.open(ENV_IMAGE_PATH)
 
 
 logging.basicConfig(level=logging.DEBUG)
