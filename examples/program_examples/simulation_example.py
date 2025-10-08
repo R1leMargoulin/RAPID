@@ -15,11 +15,11 @@ BACKGROUND_COLOR = (200, 200, 200)
 
 ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/examples/env_images_example/cross_100_100.png"# CHANGE THE PATH
 
-NB_GROUND_AGENTS = 3
+NB_GROUND_AGENTS = 4
 NB_AERIAL_AGENTS = 2
 
 #pos_list = [[85,190,0], [95,190,0], [105,190,0], [115,190,0], [125,190,0], [100,180,0]]
-pos_list = [[10,99, 0], [10,89,0], [15,95,0]]
+pos_list = [[1,5,0], [1,10,0], [5,5,0], [5,10,0]]
 #pos_list = None
 
 img = Image.open(ENV_IMAGE_PATH)
@@ -50,10 +50,9 @@ def main():
                                     max_speed=(1,1,0.5), #warning : adapt max speeds if you use aerial or ground robots
                                     behavior_to_use="action_selection", 
                                     vision_range=10,
-                                    communication_range=20,
-                                    communication_period=10,
-                                    energy_amount=1e6, #place a huge amount for no energy limitations 
-                                    altruism=0.3
+                                    communication_range=100,
+                                    communication_period=100,
+                                    energy_amount=1e6 #place a huge amount for no energy limitations 
                                 ))
         env.agents[-1].shape_competence("exploration", 1, 1)
 
