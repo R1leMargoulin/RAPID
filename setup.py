@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='RAPID',
-    version='0.10',
+    version='0.11',
     packages=find_packages(),
     description='Robotics Agent Prototyping for Intelligence Development',
     author='Erwan MARTIN',
