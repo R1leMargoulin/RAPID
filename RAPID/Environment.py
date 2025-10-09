@@ -533,3 +533,120 @@ class MineClearingEnvironment(Environment): #TODO PREPARER L ENVIRONMENT
     def add_agent(self, agent):
         agent.shape_competence("mine", 0.9, 1.0) #adding default mine competence values
         return super().add_agent(agent)
+    
+class WasteCleaningEnvironment(Environment): #TODO PREPARER L ENVIRONMENT
+    class Waste(Artifact):
+        def __init__(self, env, id, name, type, coordinates, size=1, color = (255,0,0)):
+            super().__init__(env, id, name, type, coordinates, size, color)
+            self.life_points=100
+
+        def interact(self, competence):
+            """
+            competence should be a float in [0,1]
+
+            return dict: {"cleared":bool, "explosion":bool}
+            """
+            self.life_points -= 10*competence
+
+            if self.life_points <=0:
+                self.destroy()
+                return True
+            else:
+                return False
+
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", end_at_full_clear = True, fog = True):
+        """
+        ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
+        in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
+        
+        Params :
+        
+        - render:bool =  display the environment or not
+        - width:int = (default 100) = width of the environment
+        - heigth:int = (default 100) = height of the environment
+        - background_color:(int,int,int) = rgb color of the backgroung
+        - caption:str = name given to the env
+        - env_image:PIL.Image.Image = image computed into environment (overrides the witdh and height)
+        - full_knowledge:bool = the agent gets a copy of the whole environment in it's own memory or in blackboard if there is one.
+        - limit_of_steps:int = step limitation in which the agent should reach it's goal.
+        - scaling_factor:int = the display (display only) size of the screen is multiply by the scaling factor.
+        - communication_mode:str = method of communication in ["blackboard", "limited"] :
+            - "blackboard" : all robots share a blackboard in the environment, the knowledge is centralized on this blackboard
+            - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
+        - end_at_full_exploation:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when the exploration proportion goal is reached.
+        """
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode)
+
+        self.end_at_full_clear = end_at_full_clear
+
+        exp_map = np.zeros((self.width, self.height))
+        self.interest_points.update({"exploration_map":exp_map})
+        #on va pas mettre de fog sur les murs parce que la vision ne les traverse pas, si on a des murs plus épais que 2, alors il y aura toujours de la fog.
+        self.interest_points["exploration_map"] += self.real_occupancy_grid
+
+        self.explorable_zone_types = [OG_FREE_CELL, OG_GRASS, OG_SAND, OG_WATER]
+
+        self.fog_texture = pygame.Surface((1,1), pygame.SRCALPHA)
+        self.fog_texture.fill((100, 100, 100, 150))
+        
+        self.explorable_cell_number = np.count_nonzero(np.isin(self.real_occupancy_grid, self.explorable_zone_types))
+
+    def run(self):
+        #remove some fog around agents before launching
+        for agent in self.agents:
+            neighbours = agent.get_neighbors_pixels(distance = agent.vision_range, stop_at_wall = True, self_inclusion = True)
+            self.mark_explored_cells(neighbours)
+        super().run()
+
+    def update(self):
+        super().update()
+        for agent in self.agents:
+            neighbours = agent.get_neighbors_pixels(distance = agent.vision_range, stop_at_wall = True, self_inclusion = True)
+            self.mark_explored_cells(neighbours)
+        #Il faut que les agents effacent la fog autours d'eux maintenant.
+        if self.render:
+            self.draw_fog()
+        pass
+
+    def draw_fog(self):
+        unexplored_poses = np.where(np.isin(self.interest_points["exploration_map"], self.explorable_zone_types))#check for each element of the Occ grid if it's an explorable zone.
+        for i in range(len(unexplored_poses[0])):
+            # self.screen.blit(self.fog_texture, pygame.Rect(unexplored_poses[0][i], unexplored_poses[1][i], 1, 1)) #BACKUP scaling
+            scaled_rect = pygame.Rect(unexplored_poses[0][i] * self.scaling_factor, unexplored_poses[1][i] * self.scaling_factor, self.scaling_factor, self.scaling_factor)
+            self.screen.blit(pygame.transform.scale(self.fog_texture, scaled_rect.size), scaled_rect)
+            
+        pass
+    
+    def goal_condition(self):
+        if len(self.interest_points["artifacts"]) == 0:
+            return True
+        else :
+            return False
+
+    def end_condition(self):
+        if self.end_at_full_clear:
+           return self.goal_condition()
+        else:
+            has_to_stop = True
+            for a in self.agents:
+                if not a.imdone:
+                    has_to_stop = False
+            return has_to_stop
+
+    def mark_explored_cells(self, cells):
+        for cell in cells:
+            self.interest_points["exploration_map"][cell[0]-1][cell[1]-1] = 1
+    
+    def add_waste(self, coords):
+        mine = self.Waste(self, 
+                         id=len(self.interest_points["artifacts"]),
+                         name=f"waste{len(self.interest_points["artifacts"])}",
+                         type= "clean",
+                         coordinates=coords
+                         )
+        self.interest_points["artifacts"].append(mine)
+        pass
+
+    def add_agent(self, agent):
+        agent.shape_competence("clean", 0.9, 1.0) #adding default mine competence values
+        return super().add_agent(agent)

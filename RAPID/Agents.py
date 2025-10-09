@@ -368,7 +368,9 @@ class Robot(Sprite):
         elif self.action_to_perform["type"] == "communication":
             self.action_to_perform = None     
         else: #we'll consider than everything else is consider as an artifact
-            result = self.env.interest_points["artifacts"][self.action_to_perform["id"]].interact(self.competences[self.action_to_perform["type"]]["capability"])
+            for a in self.env.interest_points["artifacts"]:
+                if a.id == self.action_to_perform["id"]:
+                    result = a.interact(self.competences[self.action_to_perform["type"]]["capability"])
             if result :
                 self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
                 self.action_to_perform = None
