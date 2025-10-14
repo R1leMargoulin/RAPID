@@ -368,8 +368,6 @@ class Robot(Sprite):
             self.action_to_perform = None     
         else: #we'll consider than everything else is consider as an artifact
             for a in self.env.interest_points["artifacts"]:
-                print("aaaaaaaaa")
-                print(a.coordinates)
                 if a.id == self.action_to_perform["id"] and (euclidian_distance((int(a.coordinates[0]), int(a.coordinates[1])), (int(self.transform.x), int(self.transform.y)) ) < 2):
                     result = a.interact(self.competences[self.action_to_perform["type"]]["capability"])
                     if result :
