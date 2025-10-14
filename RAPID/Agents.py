@@ -368,12 +368,15 @@ class Robot(Sprite):
             self.action_to_perform = None     
         else: #we'll consider than everything else is consider as an artifact
             for a in self.env.interest_points["artifacts"]:
-                if a.id == self.action_to_perform["id"] and ((int(a.coordinates[0]), int(a.coordinates[1])) == (int(self.transform.x), int(self.transform.y)) ):
+                print("aaaaaaaaa")
+                print(a.coordinates)
+                if a.id == self.action_to_perform["id"] and (euclidian_distance((int(a.coordinates[0]), int(a.coordinates[1])), (int(self.transform.x), int(self.transform.y)) ) < 2):
                     result = a.interact(self.competences[self.action_to_perform["type"]]["capability"])
                     if result :
                         self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
-                        self.belief_space["artifacts"][self.action_to_perform["id"]]["step"] = self.env.step
+                        self.belief_space["artifacts"][self.action_to_perform["id"]]["step"] = self.env.step + 1
                         self.action_to_perform = None
+                        self.belief_transfer()
                         return None
                     else:
                         return None
@@ -654,7 +657,7 @@ class Robot(Sprite):
             #Artifacts ----------------------------
             if "artifacts" in self.belief_space:
                 for art in self.belief_space["artifacts"]:
-                    if self.belief_space["artifacts"][art]["status"] != "done":
+                    if self.belief_space["artifacts"][art]["status"] not in ["done", "destroyed"] :
                         if euclidian_distance( (self.init_transform.x, self.init_transform.y) , self.belief_space["artifacts"][art]["coordinates"]) >= self.competences[self.belief_space["artifacts"][art]["type"]]["distance_treshold"]: #we verify that the treshold is respected
                             interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,"coordinates":self.belief_space["artifacts"][art]["coordinates"], "id":art})#adding directly the artifacts in the interest points
             #--------------------------------------
