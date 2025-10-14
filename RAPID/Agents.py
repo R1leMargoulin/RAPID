@@ -355,7 +355,6 @@ class Robot(Sprite):
         # self.target = None
         # self.path_to_target = None
 
-
     def move(self, vector_x, vector_y):
         print("move has to be implemented in the class.")
 
@@ -369,13 +368,17 @@ class Robot(Sprite):
             self.action_to_perform = None     
         else: #we'll consider than everything else is consider as an artifact
             for a in self.env.interest_points["artifacts"]:
-                if a.id == self.action_to_perform["id"]:
+                if a.id == self.action_to_perform["id"] and ((int(a.coordinates[0]), int(a.coordinates[1])) == (int(self.transform.x), int(self.transform.y)) ):
                     result = a.interact(self.competences[self.action_to_perform["type"]]["capability"])
-            if result :
-                self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
-                self.action_to_perform = None
-            else :
-                pass
+                    if result :
+                        self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
+                        self.belief_space["artifacts"][self.action_to_perform["id"]]["step"] = self.env.step
+                        self.action_to_perform = None
+                        return None
+                    else:
+                        return None
+            self.action_to_perform = None
+
 
     def behavior_diff_move_random(self):
         #set srobot speed at it's max speed
