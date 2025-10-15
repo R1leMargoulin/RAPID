@@ -367,6 +367,7 @@ class Robot(Sprite):
         elif self.action_to_perform["type"] == "communication":
             self.action_to_perform = None     
         else: #we'll consider than everything else is consider as an artifact
+
             for a in self.env.interest_points["artifacts"]:
                 if a.id == self.action_to_perform["id"] and (euclidian_distance((int(a.coordinates[0]), int(a.coordinates[1])), (int(self.transform.x), int(self.transform.y)) ) < 2):
                     result = a.interact(self.competences[self.action_to_perform["type"]]["capability"])
@@ -378,6 +379,9 @@ class Robot(Sprite):
                         return None
                     else:
                         return None
+            #si on ne voit pas l'artefact une fois sur place
+            self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
+            self.belief_space["artifacts"][self.action_to_perform["id"]]["step"] = self.env.step
             self.action_to_perform = None
 
 
