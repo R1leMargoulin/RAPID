@@ -15,7 +15,7 @@ import logging
 #TODO : les comportements sont EXACTEMENT les memes dans ground ou Aerial, je pourrais tout mettre dans robot...
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10, energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20):#TODO rendre abstrait
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10, energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=True):#TODO rendre abstrait
         """
         Robot class are our agents representing robots.
 
@@ -131,6 +131,9 @@ class Robot(Sprite):
 
         
         self.imdone = False #if true, the robot will consider it's mission is over, it stops its activity.
+
+        self.write_logs = write_logs
+        self.logs = {}
         
         #Ready!
         self.status = "ready"
@@ -670,6 +673,8 @@ class Robot(Sprite):
                 if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
                     self.target = (int(self.init_transform.x),int(self.init_transform.y))
                     self.last_plan_time = self.env.step
+                    if self.write_logs:
+                        self.logs.update({self.env.step:None})
                     return None
                 else:
                     self.finish()
@@ -756,12 +761,14 @@ class Robot(Sprite):
                 self.last_plan_time = self.env.step
             else:
                 print("problem")
+        if self.write_logs:
+            self.logs.update({self.env.step:self.action_to_perform})
 
 
 class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
 
-    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell)
+    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier", "action_selection"]
 
         #traversability ease in the env 
@@ -833,8 +840,8 @@ class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
 
 
 class Aerial(Robot): #TODO UPDATE ENERGY AMOUNT
-    def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell)
+    def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier", "action_selection"]
 
         #traversability ease in the env 
