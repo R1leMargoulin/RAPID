@@ -674,7 +674,7 @@ class Robot(Sprite):
                     self.target = (int(self.init_transform.x),int(self.init_transform.y))
                     self.last_plan_time = self.env.step
                     if self.write_logs:
-                        self.logs.update({self.env.step:None})
+                        self.logs.update({str(self.env.step):None})
                     return None
                 else:
                     self.finish()
@@ -762,7 +762,10 @@ class Robot(Sprite):
             else:
                 print("problem")
         if self.write_logs:
-            self.logs.update({self.env.step:self.action_to_perform})
+            if self.action_to_perform:
+                self.logs.update({str(self.env.step):self.action_to_perform['type']})
+            else:
+                self.logs.update({str(self.env.step):None})
 
 
 class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
