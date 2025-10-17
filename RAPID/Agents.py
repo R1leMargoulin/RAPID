@@ -501,7 +501,7 @@ class Robot(Sprite):
                     self.target = (int(self.init_transform.x),int(self.init_transform.y))
                     self.last_plan_time = self.env.step
                 else:
-                    self.finish
+                    self.finish()
             else:
                 cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, int(self.vision_range/2), traversable_types=self.traversable_types) #from utils : make cluster fontiers
 
