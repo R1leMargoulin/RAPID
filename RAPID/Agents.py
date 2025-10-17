@@ -701,11 +701,11 @@ class Robot(Sprite):
                 #cost = euclidian_distance(ip["coordinates"], (self.transform.x, self.transform.y)) #euclidian distance for the moment (C in the model)
                 cost = a_star_cost(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.env_ease, traversable_types=self.traversable_types)
                 if cost == 0:
-                    individual_utility = 1
-                else:
-                    capability = self.competences[ip["type"]]["capability"] #I'll cnsider that the type of the IP will be named the same than the competence (mu in the model)
+                    cost = 1e-5 #avoid divide by 0
 
-                    individual_utility = capability/cost
+                capability = self.competences[ip["type"]]["capability"] #I'll cnsider that the type of the IP will be named the same than the competence (mu in the model)
+
+                individual_utility = capability/cost
 
                 #global feasability
                 other_individual_values = np.array([])
@@ -722,12 +722,11 @@ class Robot(Sprite):
                         other_robot_pos = (int(self.belief_space["robot_informations"][robot]["position"][0]),int(self.belief_space["robot_informations"][robot]["position"][1]))
                         ocost = a_star_cost(self.belief_space["occupancy_grid"], other_robot_pos, (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.belief_space["robot_informations"][robot]["env_ease"], traversable_types=self.belief_space["robot_informations"][robot]["traversable_types"])
                         if ocost == 0:
-                            other_individual_values = np.append(other_individual_values, 1)
-                        else:
-                            ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]]["capability"]
-                            #other_individual_values = np.append(other_individual_values, ocapability/np.sqrt(ocost))
-                            other_individual_values = np.append(other_individual_values, ocapability/ocost) #retest sans racine
+                            ocost = 1e-5 #avoid divide by 0
 
+                        ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]]["capability"]
+
+                        other_individual_values = np.append(other_individual_values, ocapability/ocost) #capacite des autres sur l'ip
                 #global_feasability = float(np.mean(other_individual_values))
                 collective_sufficiency = float(np.max(other_individual_values))
 
@@ -737,6 +736,9 @@ class Robot(Sprite):
                 #backup #collective_utility = individual_utility / (global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )
                 #collective_utility = 1 / (4*np.sqrt(global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )+0.000001) #+0.000001 parce que je ne comprends pas pourquoi mais il m'arrive d'avoir des div par zero...
                 #final utility
+
+                if collective_sufficiency == 0:
+                    collective_sufficiency = 1e-5 #avoid divide by 0
                 utility = individual_utility / collective_sufficiency
 
                 ip.update({"utility":utility})
