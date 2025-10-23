@@ -132,7 +132,7 @@ class Robot(Sprite):
         
         self.imdone = False #if true, the robot will consider it's mission is over, it stops its activity.
 
-        self.write_logs = write_logs
+        self.logging = write_logs
         self.logs = {}
         
         #Ready!
@@ -673,8 +673,8 @@ class Robot(Sprite):
                 if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
                     self.target = (int(self.init_transform.x),int(self.init_transform.y))
                     self.last_plan_time = self.env.step
-                    if self.write_logs:
-                        self.logs.update({str(self.env.step):None})
+                    if self.logging:
+                        self.write_logs()
                     return None
                 else:
                     self.finish()
@@ -763,11 +763,23 @@ class Robot(Sprite):
                 self.last_plan_time = self.env.step
             else:
                 print("problem")
-        if self.write_logs:
-            if self.action_to_perform:
-                self.logs.update({str(self.env.step):self.action_to_perform['type']})
-            else:
-                self.logs.update({str(self.env.step):None})
+        if self.logging:
+            self.write_logs()
+
+    def write_logs(self):
+        step = self.env.step
+        if self.action_to_perform:
+            action = self.action_to_perform['type']
+        else:
+            action = None
+
+        self.logs.update({
+            step:{
+                "action":action,
+                "transform":{"x":self.transform.x, "y":self.transform.y, "w":self.transform.w}
+            }
+        })
+
 
 
 class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
