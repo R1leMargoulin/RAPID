@@ -147,7 +147,9 @@ class Robot(Sprite):
 
         if not(self.imdone):
             #print(f"robot {self.robot_id}: status {self.status}, target {self.target}")
-
+            if self.logging:
+                self.write_logs()
+                
             if self.env.render:
                 scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
                 screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
@@ -673,8 +675,6 @@ class Robot(Sprite):
                 if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
                     self.target = (int(self.init_transform.x),int(self.init_transform.y))
                     self.last_plan_time = self.env.step
-                    if self.logging:
-                        self.write_logs()
                     return None
                 else:
                     self.finish()
@@ -763,8 +763,6 @@ class Robot(Sprite):
                 self.last_plan_time = self.env.step
             else:
                 print("problem")
-        if self.logging:
-            self.write_logs()
 
     def write_logs(self):
         step = self.env.step
