@@ -124,7 +124,7 @@ class Robot(Sprite):
             self.connected_robots = []
         
         #creation of the belief space whatever the communication mode
-        self.belief_space = {"occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "artifacts":{}, "robot_informations":{}}
+        self.belief_space = {"self_id": self.robot_id, "occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "artifacts":{}, "robot_informations":{}, "last_com_matrix": {self.robot_id:{self.robot_id:0}}}
         self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step, "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types} }) #we add the step in order to keep the most recent known position when merging.
         if self.env.full_knowledge:
             self.belief_space["occupancy_grid"] = self.env.real_occupancy_grid
@@ -147,6 +147,10 @@ class Robot(Sprite):
 
         if not(self.imdone):
             #print(f"robot {self.robot_id}: status {self.status}, target {self.target}")
+
+            self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "step":self.env.step }}) #self beliefs update
+            self.belief_space["last_com_matrix"][self.robot_id][self.robot_id] = self.env.step
+
             if self.logging:
                 self.write_logs()
                 
@@ -253,7 +257,6 @@ class Robot(Sprite):
             self.rect.centery = int(self.transform.y)
 
 
-        self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "step":self.env.step }}) #we add the step in order to keep the most recent known position when merging.
 
         if self.env.communication_mode == "limited":
             self.communication_halo.rect.centerx = int(self.transform.x)
@@ -340,21 +343,55 @@ class Robot(Sprite):
         #dans un premiers temps, on ne partage que la grille d'occupation.
         #en supposant que le sensing de chaque agent est correct (on y mettra des probabilités plus tard, en ajoutant un layer) on peut simplement merge les deux grilles en prennant le max de chacune
         #car -1 = unknown, 0 = free, 1 = obstacle, et quand c'est plus grand c'est des points d'interets.
+
+        #ROBOTS INFOS-----------------------------------------------------------
         self.belief_space["occupancy_grid"] = np.maximum.reduce([self.belief_space["occupancy_grid"], sender_belief_space["occupancy_grid"]])
         for robot_infos in sender_belief_space["robot_informations"]: #robot positions update based on the newest timestamp
             if not (robot_infos in self.belief_space["robot_informations"]):
                 self.belief_space["robot_informations"].update({robot_infos: sender_belief_space["robot_informations"][robot_infos]})
 
+                #update in infos matrix as well
+                self.belief_space["last_com_matrix"][self.robot_id].update({robot_infos : self.belief_space["robot_informations"][robot_infos]["step"]}) #test
+
+
             elif sender_belief_space["robot_informations"][robot_infos]["step"] > self.belief_space["robot_informations"][robot_infos]["step"]:
                 self.belief_space["robot_informations"].update({robot_infos: sender_belief_space["robot_informations"][robot_infos]})
 
+                #update in infos matrix as well
+                self.belief_space["last_com_matrix"][self.robot_id].update({robot_infos : self.belief_space["robot_informations"][robot_infos]["step"]}) #test
+        #ROBOTS INFOS-----------------------------------------------------------
+
+
+
+        # LAST COM MATRIX----------------------------------------------------
+        for agent in set(list(self.belief_space["last_com_matrix"].keys()) + list(sender_belief_space["last_com_matrix"].keys())): #boucle de verif s'il y a les memes agents
+            if not(agent in  self.belief_space["last_com_matrix"]):
+                newrobot = {agent:0}
+                for r in self.belief_space["last_com_matrix"]:
+                    newrobot.update({r:0}) #on considere qu'ils n'ont jamais communique, donc on met la step 0 par defaut avec tous les agents
+                    self.belief_space["last_com_matrix"][r].update({agent:0}) #pour la symetrie
+                self.belief_space["last_com_matrix"].update({agent : newrobot})
+            
+        # maj des coms du sender et reciever dans la matrice
+        self.belief_space["last_com_matrix"][sender_belief_space["self_id"]].update({self.robot_id : self.belief_space["robot_informations"][agent]["step"]})
+        self.belief_space["last_com_matrix"][self.robot_id].update({sender_belief_space["self_id"] : self.belief_space["robot_informations"][agent]["step"]})     
+        #fusion
+        for agent in set(list(self.belief_space["last_com_matrix"].keys()) + list(sender_belief_space["last_com_matrix"].keys())):
+            if agent in sender_belief_space["last_com_matrix"]:
+                for com in sender_belief_space["last_com_matrix"][agent]:
+                    if self.belief_space["last_com_matrix"][agent][com] < sender_belief_space["last_com_matrix"][agent][com]:
+                        self.belief_space["last_com_matrix"][agent][com] = sender_belief_space["last_com_matrix"][agent][com]
+        # LAST COM MATRIX----------------------------------------------------
+            
+
+        #ARTIFACTS-----------------------------------------------------------
         for artifact in sender_belief_space["artifacts"]: #artifact update based on the newest timestamp
             if not (artifact in self.belief_space["artifacts"]):
                 self.belief_space["artifacts"].update({artifact: sender_belief_space["artifacts"][artifact]})
             
             elif sender_belief_space["artifacts"][artifact]["step"] > self.belief_space["artifacts"][artifact]["step"]:
                 self.belief_space["artifacts"].update({artifact: sender_belief_space["artifacts"][artifact]})
-        
+        #ARTIFACTS-----------------------------------------------------------
 
         self.new_communication = True
         # self.target = None
