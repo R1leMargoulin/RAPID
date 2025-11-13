@@ -4,8 +4,10 @@ from pygame.draw import *
 from pygame import Surface, SRCALPHA, Rect
 
 from .Environment import Environment
+from .Artifacts import Artifact
 from .utils import *
 from .grid_variables import *
+
 
 import numpy as np
 import random
@@ -168,8 +170,11 @@ class Robot(Sprite):
                 #print(f"robot {self.robot_id} : replan, step {self.env.step}, last com {self.time_from_last_communication}, last plan {self.last_plan_time}")
                 self.target = None
                 self.path_to_target = None
+                self.action_to_perform = None
                 self.new_communication = False
                 self.last_plan_time = self.env.step
+            
+            #print(self.robot_id, self.action_to_perform, self.target, (int(self.transform.x), int(self.transform.y)))
 
     def finish(self):
         self.imdone = True
@@ -205,27 +210,6 @@ class Robot(Sprite):
                     sides = []
                     self.transform.x = old_tfx
                     self.transform.y = old_tfy
-                    # for c in collisions:
-                    #     if self.rect.midtop[1] > c.rect.midtop[1]:
-                    #         sides.append("top")
-                    #     if self.rect.midleft[0] > c.rect.midleft[0]:
-                    #         sides.append("left")
-                    #     if self.rect.midright[0] < c.rect.midright[0]:
-                    #         sides.append("right")
-                    #     if self.rect.midtop[1] < c.rect.midtop[1]:
-                    #         sides.append("bottom")
-                    
-                    # if ("top" in sides):
-                    #     self.transform.y += 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
-                    # if ("bottom" in sides):
-                    #     self.transform.y -= 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
-                    #     int(self.transform.y)
-                    # if ("left" in sides):
-                    #     self.transform.x += 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
-                    #     int(self.transform.x)
-                    # if ("right" in sides):
-                    #     self.transform.x -= 2*max(np.abs(self.speed.x), np.abs(self.speed.y))
-                    #     int(self.transform.x)
 
         #-----------------------------------------------------------------------------------------------------------
         
@@ -420,12 +404,16 @@ class Robot(Sprite):
                         self.belief_transfer()
                         return None
                     else:
+                        #self.action_to_perform = None
                         return None
+                else:
+                    self.action_to_perform = None
+                    return None
             #si on ne voit pas l'artefact une fois sur place
-            self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
-            self.belief_space["artifacts"][self.action_to_perform["id"]]["step"] = self.env.step
-            self.action_to_perform = None
-
+            if euclidian_distance((int(self.belief_space["artifacts"][self.action_to_perform["id"]]["coordinates"][0]), int(self.belief_space["artifacts"][self.action_to_perform["id"]]["coordinates"][1])), (int(self.transform.x), int(self.transform.y))) <= self.vision_range:
+                self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
+                self.belief_space["artifacts"][self.action_to_perform["id"]]["step"] = self.env.step
+                self.action_to_perform = None
 
     def behavior_diff_move_random(self):
         #set srobot speed at it's max speed
@@ -444,6 +432,9 @@ class Robot(Sprite):
         ymove = self.speed.x * np.sin(self.transform.w)
 
         self.translate(xmove, ymove)
+
+    def behavior_stay(self):
+        self.belief_transfer()
 
     def behavior_target_djikstra(self):
         self.speed.x = 1
@@ -682,6 +673,7 @@ class Robot(Sprite):
                 self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
                 if not(self.path_to_target):
                     self.target = None
+                    self.action_to_perform = None
                 
         
         elif self.action_to_perform != None:
@@ -701,6 +693,11 @@ class Robot(Sprite):
             #Artifacts ----------------------------
             if "artifacts" in self.belief_space:
                 for art in self.belief_space["artifacts"]:
+                    #IMPORTANCE CHECK
+                    if art +1 <= len(self.env.interest_points["artifacts"]): #ouais c'est degueu
+                        self.env.interest_points["artifacts"][art].check_importance(self) #TODO test this
+
+                    #INTEREST POINT CREATION
                     if self.belief_space["artifacts"][art]["status"] not in ["done", "destroyed"] :
                         if euclidian_distance( (self.init_transform.x, self.init_transform.y) , self.belief_space["artifacts"][art]["coordinates"]) >= self.competences[self.belief_space["artifacts"][art]["type"]]["distance_treshold"]: #we verify that the treshold is respected
                             interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,"coordinates":self.belief_space["artifacts"][art]["coordinates"], "id":art})#adding directly the artifacts in the interest points
@@ -776,7 +773,10 @@ class Robot(Sprite):
 
                 if collective_sufficiency == 0:
                     collective_sufficiency = 1e-5 #avoid divide by 0
+                
                 utility = individual_utility / collective_sufficiency
+                #utility = ( self.competences[ip["type"]]["importance"] * individual_utility) / collective_sufficiency
+                print(ip["type"], self.competences[ip["type"]]["importance"], utility)
 
                 ip.update({"utility":utility})
                 #ip.update({"utility":collective_utility})
@@ -792,6 +792,10 @@ class Robot(Sprite):
                 if weighted_utility >= best_weighted_utility:
                     best_weighted_utility = weighted_utility
                     best_action = ip
+
+                # if ip["utility"] >= best_weighted_utility:
+                #     best_weighted_utility = ip["utility"]
+                #     best_action = ip
             
             #action perform
             if best_action != None:
@@ -949,3 +953,94 @@ class Aerial(Robot): #TODO UPDATE ENERGY AMOUNT
         self.speed.y = min(self.max_speed.y, vector_y)
 
         self.translate(self.speed.x, self.speed.y)
+
+class BaseStation(Robot):
+    #TODO : creer l'artefact associe
+
+    class BaseStationArtifact(Artifact):
+        def __init__(self, env, id, name, coordinates, associated_agent:Robot, size=1, color = (255,0,0)):
+            type = "base_station_com"
+            super().__init__(env, id, name, type, coordinates, size, color)
+            self.base = associated_agent
+        
+        def check_importance(self, robot:Robot): #TODO HERE
+            oldest_com_time = self.env.step
+            if self.base.robot_id in robot.belief_space["last_com_matrix"]:
+                for agent in robot.belief_space["last_com_matrix"][self.base.robot_id]:
+                    if robot.belief_space["last_com_matrix"][self.base.robot_id][agent] < oldest_com_time:
+                        oldest_com_time = robot.belief_space["last_com_matrix"][self.base.robot_id][agent]
+            
+
+            importance = np.exp(((self.env.step - oldest_com_time) - ((self.env.width + self.env.height)/2))/(np.sqrt(self.env.step))) #longest time of any agent news / mean of env size in term of width&height
+            #importance = ((self.env.step - oldest_com_time) / ((self.env.width + self.env.height)/2))
+            #importance = np.exp(self.env.step - oldest_com_time)
+
+
+            #TODO Faire l'aisance en fonction de la matrice
+            # total_timestamps = 0
+            # for agent in robot.belief_space["last_com_matrix"][robot.robot_id]:
+            #     if agent != self.base.robot_id:
+            #         total_timestamps += robot.belief_space["last_com_matrix"][robot.robot_id] #we add all timesteps of the other robots except the base
+            
+            # total_deltas_com = total_timestamps - ((len(robot.belief_space["last_com_matrix"])-1) * self.env.step)  # delte = la somme des timestamps - n * le max des steps possible (soit le temps actuel) et n = le nb de robot dans la flotte sans la base.
+            #-----------------------------------------------------------------
+
+            
+            
+            robot.shape_competence(self.type, capability=robot.competences[self.type]["capability"], importance=importance, distance_treshold = 2)
+            #TODO, for communication, maybe give the possibility to not change it 
+            #robot.shape_competence("communication", capability=robot.competences["communication"]["capability"], distance_treshold=robot.communication_range, importance=importance/2 , dispersion=0)
+
+        
+        def interact(self, competence):
+            if self.env.goal_condition():
+                return True
+            else:
+                return False
+
+    def __init__(self, env, robot_id, size = 1, color = (0, 0, 255), init_transform = (0,0,0), max_speed = (0.0 ,0.0 , 0.0),vision_range=20, communication_range = 40, communication_period = 1, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs)
+        self.behavior_space = ["stay"]
+
+        #traversability ease in the env 
+        self.env_ease = {
+            OG_FREE_CELL_GROUP_NAME:0,
+            OG_WALL_GROUP_NAME:0,
+            OG_HIGH_WALL_GROUP_NAME:0,
+            OG_SAND_GROUP_NAME:0,
+            OG_WATER_GROUP_NAME:0,
+            OG_GRASS_GROUP_NAME:0
+        }
+
+        self.traversable_types = list(filter(lambda k: self.env_ease[k] != 0, self.env_ease)) #find the cells that the robot can eventually traverse
+        for i in range(len(self.traversable_types)):#we have the string name of the cells types, lets get the int values
+            self.traversable_types[i] = ENV_CELL_TYPES[self.traversable_types[i]]
+
+        self.shape_competence("exploration", capability=0, importance=1) #that robot can't explore, so exp capability is set to zero
+        self.shape_competence("communication", capability=0, importance=1) # as it can't move, communication purpose mvt capability is also settled to 0
+
+        #handle behavior space string
+        if not( behavior_to_use in self.behavior_space) :
+            logging.error(f"Ground robot:init -> behavior_to_use not in the behavior space.\n the behavior should be in {self.behavior_space}")
+            exit()
+        else : 
+            self.behavior = behavior_to_use
+        self.artifact = None
+        self.create_artifact()
+        self.shape_competence(self.artifact.type, capability=0, importance=0)
+    
+    def update(self, screen):
+        if not(self.env.goal_condition()):
+            self.behavior_stay()
+        else:
+            self.imdone = True
+            self.artifact.destroy()
+        super().update(screen)
+
+    def create_artifact(self):
+        self.artifact = self.BaseStationArtifact(env=self.env,
+                                                 id=len(self.env.interest_points["artifacts"]),
+                                                 name="base_station",
+                                                 coordinates=(self.transform.x, self.transform.y),
+                                                 associated_agent=self)
+        self.env.interest_points["artifacts"].append(self.artifact)

@@ -298,7 +298,7 @@ def a_star_cost(grid, start, goal, env_ease, traversable_types=[OG_FREE_CELL]):
             pvalue = int(grid[p])
             if pvalue != -1:
                 current_cell_type_name = list(ENV_CELL_TYPES.keys())[list(ENV_CELL_TYPES.values()).index(pvalue)] #return the string name of the env type
-                costs.append( 1/env_ease[current_cell_type_name] ) #we make a cost for the cell only
+                costs.append( 1/(env_ease[current_cell_type_name]+1e-8) ) #we make a cost for the cell only
             else:
                 p = costs.append(1) #p will be equal to 1 if we don't know it's value, permitting exploration
         #then we sum all the costs to get a final cost

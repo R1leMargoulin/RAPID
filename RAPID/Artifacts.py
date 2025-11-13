@@ -31,6 +31,9 @@ class Artifact:
             scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
             screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
 
+    def check_importance(self, agent): #kinda abstract
+        pass
+
     def destroy(self):
         self.status = "destroyed"
         

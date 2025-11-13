@@ -52,7 +52,8 @@ def main():
                                     vision_range=10,
                                     communication_range=20,
                                     communication_period=5,
-                                    energy_amount=1e6 #place a huge amount for no energy limitations 
+                                    energy_amount=1e6, #place a huge amount for no energy limitations 
+                                    delta_replan= 5
                                 ))
         env.agents[-1].shape_competence("exploration", 1, 1)
 
