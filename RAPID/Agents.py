@@ -815,7 +815,7 @@ class Robot(Sprite):
             step:{
                 "action":action,
                 "transform":{"x":self.transform.x, "y":self.transform.y, "w":self.transform.w},
-                "last_infos_matrix" : self.behavior_space["last_infos_matrix"]
+                "last_infos_matrix" : self.belief_space["last_infos_matrix"]
             }
         })
 
