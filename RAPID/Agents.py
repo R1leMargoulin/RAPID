@@ -126,7 +126,7 @@ class Robot(Sprite):
             self.connected_robots = []
         
         #creation of the belief space whatever the communication mode
-        self.belief_space = {"self_id": self.robot_id, "occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "artifacts":{}, "robot_informations":{}, "last_com_matrix": {self.robot_id:{self.robot_id:0}}}
+        self.belief_space = {"self_id": self.robot_id, "occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "artifacts":{}, "robot_informations":{}, "last_infos_matrix": {self.robot_id:{self.robot_id:0}}}
         self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step, "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types} }) #we add the step in order to keep the most recent known position when merging.
         if self.env.full_knowledge:
             self.belief_space["occupancy_grid"] = self.env.real_occupancy_grid
@@ -151,7 +151,7 @@ class Robot(Sprite):
             #print(f"robot {self.robot_id}: status {self.status}, target {self.target}")
 
             self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "step":self.env.step }}) #self beliefs update
-            self.belief_space["last_com_matrix"][self.robot_id][self.robot_id] = self.env.step
+            self.belief_space["last_infos_matrix"][self.robot_id][self.robot_id] = self.env.step
 
             if self.logging:
                 self.write_logs()
@@ -335,36 +335,36 @@ class Robot(Sprite):
                 self.belief_space["robot_informations"].update({robot_infos: sender_belief_space["robot_informations"][robot_infos]})
 
                 #update in infos matrix as well
-                self.belief_space["last_com_matrix"][self.robot_id].update({robot_infos : self.belief_space["robot_informations"][robot_infos]["step"]}) #test
+                self.belief_space["last_infos_matrix"][self.robot_id].update({robot_infos : self.belief_space["robot_informations"][robot_infos]["step"]}) #test
 
 
             elif sender_belief_space["robot_informations"][robot_infos]["step"] > self.belief_space["robot_informations"][robot_infos]["step"]:
                 self.belief_space["robot_informations"].update({robot_infos: sender_belief_space["robot_informations"][robot_infos]})
 
                 #update in infos matrix as well
-                self.belief_space["last_com_matrix"][self.robot_id].update({robot_infos : self.belief_space["robot_informations"][robot_infos]["step"]}) #test
+                self.belief_space["last_infos_matrix"][self.robot_id].update({robot_infos : self.belief_space["robot_informations"][robot_infos]["step"]}) #test
         #ROBOTS INFOS-----------------------------------------------------------
 
 
 
         # LAST COM MATRIX----------------------------------------------------
-        for agent in set(list(self.belief_space["last_com_matrix"].keys()) + list(sender_belief_space["last_com_matrix"].keys())): #boucle de verif s'il y a les memes agents
-            if not(agent in  self.belief_space["last_com_matrix"]):
+        for agent in set(list(self.belief_space["last_infos_matrix"].keys()) + list(sender_belief_space["last_infos_matrix"].keys())): #boucle de verif s'il y a les memes agents
+            if not(agent in  self.belief_space["last_infos_matrix"]):
                 newrobot = {agent:0}
-                for r in self.belief_space["last_com_matrix"]:
+                for r in self.belief_space["last_infos_matrix"]:
                     newrobot.update({r:0}) #on considere qu'ils n'ont jamais communique, donc on met la step 0 par defaut avec tous les agents
-                    self.belief_space["last_com_matrix"][r].update({agent:0}) #pour la symetrie
-                self.belief_space["last_com_matrix"].update({agent : newrobot})
+                    self.belief_space["last_infos_matrix"][r].update({agent:0}) #pour la symetrie
+                self.belief_space["last_infos_matrix"].update({agent : newrobot})
             
         # maj des coms du sender et reciever dans la matrice
-        self.belief_space["last_com_matrix"][sender_belief_space["self_id"]].update({self.robot_id : self.belief_space["robot_informations"][agent]["step"]})
-        self.belief_space["last_com_matrix"][self.robot_id].update({sender_belief_space["self_id"] : self.belief_space["robot_informations"][agent]["step"]})     
+        self.belief_space["last_infos_matrix"][sender_belief_space["self_id"]].update({self.robot_id : self.belief_space["robot_informations"][agent]["step"]})
+        self.belief_space["last_infos_matrix"][self.robot_id].update({sender_belief_space["self_id"] : self.belief_space["robot_informations"][agent]["step"]})     
         #fusion
-        for agent in set(list(self.belief_space["last_com_matrix"].keys()) + list(sender_belief_space["last_com_matrix"].keys())):
-            if agent in sender_belief_space["last_com_matrix"]:
-                for com in sender_belief_space["last_com_matrix"][agent]:
-                    if self.belief_space["last_com_matrix"][agent][com] < sender_belief_space["last_com_matrix"][agent][com]:
-                        self.belief_space["last_com_matrix"][agent][com] = sender_belief_space["last_com_matrix"][agent][com]
+        for agent in set(list(self.belief_space["last_infos_matrix"].keys()) + list(sender_belief_space["last_infos_matrix"].keys())):
+            if agent in sender_belief_space["last_infos_matrix"]:
+                for com in sender_belief_space["last_infos_matrix"][agent]:
+                    if self.belief_space["last_infos_matrix"][agent][com] < sender_belief_space["last_infos_matrix"][agent][com]:
+                        self.belief_space["last_infos_matrix"][agent][com] = sender_belief_space["last_infos_matrix"][agent][com]
         # LAST COM MATRIX----------------------------------------------------
             
 
@@ -776,7 +776,6 @@ class Robot(Sprite):
                 
                 utility = individual_utility / collective_sufficiency
                 #utility = ( self.competences[ip["type"]]["importance"] * individual_utility) / collective_sufficiency
-                print(ip["type"], self.competences[ip["type"]]["importance"], utility)
 
                 ip.update({"utility":utility})
                 #ip.update({"utility":collective_utility})
@@ -815,7 +814,8 @@ class Robot(Sprite):
         self.logs.update({
             step:{
                 "action":action,
-                "transform":{"x":self.transform.x, "y":self.transform.y, "w":self.transform.w}
+                "transform":{"x":self.transform.x, "y":self.transform.y, "w":self.transform.w},
+                "last_infos_matrix" : self.behavior_space["last_infos_matrix"]
             }
         })
 
@@ -965,29 +965,45 @@ class BaseStation(Robot):
         
         def check_importance(self, robot:Robot): #TODO HERE
             oldest_com_time = self.env.step
-            if self.base.robot_id in robot.belief_space["last_com_matrix"]:
-                for agent in robot.belief_space["last_com_matrix"][self.base.robot_id]:
-                    if robot.belief_space["last_com_matrix"][self.base.robot_id][agent] < oldest_com_time:
-                        oldest_com_time = robot.belief_space["last_com_matrix"][self.base.robot_id][agent]
+            if self.base.robot_id in robot.belief_space["last_infos_matrix"]:
+                for agent in robot.belief_space["last_infos_matrix"][self.base.robot_id]:
+                    if robot.belief_space["last_infos_matrix"][self.base.robot_id][agent] < oldest_com_time:
+                        oldest_com_time = robot.belief_space["last_infos_matrix"][self.base.robot_id][agent]
             
 
-            importance = np.exp(((self.env.step - oldest_com_time) - ((self.env.width + self.env.height)/2))/(np.sqrt(self.env.step))) #longest time of any agent news / mean of env size in term of width&height
-            #importance = ((self.env.step - oldest_com_time) / ((self.env.width + self.env.height)/2))
-            #importance = np.exp(self.env.step - oldest_com_time)
+            #importance = np.exp(((self.env.step - oldest_com_time) - ((self.env.width + self.env.height)/2))/(np.sqrt(self.env.step))) #longest time of any agent news / mean of env size in term of width&height
 
 
-            #TODO Faire l'aisance en fonction de la matrice
-            # total_timestamps = 0
-            # for agent in robot.belief_space["last_com_matrix"][robot.robot_id]:
-            #     if agent != self.base.robot_id:
-            #         total_timestamps += robot.belief_space["last_com_matrix"][robot.robot_id] #we add all timesteps of the other robots except the base
+            #importance = ((np.max([0.0,(self.env.step - oldest_com_time) - ((self.env.width + self.env.height)/2)]))**(1 + self.base.return_priority)) / (self.env.step) # TO KEEP
+            importance = (((np.max([0.0,(self.env.step - oldest_com_time) - ((self.env.width + self.env.height)/2)])**2))*self.base.return_priority) / self.env.step
+
+
+            # TODO : faie une vriable a l'init pour controler le temps de frequence voulu
+
+
             
-            # total_deltas_com = total_timestamps - ((len(robot.belief_space["last_com_matrix"])-1) * self.env.step)  # delte = la somme des timestamps - n * le max des steps possible (soit le temps actuel) et n = le nb de robot dans la flotte sans la base.
+
+            total_timestamps = 0
+            total_base_timestamp = 0
+            for agent in robot.belief_space["last_infos_matrix"][robot.robot_id]:
+                if agent != self.base.robot_id:
+                    total_timestamps += robot.belief_space["last_infos_matrix"][robot.robot_id][agent] #we add all timesteps of the other robots except the base
+            if self.base.robot_id in robot.belief_space["last_infos_matrix"]:
+                for agent in robot.belief_space["last_infos_matrix"][self.base.robot_id]:
+                    if agent != self.base.robot_id:
+                        total_base_timestamp += robot.belief_space["last_infos_matrix"][robot.robot_id][agent] #we add all timesteps of the other robots except the base
+            
+            total_deltas_com = total_timestamps - ((len(robot.belief_space["last_infos_matrix"])-1) * self.env.step)  # delte = la somme des timestamps - n * le max des steps possible (soit le temps actuel) et n = le nb de robot dans la flotte sans la base.
+            total_base_deltas_com = total_base_timestamp - ((len(robot.belief_space["last_infos_matrix"])-1) * self.env.step)
+
+            capability = total_deltas_com / (total_base_deltas_com + 1e-8)
             #-----------------------------------------------------------------
 
             
             
-            robot.shape_competence(self.type, capability=robot.competences[self.type]["capability"], importance=importance, distance_treshold = 2)
+            #robot.shape_competence(self.type, capability=robot.competences[self.type]["capability"], importance=importance, distance_treshold = 2)
+            robot.shape_competence(self.type, capability=capability, importance=importance, distance_treshold = 2)
+
             #TODO, for communication, maybe give the possibility to not change it 
             #robot.shape_competence("communication", capability=robot.competences["communication"]["capability"], distance_treshold=robot.communication_range, importance=importance/2 , dispersion=0)
 
@@ -998,9 +1014,10 @@ class BaseStation(Robot):
             else:
                 return False
 
-    def __init__(self, env, robot_id, size = 1, color = (0, 0, 255), init_transform = (0,0,0), max_speed = (0.0 ,0.0 , 0.0),vision_range=20, communication_range = 40, communication_period = 1, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False):
+    def __init__(self, env, robot_id, size = 1, color = (0, 0, 255), init_transform = (0,0,0), max_speed = (0.0 ,0.0 , 0.0),vision_range=20, communication_range = 40, communication_period = 1, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False, return_priority=1):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs)
         self.behavior_space = ["stay"]
+        self.return_priority = return_priority
 
         #traversability ease in the env 
         self.env_ease = {
