@@ -12,6 +12,8 @@ from .grid_variables import *
 import numpy as np
 import random
 import logging
+from copy import deepcopy
+
 # from mergedeep import merge
 
 #TODO : les comportements sont EXACTEMENT les memes dans ground ou Aerial, je pourrais tout mettre dans robot...
@@ -815,7 +817,7 @@ class Robot(Sprite):
             step:{
                 "action":action,
                 "transform":{"x":self.transform.x, "y":self.transform.y, "w":self.transform.w},
-                "last_infos_matrix" : self.belief_space["last_infos_matrix"]
+                "last_infos_matrix" : deepcopy(self.belief_space["last_infos_matrix"])
             }
         })
 
