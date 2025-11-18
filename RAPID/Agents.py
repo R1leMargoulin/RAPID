@@ -973,11 +973,12 @@ class BaseStation(Robot):
                         oldest_com_time = robot.belief_space["last_infos_matrix"][self.base.robot_id][agent]
             
 
+            importance = np.exp((np.max([0.0,(self.env.step - oldest_com_time)])*self.base.return_priority )- (((self.env.width + self.env.height)/2))) /self.env.step #/(np.sqrt(self.env.step))) #longest time of any agent news / mean of env size in term of width&height
             #importance = np.exp(((self.env.step - oldest_com_time) - ((self.env.width + self.env.height)/2))/(np.sqrt(self.env.step))) #longest time of any agent news / mean of env size in term of width&height
 
 
             #importance = ((np.max([0.0,(self.env.step - oldest_com_time) - ((self.env.width + self.env.height)/2)]))**(1 + self.base.return_priority)) / (self.env.step) # TO KEEP
-            importance = (((np.max([0.0,(self.env.step - oldest_com_time) - ((self.env.width + self.env.height)/2)])**2))*self.base.return_priority) / self.env.step
+            #importance = ((np.max([0.0,(self.env.step - oldest_com_time)]) - ((self.env.width + self.env.height)/2+self.base.return_priority))**2) / self.env.step
 
 
             # TODO : faie une vriable a l'init pour controler le temps de frequence voulu
