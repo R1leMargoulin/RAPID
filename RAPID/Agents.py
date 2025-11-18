@@ -706,8 +706,8 @@ class Robot(Sprite):
             #--------------------------------------
             #------------------------------------------------------------------------------------------
 
-            #if we have no interest point anymore (or communication only), we consider the mission done.*
-            if len(interest_points) == 0:
+            #if we have no interest point anymore (or communication or base_station only), we consider the mission done.*
+            if len(interest_points) == 0 or (len(interest_points)==1 and interest_points[0]["type"] == "base_station_com"):
                 if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
                     self.target = (int(self.init_transform.x),int(self.init_transform.y))
                     self.last_plan_time = self.env.step
@@ -723,12 +723,13 @@ class Robot(Sprite):
             for robot_id in self.belief_space["robot_informations"]:
                 if robot_id != self.robot_id: #iamhere
                     if self.env.step - self.belief_space["robot_informations"][robot_id]["step"] <= (self.env.width) : #limite arbitraire pour voir si la position n'est pas trop obsolete, sinon on ne la prendra pas en compte, TODO : mettre ca en parametrable propre
-                        robots_pos_list.append(self.belief_space["robot_informations"][robot_id]["position"])
+                        if euclidian_distance((self.init_transform.x, self.init_transform.y) ,self.belief_space["robot_informations"][robot_id]["position"]) >=  self.competences["communication"]["distance_treshold"]:
+                            robots_pos_list.append(self.belief_space["robot_informations"][robot_id]["position"])
 
             communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
             for cc in communication_clusters:
-                    if euclidian_distance( (self.init_transform.x, self.init_transform.y) , cc) >= self.competences["communication"]["distance_treshold"]: #we verify that the distance treshold is respected
-                        interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
+                    #if euclidian_distance( (self.init_transform.x, self.init_transform.y) , cc) >= self.competences["communication"]["distance_treshold"]: #we verify that the distance treshold is respected
+                    interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
             #--------------------------------------        
 
             #utility calculation-----------------------------------------------------------------------            
@@ -1013,6 +1014,8 @@ class BaseStation(Robot):
         
         def interact(self, competence):
             if self.env.goal_condition():
+                self.base.imdone = True
+                self.destroy()
                 return True
             else:
                 return False
@@ -1050,11 +1053,16 @@ class BaseStation(Robot):
         self.shape_competence(self.artifact.type, capability=0, importance=0)
     
     def update(self, screen):
-        if not(self.env.goal_condition()):
+        if not(self.imdone):
             self.behavior_stay()
-        else:
-            self.imdone = True
-            self.artifact.destroy()
+            staying = 0
+            for r in self.env.agents:
+                if self.robot_id != r.robot_id:
+                    if r.imdone:
+                        staying +=1
+            if staying != 0:
+                self.artifact.destroy()
+                self.imdone = True
         super().update(screen)
 
     def create_artifact(self):
