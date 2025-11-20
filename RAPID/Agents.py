@@ -154,9 +154,6 @@ class Robot(Sprite):
 
             self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "step":self.env.step }}) #self beliefs update
             self.belief_space["last_infos_matrix"][self.robot_id][self.robot_id] = self.env.step
-
-            if self.logging:
-                self.write_logs()
                 
             if self.env.render:
                 scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
@@ -175,6 +172,9 @@ class Robot(Sprite):
                 self.action_to_perform = None
                 self.new_communication = False
                 self.last_plan_time = self.env.step
+            
+            if self.logging:
+                self.write_logs()
             
             #print(self.robot_id, self.action_to_perform, self.target, (int(self.transform.x), int(self.transform.y)))
 
@@ -818,7 +818,8 @@ class Robot(Sprite):
             step:{
                 "action":action,
                 "transform":{"x":self.transform.x, "y":self.transform.y, "w":self.transform.w},
-                "last_infos_matrix" : deepcopy(self.belief_space["last_infos_matrix"])
+                "last_infos_matrix" : deepcopy(self.belief_space["last_infos_matrix"]),
+                "target": self.target
             }
         })
 
@@ -868,7 +869,8 @@ class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
                     self.local_frontier_behavior()
                 case "action_selection":
                     self.behavior_action_selection()
-        super().update(screen)
+            super().update(screen)
+        
 
     def move(self, vector_x, vector_y):
         """
