@@ -13,13 +13,17 @@ SCREEN_WIDTH = 100
 SCREEN_HEIGHT = 100
 BACKGROUND_COLOR = (200, 200, 200)
 
-ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/examples/env_images_example/cave_200_200.png"# CHANGE THE PATH
+ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/examples/env_images_example/labyrinth_100_100.png"# CHANGE THE PATH
 
-NB_GROUND_AGENTS = 6
-NB_AERIAL_AGENTS = 2
+video_saving_path = "/home/erwan/Documents/RAPID/tests/records/4grounds/"
+#video_saving_path = None
 
-pos_list = [[85,190,0], [95,190,0], [105,190,0], [115,190,0], [125,190,0], [100,180,0]]
-#pos_list = [[1,5,0], [1,10,0], [5,5,0], [5,10,0]]
+NB_GROUND_AGENTS = 4
+NB_AERIAL_AGENTS = 0
+
+#pos_list = [[85,190,0], [95,190,0], [105,190,0], [115,190,0], [125,190,0], [100,180,0]]
+pos_list = [[1,5,0], [1,10,0], [5,5,0], [5,10,0]]
+aerial_pos_list = [[3,5,0], [3,10,0], [3,5,0], [3,10,0]]
 #pos_list = None
 
 img = Image.open(ENV_IMAGE_PATH)
@@ -31,7 +35,7 @@ def main():
     
     #env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img, amount_of_agents_goal=2, scaling_factor=2)
     #env = ExplorationEnvironment(render= True, background_color= BACKGROUND_COLOR, env_image=img, full_knowledge=False, scaling_factor=4)
-    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, env_image=img, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=4, communication_mode="limited", render=True, end_at_full_exploation=False)
+    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, env_image=img, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=4, communication_mode="limited", render=True, end_at_full_exploation=False, save_img_steps=video_saving_path)
 
 
     for i in range(NB_GROUND_AGENTS):
@@ -50,31 +54,33 @@ def main():
                                     max_speed=(1,1,0.5), #warning : adapt max speeds if you use aerial or ground robots
                                     behavior_to_use="action_selection", 
                                     vision_range=10,
-                                    communication_range=20,
+                                    communication_range=30,
                                     communication_period=5,
                                     energy_amount=1e6, #place a huge amount for no energy limitations 
                                     delta_replan= 5
                                 ))
         env.agents[-1].shape_competence("exploration", 1, 1)
 
-    # for i in range(NB_AERIAL_AGENTS):
-    #     #random init position
-    #     init_pos = (random.randrange(0,env.width), random.randrange(0,env.height), random.uniform(0, 2*3.14)) 
-    #     #init_pos = (125, 190, 0)
+    for i in range(NB_AERIAL_AGENTS):
+        #random init position
+        if aerial_pos_list :
+            init_pos = aerial_pos_list[i]
+        else:
+            init_pos = (random.randrange(0,env.width), random.randrange(0,env.height), random.uniform(0, 2*3.14)) 
 
 
-    #     env.add_agent(Agents.Aerial(
-    #                                 env, 
-    #                                 robot_id=len(env.agents)+1, 
-    #                                 init_transform=init_pos,
-    #                                 max_speed=(1,1,0.5), #warning : adapt max speeds if you use aerial or ground robots
-    #                                 behavior_to_use="minpos", 
-    #                                 vision_range=10,
-    #                                 communication_range=30,
-    #                                 communication_period=10,
-    #                                 energy_amount=1e6 #place a huge amount for no energy limitations 
-    #                             ))
-    #     env.agents[-1].shape_competence("exploration", 1, 1)
+        env.add_agent(Agents.Aerial(
+                                    env, 
+                                    robot_id=len(env.agents)+1, 
+                                    init_transform=init_pos,
+                                    max_speed=(1,1,0.5), #warning : adapt max speeds if you use aerial or ground robots
+                                    behavior_to_use="minpos", 
+                                    vision_range=10,
+                                    communication_range=30,
+                                    communication_period=10,
+                                    energy_amount=1e6 #place a huge amount for no energy limitations 
+                                ))
+        env.agents[-1].shape_competence("exploration", 1, 1)
         
     
     env.run()

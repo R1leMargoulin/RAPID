@@ -18,7 +18,7 @@ COMMUNICATION_MODE_LIST = ["blackboard", "limited"]
 
 
 class Environment():
-    def __init__(self, render = True, width:int=100, height:int=100, background_color = (200,200,200), caption = f'RAPID', env_image:Image.Image = None, full_knowledge:bool=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard"):
+    def __init__(self, render = True, width:int=100, height:int=100, background_color = (200,200,200), caption = f'RAPID', env_image:Image.Image = None, full_knowledge:bool=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", save_img_steps = None):
         """
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         Params : 
@@ -62,6 +62,8 @@ class Environment():
 
         self.obstacles_group = pygame.sprite.Group()
         self.agent_group = pygame.sprite.Group()
+
+        self.save_img_steps = save_img_steps
 
         if(env_image):
             self.width = env_image.size[0]
@@ -123,6 +125,9 @@ class Environment():
         """
         will update all agents in the self.agents object
         """
+        if self.save_img_steps != None and self.render:
+            pygame.image.save(self.screen, self.save_img_steps+str(self.step)+".png")
+            
         if self.render:
             self.screen.fill(self.background_color)
 
@@ -147,6 +152,7 @@ class Environment():
 
         if self.communication_mode == "limited":
             self.limited_communication_update()
+
             
     def add_agent(self, agent):
         self.agents.append(agent)
@@ -244,7 +250,7 @@ class Environment():
     
 
 class TargetPointEnvironment(Environment):
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, scaling_factor:int=1, communication_mode="blackboard", target_point:tuple[int,int]=None, amount_of_agents_goal=1):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, scaling_factor:int=1, communication_mode="blackboard", target_point:tuple[int,int]=None, amount_of_agents_goal=1, save_img_steps = None):
         """"
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         In this Environment, the Agents has to reach a target point in order to complete the mission.
@@ -265,7 +271,7 @@ class TargetPointEnvironment(Environment):
         - amount_of_agents:int (default : 1) : amount of agents that needs to reach the point in order to complete the mission.
         """
 
-        super().__init__(render, width, height, background_color, caption, env_image, limit_of_steps=limit_of_steps, scaling_factor=scaling_factor, communication_mode=communication_mode)
+        super().__init__(render, width, height, background_color, caption, env_image, limit_of_steps=limit_of_steps, scaling_factor=scaling_factor, communication_mode=communication_mode, save_img_steps=save_img_steps)
         if target_point :
             self.init_target_point(x=target_point[0], y=target_point[1])
         else : #s'il n'y a pas de target point, on en génère un aléatoirement:
@@ -314,7 +320,7 @@ class TargetPointEnvironment(Environment):
             return has_to_stop
 
 class ExplorationEnvironment(Environment):
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", exploration_proportion_goal=0.995, end_at_full_exploation=True):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", exploration_proportion_goal=0.995, end_at_full_exploation=True, save_img_steps = None):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
@@ -335,7 +341,7 @@ class ExplorationEnvironment(Environment):
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
         - end_at_full_exploation:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when the exploration proportion goal is reached.
         """
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode, save_img_steps=save_img_steps)
         exp_map = np.zeros((self.width, self.height))
         self.interest_points.update({"exploration_map":exp_map})
         #on va pas mettre de fog sur les murs parce que la vision ne les traverse pas, si on a des murs plus épais que 2, alors il y aura toujours de la fog.
@@ -370,6 +376,7 @@ class ExplorationEnvironment(Environment):
         if self.render:
             self.draw_fog()
         pass
+        
 
     def draw_fog(self):
         unexplored_poses = np.where(np.isin(self.interest_points["exploration_map"], self.explorable_zone_types))#check for each element of the Occ grid if it's an explorable zone.
@@ -407,7 +414,7 @@ class ExplorationEnvironment(Environment):
         for cell in cells:
             self.interest_points["exploration_map"][cell[0]-1][cell[1]-1] = 1
 
-class MineClearingEnvironment(Environment): #TODO PREPARER L ENVIRONMENT
+class MineClearingEnvironment(Environment): 
     class Mine(Artifact):
         def __init__(self, env, id, name, type, coordinates, explosion_proba=0.01, size=1, color = (255,0,0)):
             super().__init__(env, id, name, type, coordinates, size, color)
@@ -437,7 +444,7 @@ class MineClearingEnvironment(Environment): #TODO PREPARER L ENVIRONMENT
             else:
                 return False
 
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", end_at_full_clear = True, fog = True):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", end_at_full_clear = True, fog = True, save_img_steps = None):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
@@ -458,7 +465,7 @@ class MineClearingEnvironment(Environment): #TODO PREPARER L ENVIRONMENT
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
         - end_at_full_exploation:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when the exploration proportion goal is reached.
         """
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode, save_img_steps=save_img_steps)
 
         self.end_at_full_clear = end_at_full_clear
 
@@ -534,7 +541,7 @@ class MineClearingEnvironment(Environment): #TODO PREPARER L ENVIRONMENT
         agent.shape_competence("mine", 0.9, 1.0) #adding default mine competence values
         return super().add_agent(agent)
     
-class WasteCleaningEnvironment(Environment): #TODO PREPARER L ENVIRONMENT
+class WasteCleaningEnvironment(Environment): 
     class Waste(Artifact):
         def __init__(self, env, id, name, type, coordinates, size=1, color = (255,0,0)):
             super().__init__(env, id, name, type, coordinates, size, color)
@@ -554,7 +561,7 @@ class WasteCleaningEnvironment(Environment): #TODO PREPARER L ENVIRONMENT
             else:
                 return False
 
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", end_at_full_clear = True, fog = True):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", end_at_full_clear = True, fog = True, save_img_steps = None):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
@@ -575,7 +582,7 @@ class WasteCleaningEnvironment(Environment): #TODO PREPARER L ENVIRONMENT
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
         - end_at_full_exploation:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when the exploration proportion goal is reached.
         """
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode, save_img_steps=save_img_steps)
 
         self.end_at_full_clear = end_at_full_clear
 
