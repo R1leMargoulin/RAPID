@@ -144,6 +144,27 @@ class Robot(Sprite):
         self.is_active = True
 
     def update(self, screen):
+        self.sense()#first of all sense the env.
+        self.belief_transfer() #after sensing, transfer beliefs if applicable
+        if np.any(self.target):
+            if self.path_to_target: #If we have a path to our target, we continue this path.
+                self.navigate_through_target_path()
+                pass
+            else: #if we don't have any path, then compute it with our target
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
+                if not(self.path_to_target):
+                    self.target = None
+                    self.action_to_perform = None
+        elif self.action_to_perform != None:
+            self.perform_target_action()
+        else:
+            self.behave() #in order to determine what to do.
+            if not self.imdone:
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation #TODO c'est un test ca
+                self.navigate_through_target_path() #TODO c'est un test ca
+
+
+
         if self.env.communication_mode == "limited":
             if self.env.render:
                 halo_scaled_rect = Rect(self.communication_halo.rect.x * self.env.scaling_factor, self.communication_halo.rect.y * self.env.scaling_factor, self.communication_halo.rect.width * self.env.scaling_factor, self.communication_halo.rect.height * self.env.scaling_factor)
@@ -177,6 +198,9 @@ class Robot(Sprite):
                 self.write_logs()
             
             #print(self.robot_id, self.action_to_perform, self.target, (int(self.transform.x), int(self.transform.y)))
+
+    def behave(self):
+        raise Exception(f"The behave methot has to be redefined for the agent {self.robot_id} of type {self.type} ")
 
     def finish(self):
         self.imdone = True
@@ -438,37 +462,6 @@ class Robot(Sprite):
     def behavior_stay(self):
         self.belief_transfer()
 
-    def behavior_target_djikstra(self):
-        self.speed.x = 1
-        self.speed.y = 1
-
-        if OG_TARGET_POINT in self.belief_space["occupancy_grid"]:
-            tp_coords = np.where(self.belief_space["occupancy_grid"] == OG_TARGET_POINT)
-            if not "djikstra" in self.belief_space:
-                self.belief_space.update({"djikstra": djikstra(self.belief_space["occupancy_grid"],(tp_coords[0][0], tp_coords[1][0]))}) #fonctionne en full knowledge de la map.
-            else : 
-                #determination de la cellule discrete de la belief base sur laquelle on est:
-                position_actuelle = (int(self.transform.x), int(self.transform.y)) 
-
-                # Directions possibles (4-connectées)
-                directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-                voisins = []
-
-                for direction in directions: # voisins potentiels
-                    voisin = (position_actuelle[0] + direction[0], position_actuelle[1] + direction[1])
-
-                    # Vérifier si le voisin est valide (pas d'obstacle et a l'inerieur de l'env)
-                    if 0 <= voisin[0] < self.belief_space["occupancy_grid"].shape[0] and 0 <= voisin[1] < self.belief_space["occupancy_grid"].shape[1] and self.belief_space["occupancy_grid"][voisin] in self.traversable_types:
-                        voisins.append(voisin)
-                        
-                # Trouver le voisin avec le coût le plus bas dans la distance_map
-                if voisins:
-                    meilleur_voisin = min(voisins, key=lambda v: self.belief_space["djikstra"][v])
-                    #meilleur_voisin = (meilleur_voisin[1], meilleur_voisin [0]) #repassage des coords numpy à mes coordonnees d'environment
-                    direction_vers_voisin = (meilleur_voisin[0] - position_actuelle[0], meilleur_voisin[1] - position_actuelle[1]) #TODO repasser en coordonnees continues
-
-                    self.move(direction_vers_voisin[0], direction_vers_voisin[1])
-
     def nearest_frontier_search_behavior(self):
         """
         compute a greedy nearest frontier algorithm with an A* path search to the nearest frontier for each agent.
@@ -515,33 +508,24 @@ class Robot(Sprite):
         """
 
         #first of all, sense the environment
-        self.sense()#first of all sense the env.
-        self.belief_transfer() #after sensing, transfer beliefs.
-        if np.any(self.target):#si on a une target
-            if self.path_to_target: #If we have a path to our target, we continue this path.
-                self.navigate_through_target_path()
-                pass
-            else: #if we don't have any path, then compute it with our target
-                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
+       
+        #frontier detection
+        frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=self.traversable_types) #from utils
 
-        else: #sinon on va chercher les frontières.
-            #frontier detection
-            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=self.traversable_types) #from utils
-
-            if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
-                if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
-                    self.target = (int(self.init_transform.x),int(self.init_transform.y))
-                    self.last_plan_time = self.env.step
-                else:
-                    self.finish()
-            else:
-                cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, int(self.vision_range/2), traversable_types=self.traversable_types) #from utils : make cluster fontiers
-
-                pos_list_float = [pos["position"] for pos in list(self.belief_space["robot_informations"].values())] #list of float xy position of all robots
-                pos_list_int = [(int(x), int(y)) for x,y in pos_list_float] #same list with ints.
-                weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width, traversable_types=self.traversable_types) #the penalty for a frontier cluster depends of the size of the env.
-                self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
+        if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
+            if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
+                self.target = (int(self.init_transform.x),int(self.init_transform.y))
                 self.last_plan_time = self.env.step
+            else:
+                self.finish()
+        else:
+            cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, int(self.vision_range/2), traversable_types=self.traversable_types) #from utils : make cluster fontiers
+
+            pos_list_float = [pos["position"] for pos in list(self.belief_space["robot_informations"].values())] #list of float xy position of all robots
+            pos_list_int = [(int(x), int(y)) for x,y in pos_list_float] #same list with ints.
+            weighted_clusters = wavefront_propagation_algorithm(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=self.env.width, traversable_types=self.traversable_types) #the penalty for a frontier cluster depends of the size of the env.
+            self.target = min(weighted_clusters, key=weighted_clusters.get) #then we take the cluster with the minimum cost
+            self.last_plan_time = self.env.step
 
     def local_frontier_behavior(self):
         """
@@ -557,77 +541,64 @@ class Robot(Sprite):
 
         #SENSING
         self.sense()
+        #LOCAL FRONTIER DETECTION -----------------------------------------------------
+        vision_range = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
+        local_frontier_list = []
+        for cell in vision_range:
+            if not(self.belief_space["occupancy_grid"][cell[0]][cell[1]] in self.traversable_types):
+                #if it's a wall, we skip this cell.
+                continue
 
-        if np.any(self.target):#if we have a target target navigate (A*) to the target if there is one (set a trace at every update even when navigating)
-            if self.path_to_target: #If we have a path to our target, we continue this path.
-                self.navigate_through_target_path() #continue on the target path
-                if (int(self.transform.x), int(self.transform.y)) not in self.belief_space["traces"].keys():
-                    self.belief_space["traces"].update({(int(self.transform.x), int(self.transform.y)):self.env.step})#add the new current position to the traces
+            cell_neighbors = get_direct_neighbors(cell, width=self.env.width, height=self.env.height) #improvable : pour plus de realisme on pourrait mettre la taille du belief space plutot que directement l'env.
 
-            else: #if we don't have any path,only a target, then compute it with A* for our target                
-                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
-                if not self.path_to_target:
-                    #self.behavior_diff_move_random()
-                    self.target = None
-        else:
-            #LOCAL FRONTIER DETECTION -----------------------------------------------------
-            vision_range = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
-            local_frontier_list = []
-            for cell in vision_range:
-                if not(self.belief_space["occupancy_grid"][cell[0]][cell[1]] in self.traversable_types):
-                    #if it's a wall, we skip this cell.
-                    continue
-
-                cell_neighbors = get_direct_neighbors(cell, width=self.env.width, height=self.env.height) #improvable : pour plus de realisme on pourrait mettre la taille du belief space plutot que directement l'env.
-
-                for cn in cell_neighbors: #maximum 4 neighbors per cell
-                    if self.belief_space["occupancy_grid"][cn[0]][cn[1]] == OG_UNKNOWN_CELL: #if the cell has an unknown cell as neighbor, it becomes a frontier.
-                        #we add the cell to the frontier list if it is a local frontier.
-                        local_frontier_list.append(cell)
-                        break
-                        
-            #-------------------------------------------------------------------------------
-            if local_frontier_list:
-            #go to the most far local frontier from the traces
-                max_dist_of_lf = 0
-                selected_frontier = None
-                mean_traces_coordinates = (int(np.mean([c[0] for c in self.belief_space["traces"].keys()])), int(np.mean([c[1] for c in self.belief_space["traces"].keys()]))) #mean coordinates of all the traces.
-                for lf in local_frontier_list:
-                    if euclidian_distance(lf, mean_traces_coordinates)> max_dist_of_lf: #if the distance (we take euclidian) of the LF from the robot is greater, then we select it
-                        max_dist_of_lf = euclidian_distance(lf, mean_traces_coordinates)
-                        selected_frontier = lf
-                self.target = selected_frontier
-            else: #else if there is no frontier:
-                if (int(self.transform.x), int(self.transform.y)) == (int(self.init_transform.x), int(self.init_transform.y)): #if we are back at the init pose, the robot has finished.
-                    if self.belief_space["second_chance_usage"] == True:
-                        self.finish()
-                    else:
-                        #we use a second chance:
-                        self.belief_space["second_chance_usage"] = True
-                        
-                        mean_traces_coordinates = (int(np.mean([c[0] for c in self.belief_space["traces"].keys()])), int(np.mean([c[1] for c in self.belief_space["traces"].keys()]))) #mean coordinates of all the traces.
-                        max_dist = 0
-                        second_chance_target = None
-                        for cell in vision_range:
-                            if self.belief_space["occupancy_grid"][cell[0]][cell[1]] != OG_WALL:
-                                if euclidian_distance(cell, mean_traces_coordinates)> max_dist:
-                                    max_dist = euclidian_distance(cell, mean_traces_coordinates)
-                                    second_chance_target = cell
-                        self.target = second_chance_target
-                        self.last_plan_time = self.env.step
-
-                else: #else go back to the previous trace -> set it as target
-                    # pour les cases voisine de distance ou le robot à pu se déplacer sur un step de simulation (sur une periode de temps donné, on récolte les voisins)
-                    move_possible_neighbors =  self.get_neighbors_pixels(distance=int(max(4*self.max_speed.x, 4*self.max_speed.y)), stop_at_wall=True, self_inclusion=False)
-                    chosen_trace = None
-                    oldest_timestep = np.inf
-                    for cell in move_possible_neighbors : #on va prendre la trace la plus ancienne possible dans ce champs
-                        if cell in self.belief_space["traces"]: #check if the cell is registered in the traces or we would have an error
-                            if self.belief_space["traces"][cell] < oldest_timestep:
-                                chosen_trace = cell
-                                oldest_timestep = self.belief_space["traces"][cell]
-                    self.target = chosen_trace #on definit la trace la plus ancienne dans le rayon restreint défini.
+            for cn in cell_neighbors: #maximum 4 neighbors per cell
+                if self.belief_space["occupancy_grid"][cn[0]][cn[1]] == OG_UNKNOWN_CELL: #if the cell has an unknown cell as neighbor, it becomes a frontier.
+                    #we add the cell to the frontier list if it is a local frontier.
+                    local_frontier_list.append(cell)
+                    break
+                    
+        #-------------------------------------------------------------------------------
+        if local_frontier_list:
+        #go to the most far local frontier from the traces
+            max_dist_of_lf = 0
+            selected_frontier = None
+            mean_traces_coordinates = (int(np.mean([c[0] for c in self.belief_space["traces"].keys()])), int(np.mean([c[1] for c in self.belief_space["traces"].keys()]))) #mean coordinates of all the traces.
+            for lf in local_frontier_list:
+                if euclidian_distance(lf, mean_traces_coordinates)> max_dist_of_lf: #if the distance (we take euclidian) of the LF from the robot is greater, then we select it
+                    max_dist_of_lf = euclidian_distance(lf, mean_traces_coordinates)
+                    selected_frontier = lf
+            self.target = selected_frontier
+        else: #else if there is no frontier:
+            if (int(self.transform.x), int(self.transform.y)) == (int(self.init_transform.x), int(self.init_transform.y)): #if we are back at the init pose, the robot has finished.
+                if self.belief_space["second_chance_usage"] == True:
+                    self.finish()
+                else:
+                    #we use a second chance:
+                    self.belief_space["second_chance_usage"] = True
+                    
+                    mean_traces_coordinates = (int(np.mean([c[0] for c in self.belief_space["traces"].keys()])), int(np.mean([c[1] for c in self.belief_space["traces"].keys()]))) #mean coordinates of all the traces.
+                    max_dist = 0
+                    second_chance_target = None
+                    for cell in vision_range:
+                        if self.belief_space["occupancy_grid"][cell[0]][cell[1]] != OG_WALL:
+                            if euclidian_distance(cell, mean_traces_coordinates)> max_dist:
+                                max_dist = euclidian_distance(cell, mean_traces_coordinates)
+                                second_chance_target = cell
+                    self.target = second_chance_target
                     self.last_plan_time = self.env.step
+
+            else: #else go back to the previous trace -> set it as target
+                # pour les cases voisine de distance ou le robot à pu se déplacer sur un step de simulation (sur une periode de temps donné, on récolte les voisins)
+                move_possible_neighbors =  self.get_neighbors_pixels(distance=int(max(4*self.max_speed.x, 4*self.max_speed.y)), stop_at_wall=True, self_inclusion=False)
+                chosen_trace = None
+                oldest_timestep = np.inf
+                for cell in move_possible_neighbors : #on va prendre la trace la plus ancienne possible dans ce champs
+                    if cell in self.belief_space["traces"]: #check if the cell is registered in the traces or we would have an error
+                        if self.belief_space["traces"][cell] < oldest_timestep:
+                            chosen_trace = cell
+                            oldest_timestep = self.belief_space["traces"][cell]
+                self.target = chosen_trace #on definit la trace la plus ancienne dans le rayon restreint défini.
+                self.last_plan_time = self.env.step
 
         self.belief_transfer() #belief transfer management.
     
@@ -658,154 +629,135 @@ class Robot(Sprite):
             self.path_to_target = None #forget the target and the path
             self.target = None
 
-    def behavior_action_selection(self): #TODO
-        #first of all, sense the environment
-        self.sense()#first of all sense the env.
-        self.belief_transfer() #after sensing, transfer beliefs if applicable
-
+    def behavior_action_selection(self): 
         #reshape importance of communication depending of the time from last communication:
         #print(f"robot {self.robot_id} : last com : {self.time_from_last_communication}")
         self.shape_competence("communication", self.competences["communication"]["capability"], np.exp( self.time_from_last_communication/ self.env.width), distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
 
-        if np.any(self.target):
-            if self.path_to_target: #If we have a path to our target, we continue this path.
-                self.navigate_through_target_path()
-                pass
-            else: #if we don't have any path, then compute it with our target
-                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
-                if not(self.path_to_target):
-                    self.target = None
-                    self.action_to_perform = None
-                
-        
-        elif self.action_to_perform != None:
-            self.perform_target_action()
+        interest_points = [] #we will add all of our interest points here
+        #interest points identification -----------------------------------------------------------
+        #exploration frontiers ----------------------------
+        frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=self.traversable_types) #from utils
+        if list(frontiers) != None or len(list(frontiers))!=0:
+            cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, int(self.vision_range/2), traversable_types=self.traversable_types) #from utils : make cluster of fontiers to reduce computation time
+            for cc in cluster_centers:
+                interest_points.append({"type":"exploration","coordinates":cc})
+        #--------------------------------------
 
-        else:
-            interest_points = [] #we will add all of our interest points here
-            #interest points identification -----------------------------------------------------------
-            #exploration frontiers ----------------------------
-            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=self.traversable_types) #from utils
-            if list(frontiers) != None or len(list(frontiers))!=0:
-                cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, int(self.vision_range/2), traversable_types=self.traversable_types) #from utils : make cluster of fontiers to reduce computation time
-                for cc in cluster_centers:
-                    interest_points.append({"type":"exploration","coordinates":cc})
-            #--------------------------------------
+        #Artifacts ----------------------------
+        if "artifacts" in self.belief_space:
+            for art in self.belief_space["artifacts"]:
+                #IMPORTANCE CHECK
+                if art +1 <= len(self.env.interest_points["artifacts"]): #ouais c'est degueu
+                    self.env.interest_points["artifacts"][art].check_importance(self) #TODO test this
 
-            #Artifacts ----------------------------
-            if "artifacts" in self.belief_space:
-                for art in self.belief_space["artifacts"]:
-                    #IMPORTANCE CHECK
-                    if art +1 <= len(self.env.interest_points["artifacts"]): #ouais c'est degueu
-                        self.env.interest_points["artifacts"][art].check_importance(self) #TODO test this
+                #INTEREST POINT CREATION
+                if self.belief_space["artifacts"][art]["status"] not in ["done", "destroyed"] :
+                    if euclidian_distance( (self.init_transform.x, self.init_transform.y) , self.belief_space["artifacts"][art]["coordinates"]) >= self.competences[self.belief_space["artifacts"][art]["type"]]["distance_treshold"]: #we verify that the treshold is respected
+                        interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,"coordinates":self.belief_space["artifacts"][art]["coordinates"], "id":art})#adding directly the artifacts in the interest points
+        #--------------------------------------
+        #------------------------------------------------------------------------------------------
 
-                    #INTEREST POINT CREATION
-                    if self.belief_space["artifacts"][art]["status"] not in ["done", "destroyed"] :
-                        if euclidian_distance( (self.init_transform.x, self.init_transform.y) , self.belief_space["artifacts"][art]["coordinates"]) >= self.competences[self.belief_space["artifacts"][art]["type"]]["distance_treshold"]: #we verify that the treshold is respected
-                            interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,"coordinates":self.belief_space["artifacts"][art]["coordinates"], "id":art})#adding directly the artifacts in the interest points
-            #--------------------------------------
-            #------------------------------------------------------------------------------------------
-
-            #if we have no interest point anymore (or communication or base_station only), we consider the mission done.*
-            if len(interest_points) == 0 or (len(interest_points)==1 and interest_points[0]["type"] == "base_station_com"):
-                if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
-                    self.target = (int(self.init_transform.x),int(self.init_transform.y))
-                    self.last_plan_time = self.env.step
-                    return None
-                else:
-                    self.finish()
-                    return None
-
-            #barycentre de communications----------
-            #liste de toutes les positions des robots
-
-            robots_pos_list = [] #list of float xy position of all robots
-            for robot_id in self.belief_space["robot_informations"]:
-                if robot_id != self.robot_id: #iamhere
-                    if self.env.step - self.belief_space["robot_informations"][robot_id]["step"] <= (self.env.width) : #limite arbitraire pour voir si la position n'est pas trop obsolete, sinon on ne la prendra pas en compte, TODO : mettre ca en parametrable propre
-                        if euclidian_distance((self.init_transform.x, self.init_transform.y) ,self.belief_space["robot_informations"][robot_id]["position"]) >=  self.competences["communication"]["distance_treshold"]:
-                            robots_pos_list.append(self.belief_space["robot_informations"][robot_id]["position"])
-
-            communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
-            for cc in communication_clusters:
-                    #if euclidian_distance( (self.init_transform.x, self.init_transform.y) , cc) >= self.competences["communication"]["distance_treshold"]: #we verify that the distance treshold is respected
-                    interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
-            #--------------------------------------        
-
-            #utility calculation-----------------------------------------------------------------------            
-            for ip in interest_points:
-                #individual utility
-                #cost = euclidian_distance(ip["coordinates"], (self.transform.x, self.transform.y)) #euclidian distance for the moment (C in the model)
-                cost = a_star_cost(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.env_ease, traversable_types=self.traversable_types)
-                if cost == 0:
-                    cost = 1e-5 #avoid divide by 0
-
-                capability = self.competences[ip["type"]]["capability"] #I'll cnsider that the type of the IP will be named the same than the competence (mu in the model)
-
-                individual_utility = capability/cost
-
-                #global feasability
-                other_individual_values = np.array([])
-                for robot in self.belief_space["robot_informations"]: #the key value of this dict is robot id
-                    if len(self.belief_space["robot_informations"]) <=1:
-                        other_individual_values = np.append(other_individual_values, 1.0)
-                        break
-                    if robot == self.robot_id :
-                        continue
-                    else:
-                        ocost = euclidian_distance(ip["coordinates"], self.belief_space["robot_informations"][robot]["position"])
-                        #TODO TEST ICI la rapidite
-                        #ligne de l'enfer sorry
-                        other_robot_pos = (int(self.belief_space["robot_informations"][robot]["position"][0]),int(self.belief_space["robot_informations"][robot]["position"][1]))
-                        ocost = a_star_cost(self.belief_space["occupancy_grid"], other_robot_pos, (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.belief_space["robot_informations"][robot]["env_ease"], traversable_types=self.belief_space["robot_informations"][robot]["traversable_types"])
-                        if ocost == 0:
-                            ocost = 1e-5 #avoid divide by 0
-
-                        ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]]["capability"]
-
-                        other_individual_values = np.append(other_individual_values, ocapability/ocost) #capacite des autres sur l'ip
-                #global_feasability = float(np.mean(other_individual_values))
-                collective_sufficiency = float(np.max(other_individual_values))
-
-                #collective utility
-                #TODO : check if that works STOPPEDHERE
-                #old backup #collective_utility = individual_utility - global_feasability * self.competences[ip["type"]]["dispersion"]
-                #backup #collective_utility = individual_utility / (global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )
-                #collective_utility = 1 / (4*np.sqrt(global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )+0.000001) #+0.000001 parce que je ne comprends pas pourquoi mais il m'arrive d'avoir des div par zero...
-                #final utility
-
-                if collective_sufficiency == 0:
-                    collective_sufficiency = 1e-5 #avoid divide by 0
-                
-                utility = individual_utility / collective_sufficiency
-                #utility = ( self.competences[ip["type"]]["importance"] * individual_utility) / collective_sufficiency
-
-                ip.update({"utility":utility})
-                #ip.update({"utility":collective_utility})
-
-            #------------------------------------------------------------------------------------------
-            best_action = None
-            best_weighted_utility = -np.inf
-            for ip in interest_points:
-                #tuning params-----------------------------------------------------------------------------
-                pass #TODO
-                weighted_utility = ip["utility"] * self.competences[ip["type"]]["importance"]
-
-                if weighted_utility >= best_weighted_utility:
-                    best_weighted_utility = weighted_utility
-                    best_action = ip
-
-                # if ip["utility"] >= best_weighted_utility:
-                #     best_weighted_utility = ip["utility"]
-                #     best_action = ip
-            
-            #action perform
-            if best_action != None:
-                self.action_to_perform = best_action
-                self.target = (int(self.action_to_perform["coordinates"][0]), int(self.action_to_perform["coordinates"][1]))
+        #if we have no interest point anymore (or communication or base_station only), we consider the mission done.*
+        if len(interest_points) == 0 or (len(interest_points)==1 and interest_points[0]["type"] == "base_station_com"):
+            if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
+                self.target = (int(self.init_transform.x),int(self.init_transform.y))
                 self.last_plan_time = self.env.step
+                return None
             else:
-                print("problem")
+                self.finish()
+                return None
+
+        #barycentre de communications----------
+        #liste de toutes les positions des robots
+
+        robots_pos_list = [] #list of float xy position of all robots
+        for robot_id in self.belief_space["robot_informations"]:
+            if robot_id != self.robot_id: #iamhere
+                if self.env.step - self.belief_space["robot_informations"][robot_id]["step"] <= (self.env.width) : #limite arbitraire pour voir si la position n'est pas trop obsolete, sinon on ne la prendra pas en compte, TODO : mettre ca en parametrable propre
+                    if euclidian_distance((self.init_transform.x, self.init_transform.y) ,self.belief_space["robot_informations"][robot_id]["position"]) >=  self.competences["communication"]["distance_treshold"]:
+                        robots_pos_list.append(self.belief_space["robot_informations"][robot_id]["position"])
+
+        communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
+        for cc in communication_clusters:
+                #if euclidian_distance( (self.init_transform.x, self.init_transform.y) , cc) >= self.competences["communication"]["distance_treshold"]: #we verify that the distance treshold is respected
+                interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
+        #--------------------------------------        
+
+        #utility calculation-----------------------------------------------------------------------            
+        for ip in interest_points:
+            #individual utility
+            #cost = euclidian_distance(ip["coordinates"], (self.transform.x, self.transform.y)) #euclidian distance for the moment (C in the model)
+            cost = a_star_cost(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.env_ease, traversable_types=self.traversable_types)
+            if cost == 0:
+                cost = 1e-5 #avoid divide by 0
+
+            capability = self.competences[ip["type"]]["capability"] #I'll cnsider that the type of the IP will be named the same than the competence (mu in the model)
+
+            individual_utility = capability/cost
+
+            #global feasability
+            other_individual_values = np.array([])
+            for robot in self.belief_space["robot_informations"]: #the key value of this dict is robot id
+                if len(self.belief_space["robot_informations"]) <=1:
+                    other_individual_values = np.append(other_individual_values, 1.0)
+                    break
+                if robot == self.robot_id :
+                    continue
+                else:
+                    ocost = euclidian_distance(ip["coordinates"], self.belief_space["robot_informations"][robot]["position"])
+                    #TODO TEST ICI la rapidite
+                    #ligne de l'enfer sorry
+                    other_robot_pos = (int(self.belief_space["robot_informations"][robot]["position"][0]),int(self.belief_space["robot_informations"][robot]["position"][1]))
+                    ocost = a_star_cost(self.belief_space["occupancy_grid"], other_robot_pos, (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.belief_space["robot_informations"][robot]["env_ease"], traversable_types=self.belief_space["robot_informations"][robot]["traversable_types"])
+                    if ocost == 0:
+                        ocost = 1e-5 #avoid divide by 0
+
+                    ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]]["capability"]
+
+                    other_individual_values = np.append(other_individual_values, ocapability/ocost) #capacite des autres sur l'ip
+            #global_feasability = float(np.mean(other_individual_values))
+            collective_sufficiency = float(np.max(other_individual_values))
+
+            #collective utility
+            #TODO : check if that works STOPPEDHERE
+            #old backup #collective_utility = individual_utility - global_feasability * self.competences[ip["type"]]["dispersion"]
+            #backup #collective_utility = individual_utility / (global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )
+            #collective_utility = 1 / (4*np.sqrt(global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )+0.000001) #+0.000001 parce que je ne comprends pas pourquoi mais il m'arrive d'avoir des div par zero...
+            #final utility
+
+            if collective_sufficiency == 0:
+                collective_sufficiency = 1e-5 #avoid divide by 0
+            
+            utility = individual_utility / collective_sufficiency
+            #utility = ( self.competences[ip["type"]]["importance"] * individual_utility) / collective_sufficiency
+
+            ip.update({"utility":utility})
+            #ip.update({"utility":collective_utility})
+
+        #------------------------------------------------------------------------------------------
+        best_action = None
+        best_weighted_utility = -np.inf
+        for ip in interest_points:
+            #tuning params-----------------------------------------------------------------------------
+            pass #TODO
+            weighted_utility = ip["utility"] * self.competences[ip["type"]]["importance"]
+
+            if weighted_utility >= best_weighted_utility:
+                best_weighted_utility = weighted_utility
+                best_action = ip
+
+            # if ip["utility"] >= best_weighted_utility:
+            #     best_weighted_utility = ip["utility"]
+            #     best_action = ip
+        
+        #action perform
+        if best_action != None:
+            self.action_to_perform = best_action
+            self.target = (int(self.action_to_perform["coordinates"][0]), int(self.action_to_perform["coordinates"][1]))
+            self.last_plan_time = self.env.step
+        else:
+            print("problem")
 
     def write_logs(self):
         step = self.env.step
@@ -853,7 +805,7 @@ class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
         else : 
             self.behavior = behavior_to_use
 
-    def update(self, screen):
+    def behave(self):
         # self.behavior_diff_move_random()
         if not self.imdone:
             match self.behavior:
@@ -869,7 +821,6 @@ class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
                     self.local_frontier_behavior()
                 case "action_selection":
                     self.behavior_action_selection()
-            super().update(screen)
         
 
     def move(self, vector_x, vector_y):
@@ -929,8 +880,7 @@ class Aerial(Robot): #TODO UPDATE ENERGY AMOUNT
         else : 
             self.behavior = behavior_to_use
     
-    def update(self, screen):
-        # self.behavior_diff_move_random()
+    def behave(self):
         if not self.imdone:
             match self.behavior:
                 case "random":
@@ -945,7 +895,6 @@ class Aerial(Robot): #TODO UPDATE ENERGY AMOUNT
                     self.local_frontier_behavior()
                 case "action_selection":
                     self.behavior_action_selection()
-        super().update(screen)
 
     def move(self, vector_x, vector_y):
         """
@@ -1054,7 +1003,7 @@ class BaseStation(Robot):
         self.create_artifact()
         self.shape_competence(self.artifact.type, capability=0, importance=0)
     
-    def update(self, screen):
+    def behave(self):
         if not(self.imdone):
             self.behavior_stay()
             staying = 0
@@ -1065,7 +1014,6 @@ class BaseStation(Robot):
             if staying != 0:
                 self.artifact.destroy()
                 self.imdone = True
-        super().update(screen)
 
     def create_artifact(self):
         self.artifact = self.BaseStationArtifact(env=self.env,
