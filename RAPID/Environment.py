@@ -14,6 +14,9 @@ from random import uniform, randrange
 import logging
 import time
 
+# from multiprocessing import Pool
+# import threading
+
 COMMUNICATION_MODE_LIST = ["blackboard", "limited"]
 
 
@@ -121,6 +124,7 @@ class Environment():
 
         pygame.quit()
 
+
     def update(self):
         """
         will update all agents in the self.agents object
@@ -143,8 +147,23 @@ class Environment():
             a.update(self.screen) #will update the artifact display
         
 
-        for a in self.agents:
-            a.update(self.screen)
+        for a in self.agents: 
+            a.update()
+
+        # threads = []
+        # for robot in self.agents:
+        #     # Passe render=False pour éviter les conflits avec Pygame
+        #     thread = threading.Thread(target=robot.update)
+        #     threads.append(thread)
+        #     thread.start()
+        
+        # # Attends la fin de tous les threads
+        # for thread in threads:
+        #     thread.join()
+
+        if self.render:
+            for a in self.agents: 
+                a.render(self.screen)
 
         if(self.end_condition()):
             print(f"Simulation done in {self.step} steps! \n Goal Reached : {self.goal_condition()}")

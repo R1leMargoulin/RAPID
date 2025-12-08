@@ -143,7 +143,7 @@ class Robot(Sprite):
         self.status = "ready"
         self.is_active = True
 
-    def update(self, screen):
+    def update(self):
         self.sense()#first of all sense the env.
         self.belief_transfer() #after sensing, transfer beliefs if applicable
         if np.any(self.target):
@@ -163,12 +163,10 @@ class Robot(Sprite):
                 self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation #TODO c'est un test ca
                 self.navigate_through_target_path() #TODO c'est un test ca
 
-
-
-        if self.env.communication_mode == "limited":
-            if self.env.render:
-                halo_scaled_rect = Rect(self.communication_halo.rect.x * self.env.scaling_factor, self.communication_halo.rect.y * self.env.scaling_factor, self.communication_halo.rect.width * self.env.scaling_factor, self.communication_halo.rect.height * self.env.scaling_factor)
-                screen.blit(scale(self.communication_halo.image, halo_scaled_rect.size), halo_scaled_rect)
+        # if self.env.communication_mode == "limited":
+        #     if self.env.render:
+        #         halo_scaled_rect = Rect(self.communication_halo.rect.x * self.env.scaling_factor, self.communication_halo.rect.y * self.env.scaling_factor, self.communication_halo.rect.width * self.env.scaling_factor, self.communication_halo.rect.height * self.env.scaling_factor)
+        #         screen.blit(scale(self.communication_halo.image, halo_scaled_rect.size), halo_scaled_rect)
 
         if not(self.imdone):
             #print(f"robot {self.robot_id}: status {self.status}, target {self.target}")
@@ -176,9 +174,9 @@ class Robot(Sprite):
             self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "step":self.env.step }}) #self beliefs update
             self.belief_space["last_infos_matrix"][self.robot_id][self.robot_id] = self.env.step
                 
-            if self.env.render:
-                scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
-                screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
+            # if self.env.render:
+            #     scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
+            #     screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
 
             if (self.energy_amount / self.energy_max_amount) <= 0:
                 self.finish()
@@ -198,6 +196,15 @@ class Robot(Sprite):
                 self.write_logs()
             
             #print(self.robot_id, self.action_to_perform, self.target, (int(self.transform.x), int(self.transform.y)))
+
+    def render(self, screen):
+
+        if self.env.communication_mode == "limited":
+            halo_scaled_rect = Rect(self.communication_halo.rect.x * self.env.scaling_factor, self.communication_halo.rect.y * self.env.scaling_factor, self.communication_halo.rect.width * self.env.scaling_factor, self.communication_halo.rect.height * self.env.scaling_factor)
+            screen.blit(scale(self.communication_halo.image, halo_scaled_rect.size), halo_scaled_rect)
+
+        scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
+        screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
 
     def behave(self):
         raise Exception(f"The behave methot has to be redefined for the agent {self.robot_id} of type {self.type} ")
@@ -705,10 +712,11 @@ class Robot(Sprite):
                 if robot == self.robot_id :
                     continue
                 else:
-                    ocost = euclidian_distance(ip["coordinates"], self.belief_space["robot_informations"][robot]["position"])
                     #TODO TEST ICI la rapidite
                     #ligne de l'enfer sorry
                     other_robot_pos = (int(self.belief_space["robot_informations"][robot]["position"][0]),int(self.belief_space["robot_informations"][robot]["position"][1]))
+
+                    #ocost = euclidian_distance(ip["coordinates"], other_robot_pos)
                     ocost = a_star_cost(self.belief_space["occupancy_grid"], other_robot_pos, (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.belief_space["robot_informations"][robot]["env_ease"], traversable_types=self.belief_space["robot_informations"][robot]["traversable_types"])
                     if ocost == 0:
                         ocost = 1e-5 #avoid divide by 0
