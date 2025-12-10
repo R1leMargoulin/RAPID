@@ -636,10 +636,34 @@ class Robot(Sprite):
             self.path_to_target = None #forget the target and the path
             self.target = None
 
+    # def check_communication_importance(self):
+
+    #     oldest_com_time = self.env.step
+    #     all_com_times = []
+    #     for agent in self.belief_space["last_infos_matrix"][self.robot_id]:
+    #         all_com_times.append(self.belief_space["last_infos_matrix"][self.robot_id][agent])
+    #         if self.belief_space["last_infos_matrix"][self.robot_id][agent] < oldest_com_time:
+    #             oldest_com_time = self.belief_space["last_infos_matrix"][self.robot_id][agent]
+        
+    #     capability = 1# (self.env.step - np.mean(all_com_times))**2/ self.env.step
+
+
+        
+
+
+    #     oldest_com = self.env.step - oldest_com_time
+    #     importance = (oldest_com - (self.env.width + self.env.height)/2)**3 /self.env.step**2
+
+
+    #     self.shape_competence("communication", capability, importance, distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
+
+
     def behavior_action_selection(self): 
         #reshape importance of communication depending of the time from last communication:
         #print(f"robot {self.robot_id} : last com : {self.time_from_last_communication}")
         self.shape_competence("communication", self.competences["communication"]["capability"], np.exp( self.time_from_last_communication/ self.env.width), distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
+
+        #self.check_communication_importance()
 
         interest_points = [] #we will add all of our interest points here
         #interest points identification -----------------------------------------------------------
@@ -682,13 +706,28 @@ class Robot(Sprite):
         for robot_id in self.belief_space["robot_informations"]:
             if robot_id != self.robot_id: #iamhere
                 if self.env.step - self.belief_space["robot_informations"][robot_id]["step"] <= (self.env.width) : #limite arbitraire pour voir si la position n'est pas trop obsolete, sinon on ne la prendra pas en compte, TODO : mettre ca en parametrable propre
-                    if euclidian_distance((self.init_transform.x, self.init_transform.y) ,self.belief_space["robot_informations"][robot_id]["position"]) >=  self.competences["communication"]["distance_treshold"]:
+                    if euclidian_distance((self.transform.x, self.transform.y) ,self.belief_space["robot_informations"][robot_id]["position"]) >=  self.competences["communication"]["distance_treshold"]:
                         robots_pos_list.append(self.belief_space["robot_informations"][robot_id]["position"])
 
         communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
         for cc in communication_clusters:
                 #if euclidian_distance( (self.init_transform.x, self.init_transform.y) , cc) >= self.competences["communication"]["distance_treshold"]: #we verify that the distance treshold is respected
                 interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
+
+        #TODO test ici : je prend le barycenre de tous mes robots.
+
+        # # xcoords = []
+        # # ycoords = []
+        # # for robot_id in self.belief_space["robot_informations"]:
+        # #     if robot_id != self.robot_id:
+        # #         if euclidian_distance((self.transform.x, self.transform.y) ,self.belief_space["robot_informations"][robot_id]["position"]) >=  self.competences["communication"]["distance_treshold"]:
+        # #             xcoords.append(self.belief_space["robot_informations"][robot_id]["position"][0])
+        # #             ycoords.append(self.belief_space["robot_informations"][robot_id]["position"][1])
+
+        # # if len(xcoords)>0:
+        # #     barycentre_com = (np.mean(xcoords), np.mean(ycoords))
+        # #     interest_points.append({"type":"communication","coordinates":barycentre_com})#adding those clusters in the communication points
+
         #--------------------------------------        
 
         #utility calculation-----------------------------------------------------------------------            
@@ -716,8 +755,8 @@ class Robot(Sprite):
                     #ligne de l'enfer sorry
                     other_robot_pos = (int(self.belief_space["robot_informations"][robot]["position"][0]),int(self.belief_space["robot_informations"][robot]["position"][1]))
 
-                    #ocost = euclidian_distance(ip["coordinates"], other_robot_pos)
-                    ocost = a_star_cost(self.belief_space["occupancy_grid"], other_robot_pos, (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.belief_space["robot_informations"][robot]["env_ease"], traversable_types=self.belief_space["robot_informations"][robot]["traversable_types"])
+                    ocost = euclidian_distance(ip["coordinates"], other_robot_pos)
+                    #ocost = a_star_cost(self.belief_space["occupancy_grid"], other_robot_pos, (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.belief_space["robot_informations"][robot]["env_ease"], traversable_types=self.belief_space["robot_informations"][robot]["traversable_types"])
                     if ocost == 0:
                         ocost = 1e-5 #avoid divide by 0
 
@@ -727,12 +766,6 @@ class Robot(Sprite):
             #global_feasability = float(np.mean(other_individual_values))
             collective_sufficiency = float(np.max(other_individual_values))
 
-            #collective utility
-            #TODO : check if that works STOPPEDHERE
-            #old backup #collective_utility = individual_utility - global_feasability * self.competences[ip["type"]]["dispersion"]
-            #backup #collective_utility = individual_utility / (global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )
-            #collective_utility = 1 / (4*np.sqrt(global_feasability * np.exp(self.competences[ip["type"]]["dispersion"] - 1) )+0.000001) #+0.000001 parce que je ne comprends pas pourquoi mais il m'arrive d'avoir des div par zero...
-            #final utility
 
             if collective_sufficiency == 0:
                 collective_sufficiency = 1e-5 #avoid divide by 0
