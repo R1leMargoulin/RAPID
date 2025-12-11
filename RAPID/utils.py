@@ -306,8 +306,7 @@ def a_star_cost(grid, start, goal, env_ease, traversable_types=[OG_FREE_CELL]):
     else:
         cost = np.inf
     return cost
-    
-
+ 
 
 def get_direct_neighbors(cell, width, height):
     """
@@ -384,6 +383,15 @@ def heuristic_frontier_distance(start, goal, grid, traversable_types = [OG_FREE_
     return euclidean_dist + obstacle_penalty * 100  # Weight for obstacle penalty
 
 def simple_clustering(coordinates, max_distance):
+    """
+    Give a Simple and fast non optimal clustering of given (x,y) coordinates list made with maximal distance
+
+    parameters:
+    - coordinates : list[(float, float)] = list of (x,y) of the points
+    - max_distance : float = max size of the clusters in term of distance
+
+    Return : Barycenter of the clusters
+    """
     coords = np.array(coordinates)
     unvisited = set(range(len(coords)))
     clusters = []

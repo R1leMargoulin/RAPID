@@ -37,6 +37,8 @@ class Environment():
         - communication_mode:str = method of communication in ["blackboard", "limited"] :
             - "blackboard" : all robots share a blackboard in the environment, the knowledge is centralized on this blackboard
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
+        - communication_reliability: float in [0,1] = Probability for the agents to be communication neighbors when they are in communication range.
+        - save_img_steps: String = if not None, image of the simulation will be saved in the string path given
         """
         self.render = render
 
@@ -98,6 +100,7 @@ class Environment():
         pass
 
     def run(self):
+        """Runs the simulation"""
         self.start_time = time.time()
         while self.running:
             # check user input events
@@ -125,10 +128,9 @@ class Environment():
 
         pygame.quit()
 
-
     def update(self):
         """
-        will update all agents in the self.agents object
+        Handle every update method of agents and artifacts.
         """
         if self.save_img_steps != None and self.render:
             pygame.image.save(self.screen, self.save_img_steps+str(self.step)+".png")
@@ -172,13 +174,20 @@ class Environment():
 
         if self.communication_mode == "limited":
             self.limited_communication_update()
-
-            
+        
     def add_agent(self, agent):
+        """
+        Add a new agent in the environment. An agent HAS to be added to be taken into account in the simulation.
+        """
         self.agents.append(agent)
         self.agent_group.add(self.agents[-1])
 
     def create_env_from_image(self, img):
+        """
+        Will use an image to create the environment and it's obstacles.
+        
+        :param img: PIL loaded image in RGB format
+        """
         np_img = np.array(img)
         #np_img = ~np_img  # invert black and white cause (255 will be white, but we want our obstacle to be 1 and free cell be 0)
         #np_img[np_img > 0] = 1 #all non white cells are considered as obstacles.
@@ -229,9 +238,15 @@ class Environment():
         #self.obstacles_group.add(sprite) #old way
     
     def goal_condition(self):
+        """
+        Depends of the environment type, will return if the goal of the environment is reached or not.
+        """
         return False
     
     def end_condition(self):
+        """
+        Will return True if the simulation is considered as finished. The simulation will then stop at the next step update.
+        """
         has_to_stop = True
         for a in self.agents:
             if not a.imdone:
@@ -240,7 +255,7 @@ class Environment():
     
     def limited_communication_update(self):
         """
-        Available only with "limited" communication mode.
+        Available only with "limited" communication mode. Will handle the communication links between agents.
         """
         potential_links_dict = {} #in this dict, we'll append all unidirectional links : if agent B is in the com range of agent A, then the link A->B is created.
         for a in self.agents :
@@ -309,7 +324,9 @@ class TargetPointEnvironment(Environment):
             #self.screen.blit(self.target_point.image, self.target_point.rect)BACKUP scaling
 
     def init_target_point(self, x, y):
-
+        """
+        defines a target point that has to be reached by the robots.
+        """
         sprite = Sprite()
         sprite.image = pygame.Surface((4, 4))
         sprite.image.fill((255, 0, 0))
@@ -360,7 +377,10 @@ class ExplorationEnvironment(Environment):
         - communication_mode:str = method of communication in ["blackboard", "limited"] :
             - "blackboard" : all robots share a blackboard in the environment, the knowledge is centralized on this blackboard
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
+        - communication_reliability: float in [0,1] = Probability for the agents to be communication neighbors when they are in communication range.
+        - save_img_steps: String = if not None, image of the simulation will be saved in the string path given
         - end_at_full_exploation:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when the exploration proportion goal is reached.
+        - exploration_proportion_goal : float in [0,1] = if at least this proportion of the environment is explored, the goal condition of the env will be true.
         """
         super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps)
         exp_map = np.zeros((self.width, self.height))
@@ -398,8 +418,10 @@ class ExplorationEnvironment(Environment):
             self.draw_fog()
         pass
         
-
     def draw_fog(self):
+        """
+        Draw fog only if the environment is rendered
+        """
         unexplored_poses = np.where(np.isin(self.interest_points["exploration_map"], self.explorable_zone_types))#check for each element of the Occ grid if it's an explorable zone.
         for i in range(len(unexplored_poses[0])):
             # self.screen.blit(self.fog_texture, pygame.Rect(unexplored_poses[0][i], unexplored_poses[1][i], 1, 1)) #BACKUP scaling
@@ -432,6 +454,9 @@ class ExplorationEnvironment(Environment):
             return has_to_stop
 
     def mark_explored_cells(self, cells):
+        """
+        update the globally seen cells.
+        """
         for cell in cells:
             self.interest_points["exploration_map"][cell[0]-1][cell[1]-1] = 1
 

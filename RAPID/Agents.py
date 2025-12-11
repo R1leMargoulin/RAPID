@@ -14,12 +14,10 @@ import random
 import logging
 from copy import deepcopy
 
-# from mergedeep import merge
 
-#TODO : les comportements sont EXACTEMENT les memes dans ground ou Aerial, je pourrais tout mettre dans robot...
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10, energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False):#TODO rendre abstrait
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10, energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False):
         """
         Robot class are our agents representing robots.
 
@@ -36,6 +34,10 @@ class Robot(Sprite):
         - vision range:int = distance a robot can sense to
         - communication_range:int =  when communication is limited, the robot can share information within robots in the communication radius.
         - communication_period:int = when agent share it's beliefs: number of steps the agent needs to wait before it can communicate again
+        - energy_amount: int = energy unit available for the robot, the robot will stops if it reaches zero.
+        - energy_cost_per_cell: int = energy consumption
+        - delta_replan : int = time (in sim steps) from a planning until the robot will replan a new goal in case it recieve new knowledge from an other team member.
+        - write_logs : bool = if true, will save log in RAM for simulation stats.
         """
         self.status = "init"
         super().__init__()
@@ -144,6 +146,9 @@ class Robot(Sprite):
         self.is_active = True
 
     def update(self):
+        """
+        Update function of the agent, will be called at each simulation step.
+        """
         self.sense()#first of all sense the env.
         self.belief_transfer() #after sensing, transfer beliefs if applicable
         if np.any(self.target):
@@ -161,12 +166,8 @@ class Robot(Sprite):
             self.behave() #in order to determine what to do.
             if not self.imdone:
                 self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation #TODO c'est un test ca
-                self.navigate_through_target_path() #TODO c'est un test ca
+                self.navigate_through_target_path() 
 
-        # if self.env.communication_mode == "limited":
-        #     if self.env.render:
-        #         halo_scaled_rect = Rect(self.communication_halo.rect.x * self.env.scaling_factor, self.communication_halo.rect.y * self.env.scaling_factor, self.communication_halo.rect.width * self.env.scaling_factor, self.communication_halo.rect.height * self.env.scaling_factor)
-        #         screen.blit(scale(self.communication_halo.image, halo_scaled_rect.size), halo_scaled_rect)
 
         if not(self.imdone):
             #print(f"robot {self.robot_id}: status {self.status}, target {self.target}")
@@ -174,10 +175,7 @@ class Robot(Sprite):
             self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "step":self.env.step }}) #self beliefs update
             self.belief_space["last_infos_matrix"][self.robot_id][self.robot_id] = self.env.step
                 
-            # if self.env.render:
-            #     scaled_rect = Rect(self.rect.x * self.env.scaling_factor, self.rect.y * self.env.scaling_factor, self.rect.width * self.env.scaling_factor, self.rect.height * self.env.scaling_factor)
-            #     screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
-
+           
             if (self.energy_amount / self.energy_max_amount) <= 0:
                 self.finish()
 
@@ -198,7 +196,9 @@ class Robot(Sprite):
             #print(self.robot_id, self.action_to_perform, self.target, (int(self.transform.x), int(self.transform.y)))
 
     def render(self, screen):
-
+        """
+        Display rendering for the simulation
+        """
         if self.env.communication_mode == "limited":
             halo_scaled_rect = Rect(self.communication_halo.rect.x * self.env.scaling_factor, self.communication_halo.rect.y * self.env.scaling_factor, self.communication_halo.rect.width * self.env.scaling_factor, self.communication_halo.rect.height * self.env.scaling_factor)
             screen.blit(scale(self.communication_halo.image, halo_scaled_rect.size), halo_scaled_rect)
@@ -207,14 +207,21 @@ class Robot(Sprite):
         screen.blit(scale(self.surf, scaled_rect.size), scaled_rect)
 
     def behave(self):
+        """Has to be overloaded in other robots types, in order to implement the behaviors handlable by the robot"""
         raise Exception(f"The behave methot has to be redefined for the agent {self.robot_id} of type {self.type} ")
 
     def finish(self):
+        """called by behavior when the work is considered done."""
         self.imdone = True
         self.rect.centerx = -1 #tp hors de la map pour les collisions
         self.rect.centery = -1
 
     def translate(self, speed_x, speed_y):
+        """
+        CAREFUL, called by the method "move" only. every robot movement has to be called by the "move" method.
+        Will apply the "move" computation results in the actual simulation.
+        """
+
         #old positions for distance calculation
         old_tfx = self.transform.x
         old_tfy = self.transform.y
@@ -233,7 +240,6 @@ class Robot(Sprite):
 
         
         #detect and handle collisions------------------------------------------------------------------------------------
-        #TODO: remake collision
         #OBSTACLE COLLISION
         for cell_type in filter(lambda k: self.env_ease[k] == 0, self.env_ease): #for all cells type with a traversability ease of 0 (obstacles)
             if cell_type in self.env.cell_feature_groups:
@@ -265,7 +271,7 @@ class Robot(Sprite):
         self.rect.centery = int(self.transform.y)
 
         #AGENTS COLLISION detection : 
-        agent_collision = spritecollide(self, self.env.agent_group, False) #TODO wtf ca marche pas
+        agent_collision = spritecollide(self, self.env.agent_group, False)
         #print(agent_collision)
         if (len(agent_collision)> 1) :
             self.transform.x = old_tfx
@@ -280,6 +286,9 @@ class Robot(Sprite):
             self.communication_halo.rect.centery = int(self.transform.y)
 
     def sense(self):
+        """
+        Get the cells around the robot in order to update local occupancy grid
+        """
         #first, get neighbors in order to see the unseen ones.
         neighbors = self.get_neighbors_pixels(distance=self.vision_range, stop_at_wall=True, self_inclusion=True)
 
@@ -289,7 +298,7 @@ class Robot(Sprite):
         #artifact detection
         for a in self.env.interest_points["artifacts"]:
             if a.coordinates in neighbors:
-                self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step}}) #TODO : Update with belief propagation as well
+                self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step}}) 
                 pass
 
     def get_neighbors_pixels(self, distance:int, stop_at_wall = False, self_inclusion = True):
@@ -335,7 +344,7 @@ class Robot(Sprite):
             
     def belief_transfer(self): 
         """
-        va transférer la table de beliefs (la grille d'occupation uniquement pour le moment) à tous les voisins de communiation.
+        will transfer belief space to all communication neighbors.
         """
          #belief sharing handling
         if self.time_from_last_communication < self.communication_period: #verif of the communication period
@@ -357,6 +366,12 @@ class Robot(Sprite):
                 self.time_from_last_communication = 0
 
     def recieve_belief(self, sender_belief_space):
+        """
+        Method called from an other robots (in the b"belief_transfer" method) which is communication neighbor in order to share it's knowledge.
+        
+        :param sender_belief_space: Belief space of the sender
+        """
+
         #dans un premiers temps, on ne partage que la grille d'occupation.
         #en supposant que le sensing de chaque agent est correct (on y mettra des probabilités plus tard, en ajoutant un layer) on peut simplement merge les deux grilles en prennant le max de chacune
         #car -1 = unknown, 0 = free, 1 = obstacle, et quand c'est plus grand c'est des points d'interets.
@@ -415,12 +430,23 @@ class Robot(Sprite):
         # self.path_to_target = None
 
     def move(self, vector_x, vector_y):
+        """Method that has to be redefined for each type of robot because they don't have the same movement mechanism."""
         print("move has to be implemented in the class.")
 
     def shape_competence(self, type, capability, importance, distance_treshold = 0, dispersion = 1):
+        """
+        Shape the competence for a robot
+        
+        :param type: String, nature of task
+        :param capability: Float [0,1], measure how the robot is capable of performing the action of the given type
+        :param importance: Float, Measure the perception of the robot of the importance of the given task type
+        :param distance_treshold: distance where the robot will be able to detect the task, for example in communication, we don't want to take into account robots in range. default 0
+        :param dispersion: Not currently used, may be removed soon TODO
+        """
         self.competences.update({type:{"capability": capability, "importance":importance, "distance_treshold":distance_treshold, "dispersion":dispersion}})
     
     def perform_target_action(self):
+        """simulate an artifact action with an interaction."""
         if self.action_to_perform["type"] == "exploration":
             self.action_to_perform = None
         elif self.action_to_perform["type"] == "communication":
@@ -448,7 +474,7 @@ class Robot(Sprite):
                 self.belief_space["artifacts"][self.action_to_perform["id"]]["step"] = self.env.step
                 self.action_to_perform = None
 
-    def behavior_diff_move_random(self):
+    def behavior_diff_move_random(self): #could be called wiggle
         #set srobot speed at it's max speed
         self.speed.x = self.max_speed.x
         self.speed.y = self.max_speed.y
@@ -459,7 +485,8 @@ class Robot(Sprite):
 
         #2pi modulo
         self.transform.w = self.transform.w%(2*np.pi)
-        #TODO refaire ce diff drive dégueu
+
+
         #calculation of the x and y movement depending of the x direction speed and the w orientation.
         xmove = self.speed.x * np.cos(self.transform.w)
         ymove = self.speed.x * np.sin(self.transform.w)
@@ -636,28 +663,6 @@ class Robot(Sprite):
             self.path_to_target = None #forget the target and the path
             self.target = None
 
-    # def check_communication_importance(self):
-
-    #     oldest_com_time = self.env.step
-    #     all_com_times = []
-    #     for agent in self.belief_space["last_infos_matrix"][self.robot_id]:
-    #         all_com_times.append(self.belief_space["last_infos_matrix"][self.robot_id][agent])
-    #         if self.belief_space["last_infos_matrix"][self.robot_id][agent] < oldest_com_time:
-    #             oldest_com_time = self.belief_space["last_infos_matrix"][self.robot_id][agent]
-        
-    #     capability = 1# (self.env.step - np.mean(all_com_times))**2/ self.env.step
-
-
-        
-
-
-    #     oldest_com = self.env.step - oldest_com_time
-    #     importance = (oldest_com - (self.env.width + self.env.height)/2)**3 /self.env.step**2
-
-
-    #     self.shape_competence("communication", capability, importance, distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
-
-
     def behavior_action_selection(self): 
         #reshape importance of communication depending of the time from last communication:
         #print(f"robot {self.robot_id} : last com : {self.time_from_last_communication}")
@@ -680,7 +685,7 @@ class Robot(Sprite):
             for art in self.belief_space["artifacts"]:
                 #IMPORTANCE CHECK
                 if art +1 <= len(self.env.interest_points["artifacts"]): #ouais c'est degueu
-                    self.env.interest_points["artifacts"][art].check_importance(self) #TODO test this
+                    self.env.interest_points["artifacts"][art].check_importance(self)
 
                 #INTEREST POINT CREATION
                 if self.belief_space["artifacts"][art]["status"] not in ["done", "destroyed"] :
@@ -714,19 +719,6 @@ class Robot(Sprite):
                 #if euclidian_distance( (self.init_transform.x, self.init_transform.y) , cc) >= self.competences["communication"]["distance_treshold"]: #we verify that the distance treshold is respected
                 interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
 
-        #TODO test ici : je prend le barycenre de tous mes robots.
-
-        # # xcoords = []
-        # # ycoords = []
-        # # for robot_id in self.belief_space["robot_informations"]:
-        # #     if robot_id != self.robot_id:
-        # #         if euclidian_distance((self.transform.x, self.transform.y) ,self.belief_space["robot_informations"][robot_id]["position"]) >=  self.competences["communication"]["distance_treshold"]:
-        # #             xcoords.append(self.belief_space["robot_informations"][robot_id]["position"][0])
-        # #             ycoords.append(self.belief_space["robot_informations"][robot_id]["position"][1])
-
-        # # if len(xcoords)>0:
-        # #     barycentre_com = (np.mean(xcoords), np.mean(ycoords))
-        # #     interest_points.append({"type":"communication","coordinates":barycentre_com})#adding those clusters in the communication points
 
         #--------------------------------------        
 
@@ -751,7 +743,6 @@ class Robot(Sprite):
                 if robot == self.robot_id :
                     continue
                 else:
-                    #TODO TEST ICI la rapidite
                     #ligne de l'enfer sorry
                     other_robot_pos = (int(self.belief_space["robot_informations"][robot]["position"][0]),int(self.belief_space["robot_informations"][robot]["position"][1]))
 
@@ -781,7 +772,6 @@ class Robot(Sprite):
         best_weighted_utility = -np.inf
         for ip in interest_points:
             #tuning params-----------------------------------------------------------------------------
-            pass #TODO
             weighted_utility = ip["utility"] * self.competences[ip["type"]]["importance"]
 
             if weighted_utility >= best_weighted_utility:
@@ -801,6 +791,7 @@ class Robot(Sprite):
             print("problem")
 
     def write_logs(self):
+        """will keep logs in ram at each steps for simulation stats"""
         step = self.env.step
         if self.action_to_perform:
             action = self.action_to_perform['type']
@@ -818,7 +809,7 @@ class Robot(Sprite):
 
 
 
-class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
+class Ground(Robot):
 
     def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs)
@@ -862,21 +853,13 @@ class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
                     self.local_frontier_behavior()
                 case "action_selection":
                     self.behavior_action_selection()
-        
 
     def move(self, vector_x, vector_y):
-        """
-        move in the vector direction
-        params:
-        - vector_x: x coordinate of the direction vector
-        - vector_y: y coordinate of the direction vector
-        """
         angle = np.arctan2(vector_y, vector_x)
             
         #Angle to rotate to go in the neighbor direction
         tfw = (angle - self.transform.w)%(2*np.pi)  #differance of angle
 
-        #self.speed.w = min(self.max_speed.w, tfw) #TODO regérer la limite d'angle
         self.speed.w = tfw
 
         self.transform.w += self.speed.w
@@ -892,7 +875,7 @@ class Ground(Robot):#TODO UPDATE ENERGY AMOUNT
         self.translate(xmove, ymove)
 
 
-class Aerial(Robot): #TODO UPDATE ENERGY AMOUNT
+class Aerial(Robot):
     def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier", "action_selection"]
@@ -938,19 +921,12 @@ class Aerial(Robot): #TODO UPDATE ENERGY AMOUNT
                     self.behavior_action_selection()
 
     def move(self, vector_x, vector_y):
-        """
-        move in the vector direction
-        params:
-        - vector_x: x coordinate of the direction vector
-        - vector_y: y coordinate of the direction vector
-        """
         self.speed.x = min(self.max_speed.x, vector_x)
         self.speed.y = min(self.max_speed.y, vector_y)
 
         self.translate(self.speed.x, self.speed.y)
 
 class BaseStation(Robot):
-    #TODO : creer l'artefact associe
 
     class BaseStationArtifact(Artifact):
         def __init__(self, env, id, name, coordinates, associated_agent:Robot, size=1, color = (255,0,0)):
@@ -958,7 +934,7 @@ class BaseStation(Robot):
             super().__init__(env, id, name, type, coordinates, size, color)
             self.base = associated_agent
         
-        def check_importance(self, robot:Robot): #TODO HERE
+        def check_importance(self, robot:Robot):
             oldest_com_time = self.env.step
             if self.base.robot_id in robot.belief_space["last_infos_matrix"]:
                 for agent in robot.belief_space["last_infos_matrix"][self.base.robot_id]:
@@ -974,7 +950,7 @@ class BaseStation(Robot):
             #importance = ((np.max([0.0,(self.env.step - oldest_com_time)]) - ((self.env.width + self.env.height)/2+self.base.return_priority))**2) / self.env.step
             importance = np.max([0.0,(((self.env.step - oldest_com_time)*self.base.return_priority ) - (self.env.width + self.env.height)/2)])**3 /self.env.step**2
 
-            # TODO : faie une vriable a l'init pour controler le temps de frequence voulu
+            # TODO : return priority en unité de temps?
 
 
             
@@ -999,11 +975,7 @@ class BaseStation(Robot):
             
             #robot.shape_competence(self.type, capability=robot.competences[self.type]["capability"], importance=importance, distance_treshold = 2)
             robot.shape_competence(self.type, capability=capability, importance=importance, distance_treshold = 2)
-
-            #TODO, for communication, maybe give the possibility to not change it 
-            #robot.shape_competence("communication", capability=robot.competences["communication"]["capability"], distance_treshold=robot.communication_range, importance=importance/2 , dispersion=0)
-
-        
+     
         def interact(self, competence):
             if self.env.goal_condition():
                 self.base.imdone = True
@@ -1057,6 +1029,9 @@ class BaseStation(Robot):
                 self.imdone = True
 
     def create_artifact(self):
+        """
+        The base station specificly place a BS artifact on itself at creation
+        """
         self.artifact = self.BaseStationArtifact(env=self.env,
                                                  id=len(self.env.interest_points["artifacts"]),
                                                  name="base_station",
