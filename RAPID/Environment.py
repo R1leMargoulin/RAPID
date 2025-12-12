@@ -6,6 +6,7 @@ from pygame.locals import (K_ESCAPE, KEYDOWN)
 
 from .utils import *
 from .grid_variables import *
+from .Artifacts import *
 
 import numpy as np
 from PIL import Image
@@ -13,11 +14,14 @@ from random import uniform, randrange
 import logging
 import time
 
+# from multiprocessing import Pool
+# import threading
+
 COMMUNICATION_MODE_LIST = ["blackboard", "limited"]
 
 
 class Environment():
-    def __init__(self, render = True, width:int=100, height:int=100, background_color = (200,200,200), caption = f'RAPID', env_image:Image.Image = None, full_knowledge:bool=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard"):
+    def __init__(self, render = True, width:int=100, height:int=100, background_color = (200,200,200), caption = f'RAPID', env_image:Image.Image = None, full_knowledge:bool=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, save_img_steps = None):
         """
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         Params : 
@@ -33,6 +37,8 @@ class Environment():
         - communication_mode:str = method of communication in ["blackboard", "limited"] :
             - "blackboard" : all robots share a blackboard in the environment, the knowledge is centralized on this blackboard
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
+        - communication_reliability: float in [0,1] = Probability for the agents to be communication neighbors when they are in communication range.
+        - save_img_steps: String = if not None, image of the simulation will be saved in the string path given
         """
         self.render = render
 
@@ -47,9 +53,10 @@ class Environment():
         self.height = height
         self.background_color = background_color
 
-        self.agents = []
+        self.agents = [] #List of agents that are in the env, supposed to be a list of RAPID.Agents.Robot objects
         self.obstacles = []
-        self.interest_points = {}
+        self.cell_feature_groups = {}
+        self.interest_points = {"artifacts":[]}
         self.agents_tools = {}
 
         self.full_knowledge= full_knowledge
@@ -57,7 +64,12 @@ class Environment():
         self.limit_of_steps = limit_of_steps
 
         self.communication_mode = communication_mode
+        self.communication_reliability = communication_reliability
 
+        self.obstacles_group = pygame.sprite.Group()
+        self.agent_group = pygame.sprite.Group()
+
+        self.save_img_steps = save_img_steps
 
         if(env_image):
             self.width = env_image.size[0]
@@ -73,9 +85,6 @@ class Environment():
             else:
                 self.screen = None
 
-        
-        self.obstacles_group = pygame.sprite.Group(self.obstacles)
-        self.agent_group = pygame.sprite.Group()
 
         # handling of the communication mode string
         if self.communication_mode not in COMMUNICATION_MODE_LIST:
@@ -91,6 +100,7 @@ class Environment():
         pass
 
     def run(self):
+        """Runs the simulation"""
         self.start_time = time.time()
         while self.running:
             # check user input events
@@ -120,35 +130,67 @@ class Environment():
 
     def update(self):
         """
-        will update all agents in the self.agents object
+        Handle every update method of agents and artifacts.
         """
+        if self.save_img_steps != None and self.render:
+            pygame.image.save(self.screen, self.save_img_steps+str(self.step)+".png")
+            
         if self.render:
             self.screen.fill(self.background_color)
 
-        for a in self.agents:
-            a.update(self.screen)
+            for group in self.cell_feature_groups:
+                for o in self.cell_feature_groups[group]:
+                    scaled_rect = pygame.Rect(o.rect.x * self.scaling_factor, o.rect.y * self.scaling_factor, o.rect.width * self.scaling_factor, o.rect.height * self.scaling_factor)
+                    self.screen.blit(pygame.transform.scale(o.image, scaled_rect.size), scaled_rect)
+
+        for a in self.interest_points["artifacts"]:
+            if a.status == "destroyed": #if the artifact is destoyed, we remove it from the list.
+                self.interest_points["artifacts"].remove(a)
+                continue
+            a.update(self.screen) #will update the artifact display
+        
+
+        for a in self.agents: 
+            a.update()
+
+        # threads = []
+        # for robot in self.agents:
+        #     # Passe render=False pour éviter les conflits avec Pygame
+        #     thread = threading.Thread(target=robot.update)
+        #     threads.append(thread)
+        #     thread.start()
+        
+        # # Attends la fin de tous les threads
+        # for thread in threads:
+        #     thread.join()
 
         if self.render:
-            for o in self.obstacles:  #BACKUP scaling
-            #     self.screen.blit(o.image, o.rect)
-                scaled_rect = pygame.Rect(o.rect.x * self.scaling_factor, o.rect.y * self.scaling_factor, o.rect.width * self.scaling_factor, o.rect.height * self.scaling_factor)
-                self.screen.blit(pygame.transform.scale(o.image, scaled_rect.size), scaled_rect)
+            for a in self.agents: 
+                a.render(self.screen)
 
-        if(self.goal_condition()):
-            print(f"Goal reached in {self.step} steps!")
+        if(self.end_condition()):
+            print(f"Simulation done in {self.step} steps! \n Goal Reached : {self.goal_condition()}")
             self.running = False
 
         if self.communication_mode == "limited":
             self.limited_communication_update()
-            
+        
     def add_agent(self, agent):
+        """
+        Add a new agent in the environment. An agent HAS to be added to be taken into account in the simulation.
+        """
         self.agents.append(agent)
         self.agent_group.add(self.agents[-1])
 
     def create_env_from_image(self, img):
+        """
+        Will use an image to create the environment and it's obstacles.
+        
+        :param img: PIL loaded image in RGB format
+        """
         np_img = np.array(img)
-        np_img = ~np_img  # invert black and white cause (255 will be white, but we want our obstacle to be 1 and free cell be 0)
-        np_img[np_img > 0] = 1 #all non white cells are considered as obstacles.
+        #np_img = ~np_img  # invert black and white cause (255 will be white, but we want our obstacle to be 1 and free cell be 0)
+        #np_img[np_img > 0] = 1 #all non white cells are considered as obstacles.
 
         dims = np_img.shape
         self.width = dims[1]
@@ -160,24 +202,60 @@ class Environment():
             self.screen = None
         for l in range(len(np_img)) :
             for o in range(len(np_img[l])):
-                if np_img[l][o] == 1:
-                    self.create_wall(o,l)
+                #TODO traiter la couleur des pixels
+                r,g,b = np_img[l][o]
+                if r < 10 and g<10 and b<10: #black = wall
+                    self.create_cell(o,l, type=OG_WALL, group_name=OG_WALL_GROUP_NAME, color=(r,g,b))
+                elif r>180 and g<100 and b<100: #red = high obstacle
+                    self.create_cell(o,l, type=OG_HIGH_WALL, group_name=OG_HIGH_WALL_GROUP_NAME, color=(r,g,b))
+                elif r>180 and g>180 and b<100: #yellow = sand
+                    self.create_cell(o,l, type=OG_SAND, group_name=OG_SAND, color=(r,g,b), visibility=0.5)
+                elif r<100 and g<100 and b>180: #blue = water
+                    self.create_cell(o,l, type=OG_WATER, group_name=OG_WATER_GROUP_NAME, color=(r,g,b), visibility=0.5)
+                elif r<100 and g>180 and b<100: #green = grass
+                   self.create_cell(o,l, type=OG_GRASS, group_name=OG_GRASS_GROUP_NAME, color=(r,g,b), visibility=0.5)
 
-    def create_wall(self, coord_x, coord_y):
-        self.real_occupancy_grid[coord_x][coord_y] = OG_WALL
+    def create_cell(self, coord_x, coord_y, type, group_name:str, color, visibility = 1):
+        """
+        create cells in the env with a proper sprite. 
+        it will create a proper sprite object and add it in the proper group. In addition, the object will be added to the 
+        """
+        byte_visibility = int(visibility * 255)
+        self.real_occupancy_grid[coord_x][coord_y] = type
+
+        
 
         sprite = pygame.sprite.Sprite()
-        sprite.image = pygame.Surface((1, 1))
-        sprite.image.fill((0, 0, 0))
+        sprite.image = pygame.Surface((1, 1), pygame.SRCALPHA)
+        sprite.image.fill((color[0], color[1], color[2], byte_visibility))
         sprite.rect = pygame.Rect(coord_x,coord_y, 1,1)
-        self.obstacles.append(sprite)
+        #self.obstacles.append(sprite)
+
+        if group_name in self.cell_feature_groups:
+            self.cell_feature_groups[group_name].add(sprite)
+        else:
+            self.cell_feature_groups.update({group_name: pygame.sprite.Group()})
+        #self.obstacles_group.add(sprite) #old way
     
     def goal_condition(self):
+        """
+        Depends of the environment type, will return if the goal of the environment is reached or not.
+        """
         return False
+    
+    def end_condition(self):
+        """
+        Will return True if the simulation is considered as finished. The simulation will then stop at the next step update.
+        """
+        has_to_stop = True
+        for a in self.agents:
+            if not a.imdone:
+                has_to_stop = False
+        return has_to_stop
     
     def limited_communication_update(self):
         """
-        Available only with "limited" communication mode.
+        Available only with "limited" communication mode. Will handle the communication links between agents.
         """
         potential_links_dict = {} #in this dict, we'll append all unidirectional links : if agent B is in the com range of agent A, then the link A->B is created.
         for a in self.agents :
@@ -193,7 +271,8 @@ class Environment():
                 if str(agent.robot_id) in potential_links_dict[link] : #if reciprocity
                     #find the linked robot and append the loop robot to it.                    
                     for r in self.agents:
-                        if str(r.robot_id) == link:
+                        connection_error = random.uniform(0,1) > self.communication_reliability
+                        if str(r.robot_id) == link and r.robot_id != agent.robot_id and not(connection_error):
                             r.connected_robots.append(agent) #append mutually the robots in their connected robot list
                             agent.connected_robots.append(r)
                             break
@@ -207,7 +286,7 @@ class Environment():
     
 
 class TargetPointEnvironment(Environment):
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, scaling_factor:int=1, communication_mode="blackboard", target_point:tuple[int,int]=None, amount_of_agents_goal=1):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, scaling_factor:int=1, communication_mode="blackboard", target_point:tuple[int,int]=None, amount_of_agents_goal=1, save_img_steps = None):
         """"
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         In this Environment, the Agents has to reach a target point in order to complete the mission.
@@ -228,7 +307,7 @@ class TargetPointEnvironment(Environment):
         - amount_of_agents:int (default : 1) : amount of agents that needs to reach the point in order to complete the mission.
         """
 
-        super().__init__(render, width, height, background_color, caption, env_image, limit_of_steps=limit_of_steps, scaling_factor=scaling_factor, communication_mode=communication_mode)
+        super().__init__(render, width, height, background_color, caption, env_image, limit_of_steps=limit_of_steps, scaling_factor=scaling_factor, communication_mode=communication_mode, save_img_steps=save_img_steps)
         if target_point :
             self.init_target_point(x=target_point[0], y=target_point[1])
         else : #s'il n'y a pas de target point, on en génère un aléatoirement:
@@ -245,7 +324,9 @@ class TargetPointEnvironment(Environment):
             #self.screen.blit(self.target_point.image, self.target_point.rect)BACKUP scaling
 
     def init_target_point(self, x, y):
-
+        """
+        defines a target point that has to be reached by the robots.
+        """
         sprite = Sprite()
         sprite.image = pygame.Surface((4, 4))
         sprite.image.fill((255, 0, 0))
@@ -253,7 +334,7 @@ class TargetPointEnvironment(Environment):
         self.target_point = sprite
 
 
-        while pygame.sprite.spritecollide(self.target_point, self.obstacles_group, False):
+        while pygame.sprite.spritecollide(self.target_point, self.cell_feature_groups["obstacles"], False):
             logging.warning("Target point overlaps with an obstacle, reallocating it randomly.")
             self.target_point.rect.center = (randrange(0, self.width), randrange(0, self.height))
         
@@ -265,9 +346,151 @@ class TargetPointEnvironment(Environment):
             return True
         else:
             return False
+        
+    def end_condition(self):
+        if self.end_at_full_exploation:
+           return self.goal_condition()
+        else:
+            has_to_stop = True
+            for a in self.agents:
+                if not a.imdone:
+                    has_to_stop = False
+            return has_to_stop
 
 class ExplorationEnvironment(Environment):
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", exploration_proportion_goal=0.995, end_at_full_exploation=True):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, exploration_proportion_goal=0.995, end_at_full_exploation=True, save_img_steps = None):
+        """
+        ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
+        in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
+        
+        Params :
+        
+        - render:bool =  display the environment or not
+        - width:int = (default 100) = width of the environment
+        - heigth:int = (default 100) = height of the environment
+        - background_color:(int,int,int) = rgb color of the backgroung
+        - caption:str = name given to the env
+        - env_image:PIL.Image.Image = image computed into environment (overrides the witdh and height)
+        - full_knowledge:bool = the agent gets a copy of the whole environment in it's own memory or in blackboard if there is one.
+        - limit_of_steps:int = step limitation in which the agent should reach it's goal.
+        - scaling_factor:int = the display (display only) size of the screen is multiply by the scaling factor.
+        - communication_mode:str = method of communication in ["blackboard", "limited"] :
+            - "blackboard" : all robots share a blackboard in the environment, the knowledge is centralized on this blackboard
+            - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
+        - communication_reliability: float in [0,1] = Probability for the agents to be communication neighbors when they are in communication range.
+        - save_img_steps: String = if not None, image of the simulation will be saved in the string path given
+        - end_at_full_exploation:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when the exploration proportion goal is reached.
+        - exploration_proportion_goal : float in [0,1] = if at least this proportion of the environment is explored, the goal condition of the env will be true.
+        """
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps)
+        exp_map = np.zeros((self.width, self.height))
+        self.interest_points.update({"exploration_map":exp_map})
+        #on va pas mettre de fog sur les murs parce que la vision ne les traverse pas, si on a des murs plus épais que 2, alors il y aura toujours de la fog.
+        self.interest_points["exploration_map"] += self.real_occupancy_grid
+
+        self.explorable_zone_types = [OG_FREE_CELL, OG_GRASS, OG_SAND, OG_WATER]
+
+        self.fog_texture = pygame.Surface((1,1), pygame.SRCALPHA)
+        self.fog_texture.fill((100, 100, 100, 150))
+        
+        self.exploration_proportion_goal = exploration_proportion_goal
+        self.exploration_completion = 0.0
+
+        self.end_at_full_exploation = end_at_full_exploation
+
+        #self.explorable_cell_number = np.count_nonzero(np.isin(self.real_occupancy_grid, self.explorable_zone_types))
+        self.explorable_cell_number = self.width* self.height
+
+    def run(self):
+        #remove some fog around agents before launching
+        for agent in self.agents:
+            neighbours = agent.get_neighbors_pixels(distance = agent.vision_range, stop_at_wall = True, self_inclusion = True)
+            self.mark_explored_cells(neighbours)
+        super().run()
+
+    def update(self):
+        super().update()
+        for agent in self.agents:
+            neighbours = agent.get_neighbors_pixels(distance = agent.vision_range, stop_at_wall = True, self_inclusion = True)
+            self.mark_explored_cells(neighbours)
+        #Il faut que les agents effacent la fog autours d'eux maintenant.
+        if self.render:
+            self.draw_fog()
+        pass
+        
+    def draw_fog(self):
+        """
+        Draw fog only if the environment is rendered
+        """
+        unexplored_poses = np.where(np.isin(self.interest_points["exploration_map"], self.explorable_zone_types))#check for each element of the Occ grid if it's an explorable zone.
+        for i in range(len(unexplored_poses[0])):
+            # self.screen.blit(self.fog_texture, pygame.Rect(unexplored_poses[0][i], unexplored_poses[1][i], 1, 1)) #BACKUP scaling
+            scaled_rect = pygame.Rect(unexplored_poses[0][i] * self.scaling_factor, unexplored_poses[1][i] * self.scaling_factor, self.scaling_factor, self.scaling_factor)
+            self.screen.blit(pygame.transform.scale(self.fog_texture, scaled_rect.size), scaled_rect)
+            
+        pass
+    
+    def goal_condition(self):
+        # print(np.count_nonzero(self.interest_points["exploration_map"]==1))
+        # print(self.width*self.height)
+        # print(np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height))
+
+        self.exploration_completion = np.count_nonzero(self.interest_points["exploration_map"])/self.explorable_cell_number
+        # print(f"BB completion : {np.count_nonzero(self.agents_tools["blackboard"]["occupancy_grid"]!=-1)/(self.width*self.height)}")
+        # print(self.exploration_completion)
+        if (self.exploration_completion >= self.exploration_proportion_goal):
+            return True
+        else:
+            return False
+
+    def end_condition(self):
+        if self.end_at_full_exploation:
+           return self.goal_condition()
+        else:
+            has_to_stop = True
+            for a in self.agents:
+                if not a.imdone:
+                    has_to_stop = False
+            return has_to_stop
+
+    def mark_explored_cells(self, cells):
+        """
+        update the globally seen cells.
+        """
+        for cell in cells:
+            self.interest_points["exploration_map"][cell[0]-1][cell[1]-1] = 1
+
+class MineClearingEnvironment(Environment): 
+    class Mine(Artifact):
+        def __init__(self, env, id, name, type, coordinates, explosion_proba=0.01, size=1, color = (255,0,0)):
+            super().__init__(env, id, name, type, coordinates, size, color)
+            self.explosion_proba = explosion_proba
+            self.life_points=100
+
+        def interact(self, competence):
+            """
+            competence should be a float in [0,1]
+
+            return dict: {"cleared":bool, "explosion":bool}
+            """
+            self.life_points -= 10*competence
+
+            explosion = uniform(0,1) <=  self.explosion_proba #probability that the mine exploses
+
+            if explosion:
+                self.destroy() ##TODO REMAKE THIS
+                for robot in self.env.agents:
+                    if euclidian_distance(self.coordinates, (robot.transform.x, robot.transform.y)) < 2.0:
+                        robot.status = "destroyed"
+                self.destroy()
+
+            if self.life_points <=0:
+                self.destroy()
+                return True
+            else:
+                return False
+
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
@@ -288,19 +511,21 @@ class ExplorationEnvironment(Environment):
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
         - end_at_full_exploation:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when the exploration proportion goal is reached.
         """
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps)
+
+        self.end_at_full_clear = end_at_full_clear
+
         exp_map = np.zeros((self.width, self.height))
         self.interest_points.update({"exploration_map":exp_map})
         #on va pas mettre de fog sur les murs parce que la vision ne les traverse pas, si on a des murs plus épais que 2, alors il y aura toujours de la fog.
         self.interest_points["exploration_map"] += self.real_occupancy_grid
 
-        self.fog_texture = pygame.Surface((1,1))
-        self.fog_texture.fill((100, 100, 100))
-        
-        self.exploration_proportion_goal = exploration_proportion_goal
-        self.exploration_completion = 0.0
+        self.explorable_zone_types = [OG_FREE_CELL, OG_GRASS, OG_SAND, OG_WATER]
 
-        self.end_at_full_exploation = end_at_full_exploation
+        self.fog_texture = pygame.Surface((1,1), pygame.SRCALPHA)
+        self.fog_texture.fill((100, 100, 100, 150))
+        
+        self.explorable_cell_number = np.count_nonzero(np.isin(self.real_occupancy_grid, self.explorable_zone_types))
 
     def run(self):
         #remove some fog around agents before launching
@@ -320,7 +545,7 @@ class ExplorationEnvironment(Environment):
         pass
 
     def draw_fog(self):
-        unexplored_poses = np.where(self.interest_points["exploration_map"] == 0)
+        unexplored_poses = np.where(np.isin(self.interest_points["exploration_map"], self.explorable_zone_types))#check for each element of the Occ grid if it's an explorable zone.
         for i in range(len(unexplored_poses[0])):
             # self.screen.blit(self.fog_texture, pygame.Rect(unexplored_poses[0][i], unexplored_poses[1][i], 1, 1)) #BACKUP scaling
             scaled_rect = pygame.Rect(unexplored_poses[0][i] * self.scaling_factor, unexplored_poses[1][i] * self.scaling_factor, self.scaling_factor, self.scaling_factor)
@@ -329,19 +554,14 @@ class ExplorationEnvironment(Environment):
         pass
     
     def goal_condition(self):
-        # print(np.count_nonzero(self.interest_points["exploration_map"]==1))
-        # print(self.width*self.height)
-        # print(np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height))
+        if len(self.interest_points["artifacts"]) == 0:
+            return True
+        else :
+            return False
 
-        if self.end_at_full_exploation:
-            self.exploration_completion = np.count_nonzero(self.interest_points["exploration_map"]==1)/(self.width*self.height)
-            # print(f"COMPLETION : {self.exploration_completion}")
-            # print(f"BB completion : {np.count_nonzero(self.agents_tools["blackboard"]["occupancy_grid"]!=-1)/(self.width*self.height)}")
-            # print(self.exploration_completion)
-            if (self.exploration_completion >= self.exploration_proportion_goal):
-                return True
-            else:
-                return False
+    def end_condition(self):
+        if self.end_at_full_clear:
+           return self.goal_condition()
         else:
             has_to_stop = True
             for a in self.agents:
@@ -352,3 +572,134 @@ class ExplorationEnvironment(Environment):
     def mark_explored_cells(self, cells):
         for cell in cells:
             self.interest_points["exploration_map"][cell[0]-1][cell[1]-1] = 1
+    
+    def add_mine(self, coords):
+        mine = self.Mine(self, 
+                         id=len(self.interest_points["artifacts"]),
+                         name=f"mine{len(self.interest_points["artifacts"])}",
+                         type= "mine",
+                         coordinates=coords
+                         )
+        self.interest_points["artifacts"].append(mine)
+        pass
+
+    def add_agent(self, agent):
+        agent.shape_competence("mine", 0.9, 1.0) #adding default mine competence values
+        return super().add_agent(agent)
+    
+class WasteCleaningEnvironment(Environment): 
+    class Waste(Artifact):
+        def __init__(self, env, id, name, type, coordinates, size=1, color = (255,0,0)):
+            super().__init__(env, id, name, type, coordinates, size, color)
+            self.life_points=100
+
+        def interact(self, competence):
+            """
+            competence should be a float in [0,1]
+
+            return dict: {"cleared":bool, "explosion":bool}
+            """
+            self.life_points -= 10*competence
+
+            if self.life_points <=0:
+                self.destroy()
+                return True
+            else:
+                return False
+
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None):
+        """
+        ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
+        in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
+        
+        Params :
+        
+        - render:bool =  display the environment or not
+        - width:int = (default 100) = width of the environment
+        - heigth:int = (default 100) = height of the environment
+        - background_color:(int,int,int) = rgb color of the backgroung
+        - caption:str = name given to the env
+        - env_image:PIL.Image.Image = image computed into environment (overrides the witdh and height)
+        - full_knowledge:bool = the agent gets a copy of the whole environment in it's own memory or in blackboard if there is one.
+        - limit_of_steps:int = step limitation in which the agent should reach it's goal.
+        - scaling_factor:int = the display (display only) size of the screen is multiply by the scaling factor.
+        - communication_mode:str = method of communication in ["blackboard", "limited"] :
+            - "blackboard" : all robots share a blackboard in the environment, the knowledge is centralized on this blackboard
+            - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
+        - end_at_full_exploation:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when the exploration proportion goal is reached.
+        """
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps)
+
+        self.end_at_full_clear = end_at_full_clear
+
+        exp_map = np.zeros((self.width, self.height))
+        self.interest_points.update({"exploration_map":exp_map})
+        #on va pas mettre de fog sur les murs parce que la vision ne les traverse pas, si on a des murs plus épais que 2, alors il y aura toujours de la fog.
+        self.interest_points["exploration_map"] += self.real_occupancy_grid
+
+        self.explorable_zone_types = [OG_FREE_CELL, OG_GRASS, OG_SAND, OG_WATER]
+
+        self.fog_texture = pygame.Surface((1,1), pygame.SRCALPHA)
+        self.fog_texture.fill((100, 100, 100, 150))
+        
+        self.explorable_cell_number = np.count_nonzero(np.isin(self.real_occupancy_grid, self.explorable_zone_types))
+
+    def run(self):
+        #remove some fog around agents before launching
+        for agent in self.agents:
+            neighbours = agent.get_neighbors_pixels(distance = agent.vision_range, stop_at_wall = True, self_inclusion = True)
+            self.mark_explored_cells(neighbours)
+        super().run()
+
+    def update(self):
+        super().update()
+        for agent in self.agents:
+            neighbours = agent.get_neighbors_pixels(distance = agent.vision_range, stop_at_wall = True, self_inclusion = True)
+            self.mark_explored_cells(neighbours)
+        #Il faut que les agents effacent la fog autours d'eux maintenant.
+        if self.render:
+            self.draw_fog()
+        pass
+
+    def draw_fog(self):
+        unexplored_poses = np.where(np.isin(self.interest_points["exploration_map"], self.explorable_zone_types))#check for each element of the Occ grid if it's an explorable zone.
+        for i in range(len(unexplored_poses[0])):
+            # self.screen.blit(self.fog_texture, pygame.Rect(unexplored_poses[0][i], unexplored_poses[1][i], 1, 1)) #BACKUP scaling
+            scaled_rect = pygame.Rect(unexplored_poses[0][i] * self.scaling_factor, unexplored_poses[1][i] * self.scaling_factor, self.scaling_factor, self.scaling_factor)
+            self.screen.blit(pygame.transform.scale(self.fog_texture, scaled_rect.size), scaled_rect)
+            
+        pass
+    
+    def goal_condition(self):
+        if len(self.interest_points["artifacts"]) == 0:
+            return True
+        else :
+            return False
+
+    def end_condition(self):
+        if self.end_at_full_clear:
+           return self.goal_condition()
+        else:
+            has_to_stop = True
+            for a in self.agents:
+                if not a.imdone:
+                    has_to_stop = False
+            return has_to_stop
+
+    def mark_explored_cells(self, cells):
+        for cell in cells:
+            self.interest_points["exploration_map"][cell[0]-1][cell[1]-1] = 1
+    
+    def add_waste(self, coords):
+        mine = self.Waste(self, 
+                         id=len(self.interest_points["artifacts"]),
+                         name=f"waste{len(self.interest_points["artifacts"])}",
+                         type= "clean",
+                         coordinates=coords
+                         )
+        self.interest_points["artifacts"].append(mine)
+        pass
+
+    def add_agent(self, agent):
+        agent.shape_competence("clean", 0.9, 1.0) #adding default mine competence values
+        return super().add_agent(agent)

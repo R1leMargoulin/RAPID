@@ -10,13 +10,13 @@ import json
 
 
 #ENVIRONMENT PARAMETERS----------------------------------------------------------------------------------------------------------------------------------
-GROUP_EXPERIMENT_NAME = "minpos_blackboard_freq1_empty_100x100/"
+GROUP_EXPERIMENT_NAME = "minpos_empty_100x100/"
 EXPERIMENT_NAME = '3_robots'
 RESULT_PATH = "/home/erwan/Documents/tests_simulations/RAPID/experiments/"#select an existing folder
 NB_SIMULATION = 10
 
 
-RENDER = True #display the simulation GUI or not.
+RENDER = False #display the simulation GUI or not.
 SCALING_FACTOR = 3 #will scale the size of the window if render, by the scaling factor
 
 # Environment setupk
@@ -28,7 +28,7 @@ BACKGROUND_COLOR = (200, 200, 200)
 ENV_IMAGE_PATH = None
 STEP_LIMITATION = None
 
-COMMUNICATION_MODE = "blackboard" #either "blackboard" or "limited"
+COMMUNICATION_MODE = "limited" #either "blackboard" or "limited"
 
 
 def main():
@@ -38,7 +38,7 @@ def main():
     GROUND_AGENTS_MAX_SPEED = (2, 0, 0.5) #(x,y,w) speeds in 2D transform. if None : default value (1,0,0.5)
     GROUND_AGENTS_BEHAVIOR = "minpos" #random behavior if commented
     GROUND_AGENTS_COMMUNICATION_RANGE = 20 #won't be taken into acccount if the com mode is "blackboard"
-    GROUND_AGENTS_COMMUNICATION_PERIOD = 1
+    GROUND_AGENTS_COMMUNICATION_PERIOD = 10
     GROUND_AGENTS_VISION_RANGE = 20 # default 20.
 
     #-------------------------------------------------------------------------------------------------------------------------------------------
@@ -126,6 +126,7 @@ def create_simulation_data(env, sim_number:int,): #TODO, passer en CSV sera plus
                                                                             "communication_period": a.communication_period,
                                                                             "vision_range": a.vision_range,
                                                                             "max_speed": (a.max_speed.x, a.max_speed.y, a.max_speed.w),
+                                                                            "belief_space": a.belief_space
                                                                         }
                                                                     })
     

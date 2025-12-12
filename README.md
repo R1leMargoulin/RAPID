@@ -3,6 +3,8 @@ Robotics Agent Prototyping for Intelligence Development
 
 This Software is designed for rapid prototyping of multi-robots behaviors. We can run multiagent simulations permitting to observe collective effects of our behaviors.
 
+**Please, check the [Wiki](https://github.com/R1leMargoulin/RAPID/wiki) for a detailed documentation**
+
 This project is made with python, using pygame library.
 
 # Getting started
@@ -57,9 +59,11 @@ In the **examples/program_examples** directory, you can find three programs:
 
 Environment can be made with images, here are some examples:
 
-Here is an example of exploration in a "forest" environment using the minpos behavior.
-![image](./images/expl_foret_3robots.gif)
+Here is an example of exploration in a "labyrinth" environment using the action selection behavior.
+![4_grounds](https://github.com/user-attachments/assets/dd22fd09-6f11-478a-a834-afb5b8c0dbab)
 
+
+**Please, check the [Wiki](https://github.com/R1leMargoulin/RAPID/wiki) for a detailed documentation**
 
 On the below images, we can see on the left a forest simulated environment used in an exploration scenario.While on the middle, we can see a wall with an opening, environment, used in a target point scenario where an amount of agents needs to go near the target point (in red on the image). On the right,
 we can see an exploration scenario with a limited range of communication
