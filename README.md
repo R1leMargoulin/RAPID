@@ -32,9 +32,9 @@ source env/bin/activate
 Make sure to have git installed on your computer.
 
 
-Go in the directory you want to place this repo and pull it :
+Go in the directory you want to place this repo and clone it :
 ```bash
-git pull https://github.com/R1leMargoulin/RAPID.git
+git clone https://github.com/R1leMargoulin/RAPID.git
 ```
 
 Then install the package with pip:
