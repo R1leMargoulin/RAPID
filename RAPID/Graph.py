@@ -1,10 +1,12 @@
 from . import utils
 
 import numpy as np
+import heapq
 import matplotlib.pyplot as plt
 #from scipy.ndimage import binary_dilation, generate_binary_structure
 from scipy.ndimage import distance_transform_edt
 from skimage.morphology import skeletonize, medial_axis
+from skimage.measure import find_contours, approximate_polygon
 
 from collections import defaultdict
 
@@ -48,11 +50,18 @@ class Graph():
         #TODO graph creation
         self.agent_id = agent_id
         self.dist_treshold = nodes_distance_treshold
+        #graph itself
         self.graph = None
         self.nodes = {}
         self.graph_generation(occupancy_grid)
 
-        
+        #polygon zone allocation
+        nodelist = list(self.nodes.keys())
+        allocaton_map = self.allocate_cells_to_nodes(nodelist, occupancy_grid)
+        polygones = self.extraire_polygones(allocaton_map, nodelist)
+        for p in polygones:
+            self.nodes[p].zone = polygones[p][0]
+    
     def graph_generation(self, grid):
         def euclidean_distance_transform(grid):
             # grid : tableau 2D où 0 = obstacle, 1 = espace libre
@@ -242,7 +251,7 @@ class Graph():
 
         return None
     
-    def plot_voronoi_graph(self, img=None):
+    def plot_voronoi_graph(self, img=None, display_zones=False):
         from matplotlib import pyplot as plt
         # Afficher le squelette en arrière-plan
         if img:
@@ -259,6 +268,76 @@ class Graph():
         for node in self.nodes:
             x, y = node
             plt.plot(x, y, 'ro', markersize=3)  # Tracer les nœuds en rouge
+            if display_zones:
+                plt.plot(*zip(*self.nodes[node].zone) )#'k'
 
         # Ajouter une légende et un titre
         plt.show()
+
+    def allocate_cells_to_nodes(self, node_list, matrice_occupation):
+        """allocate each free cell to the closest node using a WPA for distance and obstacle avoidement"""
+            
+        # Initialisation
+        allocation_matrix = np.full(matrice_occupation.shape, -1, dtype=int)
+        distance_matrix = np.full(matrice_occupation.shape, np.inf)
+        open_set = []
+
+        # Ajouter les nœuds à la file de priorité (distance 0)
+        for node_idx, (ny, nx) in enumerate(node_list):
+            heapq.heappush(open_set, (0, int(ny), int(nx), node_idx))
+
+        # Directions possibles (4-connexité)
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+        while open_set:
+            current_dist, y, x, node_idx = heapq.heappop(open_set)
+
+            # Si la distance actuelle est supérieure à celle enregistrée, on passe
+            if current_dist > distance_matrix[y, x]:
+                continue
+
+            # Explorer les voisins
+            for dy, dx in directions:
+                ny, nx = y + dy, x + dx
+
+                # Vérifier les limites et les murs
+                if (0 <= ny < matrice_occupation.shape[0] and
+                    0 <= nx < matrice_occupation.shape[1] and
+                    matrice_occupation[ny, nx] != 1 and  # Pas un mur
+                    distance_matrix[ny, nx] > current_dist + 1):
+
+                    distance_matrix[ny, nx] = current_dist + 1
+                    allocation_matrix[ny, nx] = node_idx
+                    heapq.heappush(open_set, (distance_matrix[ny, nx], ny, nx, node_idx))
+
+        return allocation_matrix
+    
+    def extraire_polygones(self, matrice, node_list):
+
+        matrice_etendue = np.pad(matrice, pad_width=1, mode='constant', constant_values=-1)
+
+        polygones = {}
+        for value in range(len(node_list)):
+            # if value == -1:  # Ignorer la bordure ajoutée et les valeurs a -1
+            #     continue
+
+            contours = find_contours(matrice_etendue == value)
+
+            
+            polygones[node_list[value]] = []
+            for contour in contours:
+                # (y, x) -> (x, y) 
+                contour_corrige = contour[:, :] - 1  # -1 cause of padding
+                contour_corrige = np.trunc(contour_corrige).astype(int)
+
+                # Fermer le polygone en reliant le premier et dernier point si nécessaire
+                if not np.array_equal(contour_corrige[0], contour_corrige[-1]):
+                    contour_corrige = np.vstack([contour_corrige, contour_corrige[0]])
+
+                # Simplifier le polygone avec Douglas-Peucker
+                contour_simplifie = approximate_polygon(contour_corrige, tolerance=0.8) #Douglas-peucker
+
+                polygones[node_list[value]].append(contour_simplifie.tolist())
+                #polygones[value].append(contour_corrige.tolist())
+
+        return polygones
