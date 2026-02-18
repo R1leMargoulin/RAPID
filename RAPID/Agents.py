@@ -156,6 +156,7 @@ class Robot(Sprite):
                 self.navigate_through_target_path()
                 pass
             else: #if we don't have any path, then compute it with our target
+                #print("target", self.target)
                 self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
                 if not(self.path_to_target):
                     self.target = None
@@ -164,7 +165,7 @@ class Robot(Sprite):
             self.perform_target_action()
         else:
             self.behave() #in order to determine what to do.
-            if not self.imdone:
+            if not self.imdone and np.any(self.target):
                 self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation #TODO c'est un test ca
                 self.navigate_through_target_path() 
 
@@ -948,7 +949,7 @@ class BaseStation(Robot):
 
             #importance = ((np.max([0.0,(self.env.step - oldest_com_time) - ((self.env.width + self.env.height)/2)]))**(1 + self.base.return_priority)) / (self.env.step) # TO KEEP
             #importance = ((np.max([0.0,(self.env.step - oldest_com_time)]) - ((self.env.width + self.env.height)/2+self.base.return_priority))**2) / self.env.step
-            importance = np.max([0.0,(((self.env.step - oldest_com_time)*self.base.return_priority ) - (self.env.width + self.env.height)/2)])**3 /self.env.step**2
+            importance = np.max([0.0,(((self.env.step - oldest_com_time)*self.base.return_priority ) - (self.env.width )/2)])**3 /self.env.step**2
 
             # TODO : return priority en unité de temps?
 
