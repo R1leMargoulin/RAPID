@@ -251,6 +251,14 @@ class Graph():
 
         return None
     
+    def merge_graph(self, new_graph):
+        for node in new_graph.nodes:
+            if node not in self.nodes:
+                self.nodes.update({node:new_graph.nodes[node]})
+        
+        self.clean_graph()
+        pass
+    
     def plot_voronoi_graph(self, img=None, display_zones=False):
         from matplotlib import pyplot as plt
         # Afficher le squelette en arrière-plan
