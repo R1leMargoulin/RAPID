@@ -150,17 +150,19 @@ class Robot(Sprite):
         Update function of the agent, will be called at each simulation step.
         """
         self.sense()#first of all sense the env.
+
+        #TODO: gestion graphs si necessaire
+        if self.graph_mode:
+            pass
+            #if delta graph timing:
+            #   self.graph = Graph(occ_grid)
+            #   graph merging entre ancien et nouveau pour pas perdre les autres points (des nn visites)
+        #TODO : modifier dans les prises de decision en fonction, jsp encore comment faire ca...
+
+        #TODO : modif le belief transfer en fonction de si on fait des graphs ou pas.
         self.belief_transfer() #after sensing, transfer beliefs if applicable
         if np.any(self.target):
-            if self.path_to_target: #If we have a path to our target, we continue this path.
-                self.navigate_through_target_path()
-                pass
-            else: #if we don't have any path, then compute it with our target
-                #print("target", self.target)
-                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
-                if not(self.path_to_target):
-                    self.target = None
-                    self.action_to_perform = None
+            self.navigate()
         elif self.action_to_perform != None:
             self.perform_target_action()
         else:
@@ -210,6 +212,17 @@ class Robot(Sprite):
     def behave(self):
         """Has to be overloaded in other robots types, in order to implement the behaviors handlable by the robot"""
         raise Exception(f"The behave methot has to be redefined for the agent {self.robot_id} of type {self.type} ")
+
+    def navigate(self):
+        if self.path_to_target: #If we have a path to our target, we continue this path.
+            self.navigate_through_target_path()
+            pass
+        else: #if we don't have any path, then compute it with our target
+            #print("target", self.target)
+            self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
+            if not(self.path_to_target):
+                self.target = None
+                self.action_to_perform = None
 
     def finish(self):
         """called by behavior when the work is considered done."""
@@ -310,18 +323,18 @@ class Robot(Sprite):
         - stop at walls:bool (default False), cells behind a wall are considered as neighbors?
         - self_inclusion: bool (default:True), do we include the cell the agent is on?.
         """
-        todo_queue = [(int(self.transform.x), int(self.transform.y))]
+        now_queue = [(int(self.transform.x), int(self.transform.y))]
         next_queue = []
         neighbors = []
 
         if self_inclusion:
-            neighbors.append(todo_queue[0])
+            neighbors.append(now_queue[0])
 
         #instead of asking all cells if it's within the distance,we operate a propagation depending on the vision range.
         for i in range(distance):
-            while len(todo_queue)>0:
+            while len(now_queue)>0:
                 for direction in DIRECTIONS:
-                    neighbor = (todo_queue[0][0] + direction[0], todo_queue[0][1] + direction[1])
+                    neighbor = (now_queue[0][0] + direction[0], now_queue[0][1] + direction[1])
                     #if it's already in neighbors, we don't want it:
                     if (neighbor in neighbors):
                         pass
@@ -336,9 +349,9 @@ class Robot(Sprite):
                                 pass
                             else:
                                 next_queue.append(neighbor)
-                todo_queue.pop(0)
-            #then for the next distance, the next_queue becomes the todo_queue and we empty the next queue
-            todo_queue = next_queue
+                now_queue.pop(0)
+            #then for the next distance, the next_queue becomes the now_queue and we empty the next queue
+            now_queue = next_queue
             next_queue = []
 
         return neighbors

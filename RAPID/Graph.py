@@ -8,6 +8,9 @@ from scipy.ndimage import distance_transform_edt
 from skimage.morphology import skeletonize, medial_axis
 from skimage.measure import find_contours, approximate_polygon
 
+from shapely.geometry import Point
+from shapely.geometry.polygon import Polygon
+
 from collections import defaultdict
 
 #from PIL import Image
@@ -349,3 +352,13 @@ class Graph():
                 #polygones[value].append(contour_corrige.tolist())
 
         return polygones
+    
+    def identify_polygon_to_point(self, point:tuple):
+        spoint = Point(point[0], point[1])
+        identified = None
+        for node in self.nodes:
+            polygon = Polygon(self.nodes[node].zone) #zone of a point is a polygon
+            if polygon.contains(spoint):
+                identified = node
+                break
+        return identified
