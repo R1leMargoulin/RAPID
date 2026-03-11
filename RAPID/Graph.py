@@ -323,60 +323,95 @@ class Graph():
                                 self.remove_node(neighbor)
 
                                 changed = True
-                                break
-                    if changed:
-                        break
+                    #             break
+                    # if changed:
+                    #     break
                     
                        
-                    for deg2 in deg2neighbors:
-                        if deg2 == node or deg2 not in self.nodes:
-                            continue
-                        nx, ny = deg2
+                    # for deg2 in deg2neighbors:
+                    #     if deg2 == node or deg2 not in self.nodes:
+                    #         continue
+                    #     nx, ny = deg2
 
-                        if utils.euclidian_distance((x, y), (nx, ny)) <= self.dist_treshold*2 and node in self.nodes:
-                            # Calcul du point moyen
-                            moyen = ((x + nx) / 2, (y + ny) / 2)
+                    #     if utils.euclidian_distance((x, y), (nx, ny)) <= self.dist_treshold*2 and node in self.nodes:
+                    #         # Calcul du point moyen
+                    #         moyen = ((x + nx) / 2, (y + ny) / 2)
 
-                            # Récupération des autres voisins
-                            other_neighbors = []
-                            for other in self.nodes[node].neighbors:
-                                if other != deg2 and other in self.nodes:
-                                    other_neighbors.append(other)
-                            for other in self.nodes[deg2].neighbors:
-                                if other != node and other not in other_neighbors and other in self.nodes:
-                                    other_neighbors.append(other)
+                    #         # Récupération des autres voisins
+                    #         other_neighbors = []
+                    #         for other in self.nodes[node].neighbors:
+                    #             if other != deg2 and other in self.nodes:
+                    #                 other_neighbors.append(other)
+                    #         for other in self.nodes[deg2].neighbors:
+                    #             if other != node and other not in other_neighbors and other in self.nodes:
+                    #                 other_neighbors.append(other)
 
-                            # Suppression des anciens nœuds et ajout du nouveau
-                            for other in other_neighbors:
-                                # if other not in self.nodes:
-                                #     continue
-                                if node in self.nodes[other].neighbors:
-                                    self.nodes[other].add_neighbor(id=moyen, distance=utils.euclidian_distance(other, moyen) )
-                                if deg2 in self.nodes[other].neighbors:
-                                    self.nodes[other].add_neighbor(id=moyen, distance=utils.euclidian_distance(other, moyen) )
+                    #         # Suppression des anciens nœuds et ajout du nouveau
+                    #         for other in other_neighbors:
+                    #             # if other not in self.nodes:
+                    #             #     continue
+                    #             if node in self.nodes[other].neighbors:
+                    #                 self.nodes[other].add_neighbor(id=moyen, distance=utils.euclidian_distance(other, moyen) )
+                    #             if deg2 in self.nodes[other].neighbors:
+                    #                 self.nodes[other].add_neighbor(id=moyen, distance=utils.euclidian_distance(other, moyen) )
                                 
-                            observer_agents = list(np.unique( observer_agents + self.nodes[deg2].agents)) #merge agents that have seen those two merged nodes
+                    #         observer_agents = list(np.unique( observer_agents + self.nodes[deg2].agents)) #merge agents that have seen those two merged nodes
 
-                            # Ajout du nœud moyen au graph
-                            self.add_node(moyen, other_neighbors, observers=observer_agents)
+                    #         # Ajout du nœud moyen au graph
+                    #         self.add_node(moyen, other_neighbors, observers=observer_agents)
                             
 
-                            # Suppression des anciens nœuds
-                            self.remove_node(node)
-                            self.remove_node(deg2)
+                    #         # Suppression des anciens nœuds
+                    #         self.remove_node(node)
+                    #         self.remove_node(deg2)
 
-                            changed = True
-                            break
-                    if changed:
-                        break
+                    #         changed = True
+                    #         break
+                    # if changed:
+                    #     break
                     
 
         return None
     
-    def merge_graph(self, new_graph):
+    def merge_graph(self, new_graph): #TODO peut etre faire le merge a ce niveau la, plutot que dans le clean
         for node in new_graph.nodes:
             if node not in self.nodes:
-                self.nodes.update({node:new_graph.nodes[node]})
+                nodelist = list(self.nodes.keys())
+                for localnode in nodelist:
+                    if utils.euclidian_distance(node, localnode) < self.dist_treshold:
+                        #merge the two nodes directly
+                        # Calcul du point moyen
+                        moyen = ((node[0] + localnode[0]) / 2, (node[1] + localnode[1]) / 2)
+
+                        # Récupération des autres voisins
+                        other_neighbors = []
+                        for other in self.nodes[localnode].neighbors:
+                            if other != localnode and other in self.nodes:
+                                other_neighbors.append(other)
+                        for other in new_graph.nodes[node].neighbors:
+                            if other != localnode and other not in other_neighbors and other in self.nodes:
+                                other_neighbors.append(other)
+
+                        # Suppression des anciens nœuds et ajout du nouveau
+                        for other in other_neighbors:
+                            # if other not in self.nodes:
+                            #     continue
+                            if localnode in self.nodes[other].neighbors:
+                                self.nodes[other].add_neighbor(id=moyen, distance=utils.euclidian_distance(other, moyen) )
+                            if node in self.nodes[other].neighbors:
+                                self.nodes[other].add_neighbor(id=moyen, distance=utils.euclidian_distance(other, moyen) )
+                            
+                        observer_agents = list(np.unique( self.nodes[localnode].agents + new_graph.nodes[node].agents)) #merge agents that have seen those two merged nodes
+
+                        # Ajout du nœud moyen au graph
+                        self.add_node(moyen, other_neighbors, observers=observer_agents)
+                        
+
+                        # Suppression des anciens nœuds
+                        self.remove_node(localnode)
+                        #self.remove_node(deg2)
+
+                #self.nodes.update({node:new_graph.nodes[node]})
             else:
                 self.nodes[node].agents = list(np.unique(new_graph.nodes[node].agents + self.nodes[node].agents)) #merging of the agents that has seen that node
                 

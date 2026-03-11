@@ -962,7 +962,6 @@ class Aerial(Robot):
         self.translate(self.speed.x, self.speed.y)
 
 class BaseStation(Robot):
-
     class BaseStationArtifact(Artifact):
         def __init__(self, env, id, name, coordinates, associated_agent:Robot, size=1, color = (255,0,0)):
             type = "base_station_com"
