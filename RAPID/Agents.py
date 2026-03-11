@@ -4,9 +4,11 @@ from pygame.draw import *
 from pygame import Surface, SRCALPHA, Rect
 
 from .Environment import Environment
+from .Graph import Graph, Node
 from .Artifacts import Artifact
 from .utils import *
 from .grid_variables import *
+
 
 
 import numpy as np
@@ -17,7 +19,7 @@ from copy import deepcopy
 
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10, energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False):
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10, energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False, graph_mode=False, graph_delta=50):
         """
         Robot class are our agents representing robots.
 
@@ -38,6 +40,7 @@ class Robot(Sprite):
         - energy_cost_per_cell: int = energy consumption
         - delta_replan : int = time (in sim steps) from a planning until the robot will replan a new goal in case it recieve new knowledge from an other team member.
         - write_logs : bool = if true, will save log in RAM for simulation stats.
+        - graph_mode : Boolean = true if robots should use graphs over occupancy grid. Occupancy grid will be used locally for naviation purposes only, but won't be communicate. if one robot is using graph_mode, ALL ROBOTS SHOULD DO AS WELL.
         """
         self.status = "init"
         super().__init__()
@@ -135,6 +138,18 @@ class Robot(Sprite):
         if self.env.full_knowledge:
             self.belief_space["occupancy_grid"] = self.env.real_occupancy_grid
 
+        self.graph_mode = graph_mode
+        self.graph_delta = graph_delta
+        self.last_graph_generation = self.env.step
+        self.graph = None
+        if graph_mode:
+            self.graph_mode = True
+            self.belief_space["graph"] = Graph(self.belief_space["occupancy_grid"], agent_id = self.robot_id, traversable_types=self.traversable_types+[-1], nodes_distance_treshold=self.vision_range/2)
+            #self.graph = Graph(self.belief_space["occupancy_grid"], agent_id = self.robot_id, traversable_types=self.traversable_types+[-1]) #Graph generation
+            #self.graph.plot_voronoi_graph(img=self.env.env_image, display_zones=True) #virer ca
+
+
+
         
         self.imdone = False #if true, the robot will consider it's mission is over, it stops its activity.
 
@@ -153,11 +168,12 @@ class Robot(Sprite):
 
         #TODO: gestion graphs si necessaire
         if self.graph_mode:
-            pass
-            #if delta graph timing:
-            #   self.graph = Graph(occ_grid)
-            #   graph merging entre ancien et nouveau pour pas perdre les autres points (des nn visites)
-        #TODO : modifier dans les prises de decision en fonction, jsp encore comment faire ca...
+            if self.env.step - self.last_graph_generation > self.graph_delta:
+                self.belief_space["graph"].update_graph(self.belief_space["occupancy_grid"], agent_id=self.robot_id, traversable_types=self.traversable_types)
+                self.last_graph_generation = self.env.step
+                
+                self.belief_space["graph"].plot_voronoi_graph(img=self.env.env_image, display_zones=True)#TODO : virer ca
+        #TODO : modifier dans les prises de decision en fonction
 
         #TODO : modif le belief transfer en fonction de si on fait des graphs ou pas.
         self.belief_transfer() #after sensing, transfer beliefs if applicable
@@ -211,7 +227,7 @@ class Robot(Sprite):
 
     def behave(self):
         """Has to be overloaded in other robots types, in order to implement the behaviors handlable by the robot"""
-        raise Exception(f"The behave methot has to be redefined for the agent {self.robot_id} of type {self.type} ")
+        raise Exception(f"The behave method has to be redefined for the agent {self.robot_id} of type {self.type} ")
 
     def navigate(self):
         if self.path_to_target: #If we have a path to our target, we continue this path.
@@ -391,7 +407,12 @@ class Robot(Sprite):
         #car -1 = unknown, 0 = free, 1 = obstacle, et quand c'est plus grand c'est des points d'interets.
 
         #ROBOTS INFOS-----------------------------------------------------------
-        self.belief_space["occupancy_grid"] = np.maximum.reduce([self.belief_space["occupancy_grid"], sender_belief_space["occupancy_grid"]])
+        if not self.graph_mode:
+            self.belief_space["occupancy_grid"] = np.maximum.reduce([self.belief_space["occupancy_grid"], sender_belief_space["occupancy_grid"]])
+        else:
+            self.belief_space["graph"].merge_graph(sender_belief_space["graph"]) #TODO tester, est-ce le drame?
+
+
         for robot_infos in sender_belief_space["robot_informations"]: #robot positions update based on the newest timestamp
             if not (robot_infos in self.belief_space["robot_informations"]):
                 self.belief_space["robot_informations"].update({robot_infos: sender_belief_space["robot_informations"][robot_infos]})
@@ -825,8 +846,8 @@ class Robot(Sprite):
 
 class Ground(Robot):
 
-    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs)
+    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False, graph_mode=False, graph_delta=50):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs, graph_mode=graph_mode, graph_delta=graph_delta)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier", "action_selection"]
 
         #traversability ease in the env 
@@ -890,8 +911,8 @@ class Ground(Robot):
 
 
 class Aerial(Robot):
-    def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs)
+    def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False, graph_mode=False, graph_delta=50):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs, graph_mode=graph_mode, graph_delta=graph_delta)
         self.behavior_space = ["random", "target_djikstra", "nearest_frontier", "minpos", "local_frontier", "action_selection"]
 
         #traversability ease in the env 

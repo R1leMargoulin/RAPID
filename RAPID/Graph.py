@@ -8,17 +8,17 @@ from scipy.ndimage import distance_transform_edt
 from skimage.morphology import skeletonize, medial_axis
 from skimage.measure import find_contours, approximate_polygon
 
-from shapely.geometry import Point
+from shapely.geometry import Point, MultiPoint
 from shapely.geometry.polygon import Polygon
 
 from collections import defaultdict
 
 #from PIL import Image
 
-#TODO : faire une structure plus complexe pour les noeuds maintenant permettant de leur attribuer une zone, des artefacts, etc.
+#TODO : ajouter des artefacts aux nodes??? pas necessairement besoin car on a les coordonnees des artefacts, on peut les relier via la zone.
 
 class Node():
-    def __init__(self, coordinates, agent, neighbors, explored, zone, type, creation_time):
+    def __init__(self, coordinates, agent:list, creation_time, zone=None, neighbors={}, type= None, explored = False):
         """
         Docstring for __init__
         
@@ -26,14 +26,14 @@ class Node():
         :param id: Description
         :param coordinates: Description
         :param agent: Description
-        :param neighbors: Description
+        :param neighbors: Description {id : dist}
         :param explored: Description
         :param zone: Description
         :param type: Description
         :param creation_time: Description
         """
         self.coordinates = coordinates
-        self.agents = [agent]
+        self.agents = agent
         self.neighbors = neighbors
         self.explored = explored
         self.zone = zone
@@ -45,27 +45,40 @@ class Node():
     
     def remove_neighbor(self, id):
         del self.neighbors[id]
+    
+    def get_zone_points(self):
+        polygon = Polygon(self.zone)
+
+        #generate all possible points in bounds
+        xmin, ymin, xmax, ymax = polygon.bounds
+        x = np.arange(np.floor(xmin), np.ceil(xmax) + 1)
+        y = np.arange(np.floor(ymin), np.ceil(ymax) + 1)
+        points = MultiPoint(np.transpose([np.tile(x, len(y)), np.repeat(y, len(x))])) 
+
+        result = points.intersection(polygon) #keeps only the points that intersects with the polygon
+
+        coordinates = [(point.x, point.y) for point in result.geoms] #to get an (x,y) tuple list.
+        return coordinates
 
 
 
 class Graph():
-    def __init__(self, occupancy_grid, agent_id, nodes_distance_treshold=5):
-        #TODO graph creation
+    def __init__(self, occupancy_grid, agent_id, nodes_distance_treshold=5, traversable_types=[0]):
         self.agent_id = agent_id
         self.dist_treshold = nodes_distance_treshold
         #graph itself
         self.graph = None
         self.nodes = {}
-        self.graph_generation(occupancy_grid)
+        self.graph_generation(occupancy_grid, traversable_types=traversable_types) #pour les unknown, peut etre mettre ca en parametrable... a voir
 
         #polygon zone allocation
         nodelist = list(self.nodes.keys())
-        allocaton_map = self.allocate_cells_to_nodes(nodelist, occupancy_grid)
+        allocaton_map = self.allocate_cells_to_nodes(nodelist, occupancy_grid, traversable_types=traversable_types)
         polygones = self.extraire_polygones(allocaton_map, nodelist)
         for p in polygones:
             self.nodes[p].zone = polygones[p][0]
     
-    def graph_generation(self, grid):
+    def graph_generation(self, grid, traversable_types=[0]):
         def euclidean_distance_transform(grid):
             # grid : tableau 2D où 0 = obstacle, 1 = espace libre
 
@@ -73,19 +86,22 @@ class Graph():
             grid_with_borders = grid.copy()
 
             # Marquer les bords comme obstacles (0)
-            grid_with_borders[0, :] = 1  # Bord supérieur
-            grid_with_borders[-1, :] = 1  # Bord inférieur
-            grid_with_borders[:, 0] = 1  # Bord gauche
-            grid_with_borders[:, -1] = 1  # Bord droit
+            #-2 = absolutely untraversable, while -1 = unknown.
+            grid_with_borders[0, :] = -2  # Bord sup
+            grid_with_borders[-1, :] = -2  # Bord inf
+            grid_with_borders[:, 0] = -2  # Bord gauche
+            grid_with_borders[:, -1] = -2  # Bord droit
 
+            traversable_with_unknown = traversable_types
+            
+            #dist_grid =  distance_transform_edt(grid_with_borders == 0) #for binary grid
 
-            dist_grid =  distance_transform_edt(grid_with_borders == 0)
+            dist_grid =  distance_transform_edt(np.isin(grid_with_borders, traversable_with_unknown))
 
             return dist_grid #dist_grid
         
         def build_voronoi_graph(skeleton, dist_tf_grid):
             # making a graph from skeletton
-            graph = defaultdict(Node)
             width, height = skeleton.shape
             directions = [(-1, -1), (-1, 0), (-1, 1),
                         (0, -1),          (0, 1),
@@ -99,7 +115,7 @@ class Graph():
                         id=(x,y)
                         self.nodes.update({id :Node(
                             coordinates= (x,y),
-                            agent = self.agent_id,
+                            agent = [self.agent_id],
                             neighbors={},
                             explored=False,
                             zone = None, #TODO
@@ -141,6 +157,8 @@ class Graph():
             
             # adding local minimas of dist as critical points
             for node in self.nodes:
+                if len(self.nodes[node].neighbors) == 0:
+                    continue
                 distances_neighbors = []
                 for neighbor in self.nodes[node].neighbors:
                     distances_neighbors.append(dist_tf_grid[neighbor])
@@ -168,6 +186,7 @@ class Graph():
 
             return self.nodes, critical_points
         
+        self.nodes = {}
         distance_map = euclidean_distance_transform(grid=grid)
         skeleton = skeletonize(distance_map)
         build_voronoi_graph(skeleton=skeleton, dist_tf_grid=distance_map)
@@ -176,10 +195,12 @@ class Graph():
     
     def remove_node(self, id):
         for neighbor in self.nodes[id].neighbors:
-            del self.nodes[neighbor].neighbors[id]
+            if neighbor in self.nodes:
+                if id in self.nodes[neighbor].neighbors:
+                    del self.nodes[neighbor].neighbors[id]
         del self.nodes[id]
 
-    def add_node(self, id, neighbors=None):
+    def add_node(self, id, neighbors=None, observers=None):
         """
          Adding a Node to the graph.
         
@@ -193,10 +214,15 @@ class Graph():
             #on ajoute le noeud en nouveau voisin aussi
             self.nodes[n].add_neighbor(id=id, distance=dist)
 
+        if observers == None:
+            observer_agents = [self.agent_id]
+        else:
+            observer_agents = observers
+
         self.nodes.update({
             id: Node(
                 coordinates=id,
-                agent=self.agent_id,
+                agent=observer_agents,
                 neighbors= new_neighbors,
                 explored=False, #TODO
                 zone=None, #TODO
@@ -205,6 +231,40 @@ class Graph():
             )
         })
         pass
+
+    def update_graph(self, occupancy_grid, agent_id, traversable_types=[0]):
+        nodes_backup = self.nodes
+        #getting unseen nodes to keep those in the graph after regeneration
+        unseen_nodes = {}
+        for nb in nodes_backup:
+            if agent_id not in nodes_backup[nb].agents:
+                unseen_nodes.update({nb:nodes_backup[nb]})
+        #graph regeneration
+        self.graph_generation(occupancy_grid)
+        self.allocate_polygons(occupancy_grid, traversable_types)
+
+        
+        
+        #2 juste les ajouter et les relier au noeud le plus proche du coisin original. 
+        #Si y'a un tres gros nombre de noeuds, jsp si ca ralentira beaucoup ou pas le truc. a tester
+        for unseen in unseen_nodes:
+            seen_neighbors = []
+            neighbors = unseen_nodes[unseen].neighbors
+            for n in list(neighbors.keys()):
+                if n not in list(unseen_nodes.keys()): #si le noeud a ete vu par le robot au final, alors il doit etre dans le graph, mais il peut avoir bouge legerement d'ou ce trickshot...
+                    seen_neighbors.append(n)
+            for seen in seen_neighbors:
+                closest_node = None
+                min_dist = np.inf
+                for node in self.nodes:
+                    dist = utils.euclidian_distance(seen, self.nodes[node].coordinates)
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest_node = self.nodes[node].coordinates
+                del unseen_nodes[unseen].neighbors[seen] #on vire le voisin deja vu au cas ou
+                unseen_nodes[unseen].neighbors.update({closest_node:utils.euclidian_distance(closest_node, unseen)}) #on ajoute le noeud identifie en tant que voisin
+            #au final on ajoute simplement le noeud au graph, et normalement ca marche (spoiler oui)
+            self.nodes.update({unseen : unseen_nodes[unseen]})
 
     def clean_graph(self):
         """
@@ -216,41 +276,100 @@ class Graph():
             nodes = list(self.nodes.keys()) #copy pour changer le dico tranquille
             changed = False
             for node in nodes:
+
+                if node in self.nodes:
+                    observer_agents = self.nodes[node].agents
+                else:
+                    observer_agents = []
+
                 x, y = node
                 if node in self.nodes:
                     neighbors = list(self.nodes[node].neighbors.keys())
 
-                    for neighbor in neighbors:
-                        nx, ny = neighbor
-                        if utils.euclidian_distance((x, y), (nx, ny)) <= self.dist_treshold and node in self.nodes:
+                    deg2neighbors = []
+
+                    for neighbor in neighbors: #TODO TODO TODO IL FAUT MERGE CERTAINS NOEUDS MEME SI PAS VOISINS DIRECT, CERTAINS NE SONT PAS MERGED...
+                        if neighbor in self.nodes:
+                            deg2neighbors = deg2neighbors + list(self.nodes[neighbor].neighbors.keys())
+                            nx, ny = neighbor
+                            if utils.euclidian_distance((x, y), (nx, ny)) <= self.dist_treshold and node in self.nodes:
+                                # Calcul du point moyen
+                                moyen = ((x + nx) / 2, (y + ny) / 2)
+
+                                # Récupération des autres voisins
+                                other_neighbors = []
+                                for other in self.nodes[node].neighbors:
+                                    if other != neighbor:
+                                        other_neighbors.append(other)
+                                for other in self.nodes[neighbor].neighbors:
+                                    if other != node and other not in other_neighbors:
+                                        other_neighbors.append(other)
+
+                                # Suppression des anciens nœuds et ajout du nouveau
+                                for other in other_neighbors:
+                                    if node in self.nodes[other].neighbors:
+                                        self.nodes[other].add_neighbor(id=moyen, distance=utils.euclidian_distance(other, moyen) )
+                                    if neighbor in self.nodes[other].neighbors:
+                                        self.nodes[other].add_neighbor(id=moyen, distance=utils.euclidian_distance(other, moyen) )
+                                    
+                                observer_agents = list(np.unique( observer_agents + self.nodes[neighbor].agents)) #merge agents that have seen those two merged nodes
+
+                                # Ajout du nœud moyen au graph
+                                self.add_node(moyen, other_neighbors, observers=observer_agents)
+                                
+
+                                # Suppression des anciens nœuds
+                                self.remove_node(node)
+                                self.remove_node(neighbor)
+
+                                changed = True
+                                break
+                    if changed:
+                        break
+                    
+                       
+                    for deg2 in deg2neighbors:
+                        if deg2 == node or deg2 not in self.nodes:
+                            continue
+                        nx, ny = deg2
+
+                        if utils.euclidian_distance((x, y), (nx, ny)) <= self.dist_treshold*2 and node in self.nodes:
                             # Calcul du point moyen
                             moyen = ((x + nx) / 2, (y + ny) / 2)
 
                             # Récupération des autres voisins
                             other_neighbors = []
                             for other in self.nodes[node].neighbors:
-                                if other != neighbor:
+                                if other != deg2 and other in self.nodes:
                                     other_neighbors.append(other)
-                            for other in self.nodes[neighbor].neighbors:
-                                if other != node and other not in other_neighbors:
+                            for other in self.nodes[deg2].neighbors:
+                                if other != node and other not in other_neighbors and other in self.nodes:
                                     other_neighbors.append(other)
 
                             # Suppression des anciens nœuds et ajout du nouveau
                             for other in other_neighbors:
+                                # if other not in self.nodes:
+                                #     continue
                                 if node in self.nodes[other].neighbors:
                                     self.nodes[other].add_neighbor(id=moyen, distance=utils.euclidian_distance(other, moyen) )
-                                if neighbor in self.nodes[other].neighbors:
+                                if deg2 in self.nodes[other].neighbors:
                                     self.nodes[other].add_neighbor(id=moyen, distance=utils.euclidian_distance(other, moyen) )
                                 
+                            observer_agents = list(np.unique( observer_agents + self.nodes[deg2].agents)) #merge agents that have seen those two merged nodes
+
                             # Ajout du nœud moyen au graph
-                            self.add_node(moyen, other_neighbors)
+                            self.add_node(moyen, other_neighbors, observers=observer_agents)
                             
 
                             # Suppression des anciens nœuds
                             self.remove_node(node)
-                            self.remove_node(neighbor)
+                            self.remove_node(deg2)
 
                             changed = True
+                            break
+                    if changed:
+                        break
+                    
 
         return None
     
@@ -258,6 +377,9 @@ class Graph():
         for node in new_graph.nodes:
             if node not in self.nodes:
                 self.nodes.update({node:new_graph.nodes[node]})
+            else:
+                self.nodes[node].agents = list(np.unique(new_graph.nodes[node].agents + self.nodes[node].agents)) #merging of the agents that has seen that node
+                
         
         self.clean_graph()
         pass
@@ -280,12 +402,38 @@ class Graph():
             x, y = node
             plt.plot(x, y, 'ro', markersize=3)  # Tracer les nœuds en rouge
             if display_zones:
-                plt.plot(*zip(*self.nodes[node].zone) )#'k'
+                try:
+                    plt.plot(*zip(*self.nodes[node].zone) )#'k'
+                except Exception as e:
+                    print(e)
+                    continue
 
         # Ajouter une légende et un titre
         plt.show()
 
-    def allocate_cells_to_nodes(self, node_list, matrice_occupation):
+    def allocate_polygons(self, occupancy_grid, traversable_types):
+        nodelist=[]
+        external_nodes = []
+        for node in self.nodes:
+            print(self.nodes[node].zone)
+            if self.nodes[node].zone == None:
+                nodelist.append(node)
+            else:
+                external_nodes.append(node)
+        print(nodelist)
+        print(external_nodes)
+        allocaton_map = self.allocate_cells_to_nodes(nodelist, occupancy_grid, traversable_types=traversable_types)
+
+        for en in external_nodes:
+            zonepoints = self.nodes[en].get_zone_points
+            for p in zonepoints:
+                allocaton_map[p] = -1
+
+        polygones = self.extraire_polygones(allocaton_map, nodelist)
+        for p in polygones:
+            self.nodes[p].zone = polygones[p][0]
+
+    def allocate_cells_to_nodes(self, node_list, matrice_occupation, traversable_types=[0]):
         """allocate each free cell to the closest node using a WPA for distance and obstacle avoidement"""
             
         # Initialisation
@@ -314,12 +462,13 @@ class Graph():
                 # Vérifier les limites et les murs
                 if (0 <= ny < matrice_occupation.shape[0] and
                     0 <= nx < matrice_occupation.shape[1] and
-                    matrice_occupation[ny, nx] != 1 and  # Pas un mur
+                    matrice_occupation[ny, nx] in traversable_types + [-1] and  # Pas un mur
                     distance_matrix[ny, nx] > current_dist + 1):
 
                     distance_matrix[ny, nx] = current_dist + 1
                     allocation_matrix[ny, nx] = node_idx
                     heapq.heappush(open_set, (distance_matrix[ny, nx], ny, nx, node_idx))
+        #print(allocation_matrix)
 
         return allocation_matrix
     
@@ -362,3 +511,10 @@ class Graph():
                 identified = node
                 break
         return identified
+
+    def check_explored_nodes(self, occupancy_grid):
+        for node in self.nodes:
+            pointlist = self.nodes[node].get_zone_points()
+            for p in pointlist:
+                #TODO : check if one of those points is unknown (aka == -1) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                pass

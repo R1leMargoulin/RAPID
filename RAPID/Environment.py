@@ -75,6 +75,7 @@ class Environment():
             self.width = env_image.size[0]
             self.height = env_image.size[1]
             self.real_occupancy_grid = np.zeros((self.width, self.height))
+            self.env_image = env_image
             
             self.create_env_from_image(env_image)
         else:
