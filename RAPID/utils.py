@@ -424,3 +424,10 @@ def simple_clustering(coordinates, max_distance):
             barycenters.append(barycenter.tolist())
 
     return barycenters
+
+def max_k(list, k):
+    "gives the k-th max element of a list"
+    partitioned = np.partition(list, -k)[-k:]
+    xth_max = partitioned[0]
+
+    return xth_max 

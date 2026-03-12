@@ -328,7 +328,7 @@ class Robot(Sprite):
         #artifact detection
         for a in self.env.interest_points["artifacts"]:
             if a.coordinates in neighbors:
-                self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step}}) 
+                self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step, "needed_robots":a.needed_robots}}) 
                 pass
 
     def get_neighbors_pixels(self, distance:int, stop_at_wall = False, self_inclusion = True):
@@ -487,9 +487,9 @@ class Robot(Sprite):
         elif self.action_to_perform["type"] == "communication":
             self.action_to_perform = None     
         else: #we'll consider than everything else is consider as an artifact
-
             for a in self.env.interest_points["artifacts"]:
                 if a.id == self.action_to_perform["id"] and (euclidian_distance((int(a.coordinates[0]), int(a.coordinates[1])), (int(self.transform.x), int(self.transform.y)) ) < 2):
+                    
                     result = a.interact(self.competences[self.action_to_perform["type"]]["capability"])
                     if result :
                         self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
@@ -500,9 +500,9 @@ class Robot(Sprite):
                     else:
                         #self.action_to_perform = None
                         return None
-                else:
-                    self.action_to_perform = None
-                    return None
+                # else:
+                #     self.action_to_perform = None
+                #     return None
             #si on ne voit pas l'artefact une fois sur place
             if euclidian_distance((int(self.belief_space["artifacts"][self.action_to_perform["id"]]["coordinates"][0]), int(self.belief_space["artifacts"][self.action_to_perform["id"]]["coordinates"][1])), (int(self.transform.x), int(self.transform.y))) <= self.vision_range:
                 self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
@@ -712,7 +712,7 @@ class Robot(Sprite):
         if list(frontiers) != None or len(list(frontiers))!=0:
             cluster_centers = cluster_frontier_cells(self.belief_space["occupancy_grid"], frontiers, int(self.vision_range/2), traversable_types=self.traversable_types) #from utils : make cluster of fontiers to reduce computation time
             for cc in cluster_centers:
-                interest_points.append({"type":"exploration","coordinates":cc})
+                interest_points.append({"type":"exploration","coordinates":cc, "needed_robots":1})
         #--------------------------------------
 
         #Artifacts ----------------------------
@@ -725,7 +725,7 @@ class Robot(Sprite):
                 #INTEREST POINT CREATION
                 if self.belief_space["artifacts"][art]["status"] not in ["done", "destroyed"] :
                     if euclidian_distance( (self.init_transform.x, self.init_transform.y) , self.belief_space["artifacts"][art]["coordinates"]) >= self.competences[self.belief_space["artifacts"][art]["type"]]["distance_treshold"]: #we verify that the treshold is respected
-                        interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,"coordinates":self.belief_space["artifacts"][art]["coordinates"], "id":art})#adding directly the artifacts in the interest points
+                        interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,"coordinates":self.belief_space["artifacts"][art]["coordinates"], "id":art, "needed_robots": self.belief_space["artifacts"][art]["needed_robots"]})#adding directly the artifacts in the interest points
         #--------------------------------------
         #------------------------------------------------------------------------------------------
 
@@ -752,7 +752,8 @@ class Robot(Sprite):
         communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
         for cc in communication_clusters:
                 #if euclidian_distance( (self.init_transform.x, self.init_transform.y) , cc) >= self.competences["communication"]["distance_treshold"]: #we verify that the distance treshold is respected
-                interest_points.append({"type":"communication","coordinates":cc})#adding those clusters in the communication points
+                interest_points.append({"type":"communication","coordinates":cc, "needed_robots":2})#adding those clusters in the communication points
+                #TODO : try different values of needed robots
 
 
         #--------------------------------------        
@@ -790,7 +791,11 @@ class Robot(Sprite):
 
                     other_individual_values = np.append(other_individual_values, ocapability/ocost) #capacite des autres sur l'ip
             #global_feasability = float(np.mean(other_individual_values))
-            collective_sufficiency = float(np.max(other_individual_values))
+            
+            #collective_sufficiency = float(np.max(other_individual_values))
+
+            #for several needed robots: TODO TEST
+            collective_sufficiency = float(max_k(other_individual_values, ip["needed_robots"]))
 
 
             if collective_sufficiency == 0:

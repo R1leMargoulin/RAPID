@@ -373,7 +373,7 @@ class Graph():
 
         return None
     
-    def merge_graph(self, new_graph): #TODO peut etre faire le merge a ce niveau la, plutot que dans le clean
+    def merge_graph(self, new_graph): 
         for node in new_graph.nodes:
             if node not in self.nodes:
                 nodelist = list(self.nodes.keys())
