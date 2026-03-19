@@ -328,8 +328,11 @@ class Robot(Sprite):
         #artifact detection
         for a in self.env.interest_points["artifacts"]:
             if a.coordinates in neighbors:
-                self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step, "needed_robots":a.needed_robots}}) 
-                pass
+                if a.id in self.belief_space["artifacts"]:
+                    discovery_time = self.belief_space["artifacts"][a.id]["discovery_time"] #keeping the discov time
+                    self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step, "needed_robots":a.needed_robots, "discovery_time": discovery_time}}) 
+                else:
+                    self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step, "needed_robots":a.needed_robots, "discovery_time": self.env.step}}) 
 
     def get_neighbors_pixels(self, distance:int, stop_at_wall = False, self_inclusion = True):
         """
@@ -455,9 +458,14 @@ class Robot(Sprite):
         for artifact in sender_belief_space["artifacts"]: #artifact update based on the newest timestamp
             if not (artifact in self.belief_space["artifacts"]):
                 self.belief_space["artifacts"].update({artifact: sender_belief_space["artifacts"][artifact]})
+                self.belief_space["artifacts"][artifact].update({"discovery_time": self.env.step}) #each robot has it's own discovery time of the artifact. => the discovery time is supposed to be local
             
             elif sender_belief_space["artifacts"][artifact]["step"] > self.belief_space["artifacts"][artifact]["step"]:
+                #keeping the discovery time
+                discovery_time = self.belief_space["artifacts"][artifact]["discovery_time"]
+
                 self.belief_space["artifacts"].update({artifact: sender_belief_space["artifacts"][artifact]})
+                self.belief_space["artifacts"][artifact].update({"discovery_time": discovery_time})
         #ARTIFACTS-----------------------------------------------------------
 
         self.new_communication = True
@@ -488,7 +496,7 @@ class Robot(Sprite):
             self.action_to_perform = None     
         else: #we'll consider than everything else is consider as an artifact
             for a in self.env.interest_points["artifacts"]:
-                if a.id == self.action_to_perform["id"] and (euclidian_distance((int(a.coordinates[0]), int(a.coordinates[1])), (int(self.transform.x), int(self.transform.y)) ) < 2):
+                if a.id == self.action_to_perform["id"] and (euclidian_distance((int(a.coordinates[0]), int(a.coordinates[1])), (int(self.transform.x), int(self.transform.y)) ) < a.needed_robots):
                     
                     result = a.interact(self.competences[self.action_to_perform["type"]]["capability"])
                     if result :
@@ -725,7 +733,12 @@ class Robot(Sprite):
                 #INTEREST POINT CREATION
                 if self.belief_space["artifacts"][art]["status"] not in ["done", "destroyed"] :
                     if euclidian_distance( (self.init_transform.x, self.init_transform.y) , self.belief_space["artifacts"][art]["coordinates"]) >= self.competences[self.belief_space["artifacts"][art]["type"]]["distance_treshold"]: #we verify that the treshold is respected
-                        interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,"coordinates":self.belief_space["artifacts"][art]["coordinates"], "id":art, "needed_robots": self.belief_space["artifacts"][art]["needed_robots"]})#adding directly the artifacts in the interest points
+                        interest_points.append({"type": self.belief_space["artifacts"][art]["type"] ,
+                                                "coordinates":self.belief_space["artifacts"][art]["coordinates"], 
+                                                "id":art, 
+                                                "needed_robots": self.belief_space["artifacts"][art]["needed_robots"],
+                                                "step": self.belief_space["artifacts"][art]["step"],
+                                                "discovery_time": self.belief_space["artifacts"][art]["discovery_time"]})#adding directly the artifacts in the interest points
         #--------------------------------------
         #------------------------------------------------------------------------------------------
 
@@ -752,7 +765,7 @@ class Robot(Sprite):
         communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
         for cc in communication_clusters:
                 #if euclidian_distance( (self.init_transform.x, self.init_transform.y) , cc) >= self.competences["communication"]["distance_treshold"]: #we verify that the distance treshold is respected
-                interest_points.append({"type":"communication","coordinates":cc, "needed_robots":2})#adding those clusters in the communication points
+                interest_points.append({"type":"communication","coordinates":cc, "needed_robots":1})#adding those clusters in the communication points
                 #TODO : try different values of needed robots
 
 
@@ -763,17 +776,18 @@ class Robot(Sprite):
             #individual utility
             #cost = euclidian_distance(ip["coordinates"], (self.transform.x, self.transform.y)) #euclidian distance for the moment (C in the model)
             cost = a_star_cost(self.belief_space["occupancy_grid"], (int(self.transform.x), int(self.transform.y)), (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.env_ease, traversable_types=self.traversable_types)
-            if cost == 0:
-                cost = 1e-5 #avoid divide by 0
+            if cost < 1:
+                cost = 1 #avoid divide by 0
 
             capability = self.competences[ip["type"]]["capability"] #I'll cnsider that the type of the IP will be named the same than the competence (mu in the model)
 
             individual_utility = capability/cost
-
             #global feasability
+            other_individual_values_phi = np.array([])
             other_individual_values = np.array([])
             for robot in self.belief_space["robot_informations"]: #the key value of this dict is robot id
                 if len(self.belief_space["robot_informations"]) <=1:
+                    other_individual_values_phi = np.append(other_individual_values, 1.0)
                     other_individual_values = np.append(other_individual_values, 1.0)
                     break
                 if robot == self.robot_id :
@@ -784,24 +798,63 @@ class Robot(Sprite):
 
                     ocost = euclidian_distance(ip["coordinates"], other_robot_pos)
                     #ocost = a_star_cost(self.belief_space["occupancy_grid"], other_robot_pos, (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.belief_space["robot_informations"][robot]["env_ease"], traversable_types=self.belief_space["robot_informations"][robot]["traversable_types"])
-                    if ocost == 0:
-                        ocost = 1e-5 #avoid divide by 0
+                    if ocost <1:
+                        ocost = 1 #avoid divide by 0
 
                     ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]]["capability"]
 
-                    other_individual_values = np.append(other_individual_values, ocapability/ocost) #capacite des autres sur l'ip
-            #global_feasability = float(np.mean(other_individual_values))
+                    #TODO, check ca
+                    phi = 1
+                    if ip["needed_robots"] <=1:
+                        phi = 1
+                        other_individual_values = np.append(other_individual_values, (ocapability/ocost))
+                    else:
+                        #self.belief_space["robot_informations"][robot]["step"]
+
+                        if  self.belief_space["last_infos_matrix"][robot][self.robot_id] >= ip["discovery_time"] : #check in matrix if the robot knows about the task or not
+                            phi = 1
+                            other_individual_values = np.append(other_individual_values, (ocapability/ocost))
+                        else : #if the robot doesn't know about this artifact
+                            phi = np.inf
+
+                     #capacite des autres sur l'ip 
+                     #capacite des autres sur l'ip 
+                    #TODO TODO TODO : Le phi est placé dans le required_assist!!!!! c'est un pb parce que l'infini devient mal placé
             
-            #collective_sufficiency = float(np.max(other_individual_values))
+            #collective_sufficiency = float(np.max(other_individual_values)) #backup
 
-            #for several needed robots: TODO TEST
-            collective_sufficiency = float(max_k(other_individual_values, ip["needed_robots"]))
-
+            #for several needed robots:
+            if len(other_individual_values) >= ip["needed_robots"]:
+                collective_sufficiency = float(max_k(other_individual_values, ip["needed_robots"]))
+            else:
+                collective_sufficiency = np.inf
+            #collective_sufficiency = testproduct
 
             if collective_sufficiency == 0:
-                collective_sufficiency = 1e-5 #avoid divide by 0
+                collective_sufficiency = 1e-8 #avoid divide by 0
+
+
+
+            bests_others = [] #TODO test ca
+            required_assist = 1 
+            if ip["needed_robots"] > 1: #TODO TODO TODO : Le phi est placé dans le required_assist!!!!! c'est un pb parce que l'infini devient mal placé
+                # #required_assist = 1
+                if len(other_individual_values) >= ip["needed_robots"]:
+                    for i in range (ip["needed_robots"] -1):
+                        bests_others.append(float(max_k(other_individual_values, i+1)))
+                
+                    required_assist = 1 + float(np.prod(bests_others))
+                else:
+                    required_assist = -1
+                
+                #required_assist = 1 + float(max_k(other_individual_values, ip["needed_robots"] -1)) #equivalent to the commented above...
             
-            utility = individual_utility / collective_sufficiency
+
+            # if required_assist !=0:
+            #     required_assist += self.env.step - ip["step"]
+        
+            
+            utility = ((individual_utility * required_assist) / (collective_sufficiency ))
             #utility = ( self.competences[ip["type"]]["importance"] * individual_utility) / collective_sufficiency
 
             ip.update({"utility":utility})

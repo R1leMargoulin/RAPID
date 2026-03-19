@@ -810,16 +810,17 @@ class MultiRobotTasksEnvironment(Environment):
         for cell in cells:
             self.interest_points["exploration_map"][cell[0]-1][cell[1]-1] = 1
     
-    def add_artifact(self, coords):
+    def add_artifact(self, coords, needed_robots=2):
         art = self.MultiRobotArtifact(self, 
                          id=len(self.interest_points["artifacts"]),
                          name=f"multi{len(self.interest_points["artifacts"])}",
                          type= "multi_robot_task",
-                         coordinates=coords
+                         coordinates=coords,
+                         needed_robots=needed_robots
                          )
         self.interest_points["artifacts"].append(art)
         pass
 
     def add_agent(self, agent):
-        agent.shape_competence("multi_robot_task", 0.9, 1.0) #adding default mine competence values
+        agent.shape_competence("multi_robot_task", 1.0, 1.0) #adding default mine competence values
         return super().add_agent(agent)

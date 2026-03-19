@@ -427,7 +427,10 @@ def simple_clustering(coordinates, max_distance):
 
 def max_k(list, k):
     "gives the k-th max element of a list"
-    partitioned = np.partition(list, -k)[-k:]
-    xth_max = partitioned[0]
+    if k <= len(list):
+        partitioned = np.partition(list, -k)[-k:]
+        xth_max = partitioned[0]
 
-    return xth_max 
+        return xth_max 
+    else:
+        return 0
