@@ -264,9 +264,12 @@ class Robot(Sprite):
         current_cell_type_name = list(ENV_CELL_TYPES.keys())[list(ENV_CELL_TYPES.values()).index(int(current_cell_type))]
         movement_ease = self.env_ease[current_cell_type_name]
 
+        #noise to mvt
+        noise = round(random.uniform(0.0, 0.05),5)
+
         # update position based on delta x/y and the movement ease depending of the type of the cell we are on
-        self.transform.x = self.transform.x + speed_x * movement_ease
-        self.transform.y = self.transform.y + speed_y * movement_ease
+        self.transform.x = self.transform.x + speed_x * movement_ease * (1-noise)
+        self.transform.y = self.transform.y + speed_y * movement_ease * (1-noise)
 
         
         #detect and handle collisions------------------------------------------------------------------------------------
@@ -330,9 +333,10 @@ class Robot(Sprite):
             if a.coordinates in neighbors:
                 if a.id in self.belief_space["artifacts"]:
                     discovery_time = self.belief_space["artifacts"][a.id]["discovery_time"] #keeping the discov time
-                    self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step, "needed_robots":a.needed_robots, "discovery_time": discovery_time}}) 
+                    awared = self.belief_space["artifacts"][a.id]["awared"] #keeping awared
+                    self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step, "needed_robots":a.needed_robots, "discovery_time": discovery_time, "awared":awared}}) 
                 else:
-                    self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step, "needed_robots":a.needed_robots, "discovery_time": self.env.step}}) 
+                    self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step, "needed_robots":a.needed_robots, "discovery_time": self.env.step, "awared": [self.robot_id]}}) 
 
     def get_neighbors_pixels(self, distance:int, stop_at_wall = False, self_inclusion = True):
         """
@@ -457,15 +461,28 @@ class Robot(Sprite):
         #ARTIFACTS-----------------------------------------------------------
         for artifact in sender_belief_space["artifacts"]: #artifact update based on the newest timestamp
             if not (artifact in self.belief_space["artifacts"]):
+                awared = sender_belief_space["artifacts"][artifact]["awared"]
+                awared.append(self.robot_id)
                 self.belief_space["artifacts"].update({artifact: sender_belief_space["artifacts"][artifact]})
-                self.belief_space["artifacts"][artifact].update({"discovery_time": self.env.step}) #each robot has it's own discovery time of the artifact. => the discovery time is supposed to be local
+                self.belief_space["artifacts"][artifact].update({"awared": awared})
+                #self.belief_space["artifacts"][artifact].update({"discovery_time": self.env.step}) #each robot has it's own discovery time of the artifact. => the discovery time is supposed to be local
             
             elif sender_belief_space["artifacts"][artifact]["step"] > self.belief_space["artifacts"][artifact]["step"]:
-                #keeping the discovery time
-                discovery_time = self.belief_space["artifacts"][artifact]["discovery_time"]
+                #keeping the global discovery time
+                discovery_time = np.min([self.belief_space["artifacts"][artifact]["discovery_time"], sender_belief_space["artifacts"][artifact]["discovery_time"]])
 
+                #update
                 self.belief_space["artifacts"].update({artifact: sender_belief_space["artifacts"][artifact]})
                 self.belief_space["artifacts"][artifact].update({"discovery_time": discovery_time})
+
+            if sender_belief_space["artifacts"][artifact]["awared"] != self.belief_space["artifacts"][artifact]["awared"]:
+                #merging the robots id of robots awared of the tasks
+                sender_awared = sender_belief_space["artifacts"][artifact]["awared"]
+                self_awared = self.belief_space["artifacts"][artifact]["awared"]
+                global_awared = list(set(self_awared + sender_awared))
+
+                self.belief_space["artifacts"][artifact].update({"awared": global_awared})
+
         #ARTIFACTS-----------------------------------------------------------
 
         self.new_communication = True
@@ -738,7 +755,8 @@ class Robot(Sprite):
                                                 "id":art, 
                                                 "needed_robots": self.belief_space["artifacts"][art]["needed_robots"],
                                                 "step": self.belief_space["artifacts"][art]["step"],
-                                                "discovery_time": self.belief_space["artifacts"][art]["discovery_time"]})#adding directly the artifacts in the interest points
+                                                "discovery_time": self.belief_space["artifacts"][art]["discovery_time"],
+                                                "awared": self.belief_space["artifacts"][art]["awared"]})#adding directly the artifacts in the interest points
         #--------------------------------------
         #------------------------------------------------------------------------------------------
 
@@ -783,11 +801,9 @@ class Robot(Sprite):
 
             individual_utility = capability/cost
             #global feasability
-            other_individual_values_phi = np.array([])
             other_individual_values = np.array([])
             for robot in self.belief_space["robot_informations"]: #the key value of this dict is robot id
                 if len(self.belief_space["robot_informations"]) <=1:
-                    other_individual_values_phi = np.append(other_individual_values, 1.0)
                     other_individual_values = np.append(other_individual_values, 1.0)
                     break
                 if robot == self.robot_id :
@@ -796,36 +812,30 @@ class Robot(Sprite):
                     #ligne de l'enfer sorry
                     other_robot_pos = (int(self.belief_space["robot_informations"][robot]["position"][0]),int(self.belief_space["robot_informations"][robot]["position"][1]))
 
-                    ocost = euclidian_distance(ip["coordinates"], other_robot_pos)
-                    #ocost = a_star_cost(self.belief_space["occupancy_grid"], other_robot_pos, (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.belief_space["robot_informations"][robot]["env_ease"], traversable_types=self.belief_space["robot_informations"][robot]["traversable_types"])
+                    #ocost = euclidian_distance(ip["coordinates"], other_robot_pos)
+                    ocost = a_star_cost(self.belief_space["occupancy_grid"], other_robot_pos, (int(ip["coordinates"][0]), int(ip["coordinates"][1])), self.belief_space["robot_informations"][robot]["env_ease"], traversable_types=self.belief_space["robot_informations"][robot]["traversable_types"])
                     if ocost <1:
                         ocost = 1 #avoid divide by 0
 
                     ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]]["capability"]
 
                     #TODO, check ca
-                    phi = 1
                     if ip["needed_robots"] <=1:
-                        phi = 1
                         other_individual_values = np.append(other_individual_values, (ocapability/ocost))
                     else:
                         #self.belief_space["robot_informations"][robot]["step"]
-
-                        if  self.belief_space["last_infos_matrix"][robot][self.robot_id] >= ip["discovery_time"] : #check in matrix if the robot knows about the task or not
-                            phi = 1
+                        if  robot in ip["awared"] : #check if the robot knows about the task or not
                             other_individual_values = np.append(other_individual_values, (ocapability/ocost))
-                        else : #if the robot doesn't know about this artifact
-                            phi = np.inf
-
+                
                      #capacite des autres sur l'ip 
-                     #capacite des autres sur l'ip 
-                    #TODO TODO TODO : Le phi est placé dans le required_assist!!!!! c'est un pb parce que l'infini devient mal placé
             
             #collective_sufficiency = float(np.max(other_individual_values)) #backup
 
             #for several needed robots:
             if len(other_individual_values) >= ip["needed_robots"]:
                 collective_sufficiency = float(max_k(other_individual_values, ip["needed_robots"]))
+            elif len(other_individual_values) == ip["needed_robots"]-1:
+                collective_sufficiency = 1
             else:
                 collective_sufficiency = np.inf
             #collective_sufficiency = testproduct
@@ -836,16 +846,21 @@ class Robot(Sprite):
 
 
             bests_others = [] #TODO test ca
-            required_assist = 1 
-            if ip["needed_robots"] > 1: #TODO TODO TODO : Le phi est placé dans le required_assist!!!!! c'est un pb parce que l'infini devient mal placé
+            required_assist = 0
+            if ip["needed_robots"] > 1: 
                 # #required_assist = 1
-                if len(other_individual_values) >= ip["needed_robots"]:
+                if len(other_individual_values) >= ip["needed_robots"]-1:
+                    nbcloser = 0
                     for i in range (ip["needed_robots"] -1):
-                        bests_others.append(float(max_k(other_individual_values, i+1)))
-                
-                    required_assist = 1 + float(np.prod(bests_others))
+                        value = float(max_k(other_individual_values, i+1))
+                        bests_others.append(value)
+                        if value > individual_utility:
+                            nbcloser+=1
+
+                    #TODO TODO TODO TODO TODO : il faut vraiment ajuster le required assist
+                    required_assist = (float(np.sum(bests_others)) - (1+nbcloser - ip["needed_robots"])) * ((self.env.step - ip["discovery_time"])/self.env.step) #TODO ajuster le delta discovery
                 else:
-                    required_assist = -1
+                    required_assist = - individual_utility
                 
                 #required_assist = 1 + float(max_k(other_individual_values, ip["needed_robots"] -1)) #equivalent to the commented above...
             
@@ -854,7 +869,7 @@ class Robot(Sprite):
             #     required_assist += self.env.step - ip["step"]
         
             
-            utility = ((individual_utility * required_assist) / (collective_sufficiency ))
+            utility = ((individual_utility + required_assist) / (collective_sufficiency ))
             #utility = ( self.competences[ip["type"]]["importance"] * individual_utility) / collective_sufficiency
 
             ip.update({"utility":utility})

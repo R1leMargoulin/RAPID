@@ -822,5 +822,5 @@ class MultiRobotTasksEnvironment(Environment):
         pass
 
     def add_agent(self, agent):
-        agent.shape_competence("multi_robot_task", 1.0, 1.0) #adding default mine competence values
+        agent.shape_competence("multi_robot_task", 1.0, 1.5) #adding default mine competence values
         return super().add_agent(agent)
