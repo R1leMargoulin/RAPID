@@ -726,7 +726,14 @@ class Robot(Sprite):
     def behavior_action_selection(self): 
         #reshape importance of communication depending of the time from last communication:
         #print(f"robot {self.robot_id} : last com : {self.time_from_last_communication}")
-        self.shape_competence("communication", self.competences["communication"]["capability"], np.exp( self.time_from_last_communication/ self.env.width), distance_treshold=self.communication_range, dispersion=0) #TODO enlever l'incrementation en dur, faire un parametre adequat
+
+
+        # TODO : ComImportance : comment faire des experiences ou je fais varier proprement cette valeur?
+        # Soluce 1 : faire une fonction a part comme ca je ne modifie que la fonction et au pire, je la redéfinie dans un agent fils, spécial pour l'expérience?????
+        # Soluce 2 : faire une fonction a part sans agent fils, je met un parametre en string "default" par defaut et un mode pour chaque expe tentée?
+
+        # 
+        self.reshape_com_importance_for_action_selection()
 
         #self.check_communication_importance()
 
@@ -893,6 +900,16 @@ class Robot(Sprite):
             self.last_plan_time = self.env.step
         else:
             print("problem")
+    
+    def reshape_com_importance_for_action_selection(self):
+        
+        capability = self.competences["communication"]["capability"] #same, doesnt change
+        distance_treshold = self.communication_range 
+
+        importance = np.exp( self.time_from_last_communication/ self.env.width) #value to be changed
+
+        self.shape_competence("communication", capability=capability , importance=importance, distance_treshold=distance_treshold)
+
 
     def write_logs(self):
         """will keep logs in ram at each steps for simulation stats"""
