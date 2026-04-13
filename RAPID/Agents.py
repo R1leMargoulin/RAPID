@@ -901,12 +901,22 @@ class Robot(Sprite):
         else:
             print("problem")
     
-    def reshape_com_importance_for_action_selection(self):
-        
+    def reshape_com_importance_for_action_selection(self, mode="default"):
+        # TODO : ComImportance : Trouver un moyen de changer le mode dans la fonction de selection d'action apres, y'aura un param a rajouter je pense
         capability = self.competences["communication"]["capability"] #same, doesnt change
         distance_treshold = self.communication_range 
 
-        importance = np.exp( self.time_from_last_communication/ self.env.width) #value to be changed
+        if mode == "default":
+            importance = np.exp( self.time_from_last_communication/ self.env.width) #value to be changed
+        elif mode =="linear":
+            importance = self.time_from_last_communication #* self.env.width  #???????????????????
+        elif mode =="geometric":
+            pass #TODO : ComImportance
+        elif mode =="exponential":
+            pass #TODO : ComImportance
+        elif mode =="rule-based":
+            pass #TODO : ComImportance
+        
 
         self.shape_competence("communication", capability=capability , importance=importance, distance_treshold=distance_treshold)
 
