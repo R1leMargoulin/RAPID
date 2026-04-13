@@ -831,11 +831,11 @@ class Robot(Sprite):
             
             #collective_sufficiency = float(np.max(other_individual_values)) #backup
 
-            #for several needed robots:
+            #for MultiRobotTask::
             if len(other_individual_values) >= ip["needed_robots"]:
                 collective_sufficiency = float(max_k(other_individual_values, ip["needed_robots"]))
             elif len(other_individual_values) == ip["needed_robots"]-1:
-                collective_sufficiency = 1
+                collective_sufficiency = 1 #TODO TODO TODO: MultiRobotTask: je ne suis pas sur sur de cette valeur la, quesque j'ai foutu?????
             else:
                 collective_sufficiency = np.inf
             #collective_sufficiency = testproduct
@@ -845,7 +845,7 @@ class Robot(Sprite):
 
 
 
-            bests_others = [] #TODO test ca
+            bests_others = [] #TODO MultiRobotTask: test ca
             required_assist = 0
             if ip["needed_robots"] > 1: 
                 # #required_assist = 1
@@ -857,7 +857,7 @@ class Robot(Sprite):
                         if value > individual_utility:
                             nbcloser+=1
 
-                    #TODO TODO TODO TODO TODO : il faut vraiment ajuster le required assist
+                    #TODO TODO TODO TODO TODO : MultiRobotTask: il faut vraiment ajuster le required assist
                     required_assist = (float(np.sum(bests_others)) - (1+nbcloser - ip["needed_robots"])) * ((self.env.step - ip["discovery_time"])/self.env.step) #TODO ajuster le delta discovery
                 else:
                     required_assist = - individual_utility
@@ -885,10 +885,6 @@ class Robot(Sprite):
             if weighted_utility >= best_weighted_utility:
                 best_weighted_utility = weighted_utility
                 best_action = ip
-
-            # if ip["utility"] >= best_weighted_utility:
-            #     best_weighted_utility = ip["utility"]
-            #     best_action = ip
         
         #action perform
         if best_action != None:
