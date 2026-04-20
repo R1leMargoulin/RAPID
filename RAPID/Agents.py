@@ -149,12 +149,14 @@ class Robot(Sprite):
             #self.graph.plot_voronoi_graph(img=self.env.env_image, display_zones=True) #virer ca
 
 
-
+        self.last_given_position = (int(self.transform.x), int(self.transform.y))
         
         self.imdone = False #if true, the robot will consider it's mission is over, it stops its activity.
 
         self.logging = write_logs
         self.logs = {}
+
+        self.com_importance_mode = "default" #ComImportance
         
         #Ready!
         self.status = "ready"
@@ -166,16 +168,16 @@ class Robot(Sprite):
         """
         self.sense()#first of all sense the env.
 
-        #TODO: gestion graphs si necessaire
+        #TODO: Graphs : gestion graphs si necessaire
         if self.graph_mode:
             if self.env.step - self.last_graph_generation > self.graph_delta:
                 self.belief_space["graph"].update_graph(self.belief_space["occupancy_grid"], agent_id=self.robot_id, traversable_types=self.traversable_types)
                 self.last_graph_generation = self.env.step
                 
                 self.belief_space["graph"].plot_voronoi_graph(img=self.env.env_image, display_zones=True)#TODO : virer ca
-        #TODO : modifier dans les prises de decision en fonction
+        #TODO : Graphs : modifier dans les prises de decision en fonction
 
-        #TODO : modif le belief transfer en fonction de si on fait des graphs ou pas.
+        #TODO : Graphs : modif le belief transfer en fonction de si on fait des graphs ou pas.
         self.belief_transfer() #after sensing, transfer beliefs if applicable
         if np.any(self.target):
             self.navigate()
@@ -184,7 +186,7 @@ class Robot(Sprite):
         else:
             self.behave() #in order to determine what to do.
             if not self.imdone and np.any(self.target):
-                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation #TODO c'est un test ca
+                self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
                 self.navigate_through_target_path() 
 
 
@@ -393,6 +395,7 @@ class Robot(Sprite):
                         if self.robot_id != robot.robot_id:
                             robot.recieve_belief(self.belief_space) #envoie des beliefs à tous les robots voisins.
                             self.time_from_last_communication = 0
+                    self.last_given_position = (int(self.transform.x), int(self.transform.y))
                 else:
                     self.time_from_last_communication +=1
 
@@ -401,6 +404,7 @@ class Robot(Sprite):
                 self.env.agents_tools["blackboard"]["robot_informations"].update({self.robot_id:self.belief_space["robot_informations"][self.robot_id]}) #Maj des infos perso du robot pour le blackboard
                 self.belief_space = self.env.agents_tools["blackboard"] #on tire le blackboard dans nos beliefs space une fois l'avoir mis a jour.
                 self.time_from_last_communication = 0
+                self.last_given_position = (int(self.transform.x), int(self.transform.y))
 
     def recieve_belief(self, sender_belief_space):
         """
@@ -417,7 +421,7 @@ class Robot(Sprite):
         if not self.graph_mode:
             self.belief_space["occupancy_grid"] = np.maximum.reduce([self.belief_space["occupancy_grid"], sender_belief_space["occupancy_grid"]])
         else:
-            self.belief_space["graph"].merge_graph(sender_belief_space["graph"]) #TODO tester, est-ce le drame?
+            self.belief_space["graph"].merge_graph(sender_belief_space["graph"]) #TODO : Graph merging has to be improved, currently not working
 
 
         for robot_infos in sender_belief_space["robot_informations"]: #robot positions update based on the newest timestamp
@@ -728,12 +732,10 @@ class Robot(Sprite):
         #print(f"robot {self.robot_id} : last com : {self.time_from_last_communication}")
 
 
-        # TODO : ComImportance : comment faire des experiences ou je fais varier proprement cette valeur?
-        # Soluce 1 : faire une fonction a part comme ca je ne modifie que la fonction et au pire, je la redéfinie dans un agent fils, spécial pour l'expérience?????
-        # Soluce 2 : faire une fonction a part sans agent fils, je met un parametre en string "default" par defaut et un mode pour chaque expe tentée?
 
-        # 
-        self.reshape_com_importance_for_action_selection()
+       
+        # fonction a part, je met un parametre en string "default" par defaut et un mode pour chaque expe tentée?
+        self.reshape_com_importance_for_action_selection(mode = self.com_importance_mode)
 
         #self.check_communication_importance()
 
@@ -782,16 +784,19 @@ class Robot(Sprite):
 
         robots_pos_list = [] #list of float xy position of all robots
         for robot_id in self.belief_space["robot_informations"]:
-            if robot_id != self.robot_id: #iamhere
-                if self.env.step - self.belief_space["robot_informations"][robot_id]["step"] <= (self.env.width) : #limite arbitraire pour voir si la position n'est pas trop obsolete, sinon on ne la prendra pas en compte, TODO : mettre ca en parametrable propre
+            if robot_id != self.robot_id:  # ComImportance : est ce que je ferais pas un truc spécifique aux robots?
+                if self.communication_range*2 <= self.env.step - self.belief_space["robot_informations"][robot_id]["step"] :#<= (2 * self.env.width) : #limite arbitraire pour voir si la position n'est pas trop obsolete, sinon on ne la prendra pas en compte, TODO : mettre ca en parametrable propre
                     if euclidian_distance((self.transform.x, self.transform.y) ,self.belief_space["robot_informations"][robot_id]["position"]) >=  self.competences["communication"]["distance_treshold"]:
                         robots_pos_list.append(self.belief_space["robot_informations"][robot_id]["position"])
+            else:
+                if euclidian_distance((self.transform.x, self.transform.y) , self.last_given_position) >=  self.competences["communication"]["distance_treshold"]:
+                        robots_pos_list.append(self.last_given_position)# TODO ComInfo, la last given position, c'est a double trnchant, je sais pas trop
 
         communication_clusters = simple_clustering(robots_pos_list, self.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
         for cc in communication_clusters:
                 #if euclidian_distance( (self.init_transform.x, self.init_transform.y) , cc) >= self.competences["communication"]["distance_treshold"]: #we verify that the distance treshold is respected
                 interest_points.append({"type":"communication","coordinates":cc, "needed_robots":1})#adding those clusters in the communication points
-                #TODO : try different values of needed robots
+                #TODO MultiRobotTask : try different values of needed robots
 
 
         #--------------------------------------        
@@ -826,7 +831,9 @@ class Robot(Sprite):
 
                     ocapability = self.belief_space["robot_informations"][robot]["competences"][ip["type"]]["capability"]
 
-                    #TODO, check ca
+                    oobsolecence = self.env.step - self.belief_space["robot_informations"][robot]["step"] 
+
+                    #TODO, MultiRobotTask check ca
                     if ip["needed_robots"] <=1:
                         other_individual_values = np.append(other_individual_values, (ocapability/ocost))
                     else:
@@ -902,20 +909,49 @@ class Robot(Sprite):
             print("problem")
     
     def reshape_com_importance_for_action_selection(self, mode="default"):
-        # TODO : ComImportance : Trouver un moyen de changer le mode dans la fonction de selection d'action apres, y'aura un param a rajouter je pense
         capability = self.competences["communication"]["capability"] #same, doesnt change
         distance_treshold = self.communication_range 
 
+        longest_infotime = 0
+        for robot in self.belief_space["last_infos_matrix"][self.robot_id]:
+            if robot == self.robot_id:
+                continue
+            else:
+                #if self.belief_space["last_infos_matrix"][self.robot_id][robot] < self.env.width :#treshold to regulate : definir quel treshold est pertinent maintenant
+                infotime = self.belief_space["last_infos_matrix"][self.robot_id][robot]
+                #print(infotime)
+                if self.env.step - infotime > longest_infotime:
+                    longest_infotime = self.env.step - infotime
+
+        com_time = longest_infotime #longest synchro from every robots synchro time # ComImportance
+        #com_time =  self.time_from_last_communication #time of last communication with any robots
+    
+        
+        #ComInfo : faire un truc coherent pour lancer les expes. Bien identifier ce qui marche, et ce qui ne marche pas.
+        
         if mode == "default":
-            importance = np.exp( self.time_from_last_communication/ self.env.width) #value to be changed
+            importance = np.exp(com_time/ self.env.width) #value to be changed
         elif mode =="linear":
-            importance = self.time_from_last_communication #* self.env.width  #???????????????????
-        elif mode =="geometric":
-            pass #TODO : ComImportance
+            importance = 1.5*com_time - self.env.step #/ self.env.width  #???????????????????
+        elif mode =="polynomial2":
+            importance = ((com_time/self.communication_range)**2)-self.env.step
+        elif mode =="polynomial3":
+            importance = ((com_time/self.communication_range)**3)-self.env.step
         elif mode =="exponential":
-            pass #TODO : ComImportance
+            importance = np.exp(com_time/ self.communication_range)/self.env.step #value to be changed
         elif mode =="rule-based":
-            pass #TODO : ComImportance
+            if com_time < 30: #treshold for no need at all
+                importance = 0
+            elif com_time >= np.sqrt(np.count_nonzero(self.belief_space["occupancy_grid"] != -1))/np.mean([self.max_speed.x, self.max_speed.y]): # s'adapte en fonction de la taille de l'env decouvert.
+                #print("aaa")
+                importance = np.inf
+            else:
+                importance = 1.5*com_time - self.env.step #linear otherwise
+        elif mode =="test":
+            importance = np.exp(com_time/ self.communication_range)  #value to be changed
+        else:
+            raise Exception(f"incorrect importance com mode in agent {self.robot_id}")
+
         
 
         self.shape_competence("communication", capability=capability , importance=importance, distance_treshold=distance_treshold)
@@ -1080,7 +1116,6 @@ class BaseStation(Robot):
             #importance = ((np.max([0.0,(self.env.step - oldest_com_time)]) - ((self.env.width + self.env.height)/2+self.base.return_priority))**2) / self.env.step
             importance = np.max([0.0,(((self.env.step - oldest_com_time)*self.base.return_priority ) - (self.env.width )/2)])**3 /self.env.step**2
 
-            # TODO : return priority en unité de temps?
 
 
             
