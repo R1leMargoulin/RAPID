@@ -2,6 +2,7 @@ import numpy as np
 import heapq
 import random
 from scipy.ndimage import sobel
+from sklearn.cluster import KMeans
 
 from .grid_variables import *
 
@@ -443,6 +444,14 @@ def simple_clustering(coordinates, max_distance):
             barycenters.append(barycenter.tolist())
 
     return barycenters
+
+
+def kmeans_cluster_frontiers(frontiers, robots):
+    npfrontiers = np.array(frontiers)
+    kmeans = KMeans(n_clusters=len(robots), random_state=0, n_init="auto").fit(npfrontiers)
+
+    return kmeans.cluster_centers_, kmeans.labels_
+
 
 def max_k(list, k):
     "gives the k-th max element of a list"
