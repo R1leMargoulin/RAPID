@@ -88,10 +88,11 @@ def find_frontier_cells(grid, traversable_types = [OG_FREE_CELL]):
     return frontier_cells
 
 def sobel_frontier_detection(grid, traversable_types = [OG_FREE_CELL]):
-    traversable_grid = np.isin(grid, traversable_types) #returns true if free and false if obstacle
-    sobel_h = sobel(traversable_grid, 0)  # horizontal gradient
-    sobel_v = sobel(traversable_grid, 1)  # vertical gradient
+    explo_grid = grid==-1 #returns true if free and false if obstacle
+    sobel_h = sobel(explo_grid, 0)  # horizontal gradient
+    sobel_v = sobel(explo_grid, 1)  # vertical gradient
     magnitude = np.sqrt(sobel_h**2 + sobel_v**2)
+    #magnitude *= 255.0 / np.max(magnitude)  # normalization
 
     frontiers_candidates = np.column_stack(np.where(magnitude>0))
     frontiers = []
