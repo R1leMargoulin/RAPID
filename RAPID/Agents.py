@@ -107,6 +107,7 @@ class Robot(Sprite):
 
         #internal memory vars
         self.target = None
+        self.treshold_for_target = 1
         self.path_to_target = None
         self.action_to_perform=None
 
@@ -189,13 +190,14 @@ class Robot(Sprite):
             self.behave() #in order to determine what to do.
             if not self.imdone and np.any(self.target):
                 self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
-                self.navigate_through_target_path() 
+                if self.path_to_target != None:
+                    self.navigate_through_target_path() 
 
 
         if not(self.imdone):
             #print(f"robot {self.robot_id}: status {self.status}, target {self.target}")
 
-            self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "step":self.env.step }}) #self beliefs update
+            self.belief_space["robot_informations"][self.robot_id].update({ "position":(self.transform.x, self.transform.y), "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "step":self.env.step }) #self beliefs update
             self.belief_space["last_infos_matrix"][self.robot_id][self.robot_id] = self.env.step
                 
            
@@ -395,7 +397,8 @@ class Robot(Sprite):
                 if self.connected_robots:
                     for robot in self.connected_robots:
                         if self.robot_id != robot.robot_id:
-                            robot.recieve_belief(self.belief_space) #envoie des beliefs à tous les robots voisins.
+                            BS_copy = deepcopy(self.belief_space)
+                            robot.recieve_belief(BS_copy) #envoie des beliefs à tous les robots voisins, faut ptet faire une copie...
                             self.time_from_last_communication = 0
                     self.last_given_position = (int(self.transform.x), int(self.transform.y))
                 else:
@@ -631,6 +634,7 @@ class Robot(Sprite):
         def cluster_env():
             unknowns = np.column_stack(np.where(self.belief_space["occupancy_grid"]==-1))
             robots = list(self.belief_space["robot_informations"].keys())
+            print("NB ROBOOTS : ", len(robots))
             kmeans_clusters = KMeans(n_clusters=len(robots), random_state=0, n_init="auto").fit(unknowns)
 
             return kmeans_clusters
@@ -644,7 +648,7 @@ class Robot(Sprite):
                             art_found.append({"id": art, "type":self.belief_space["artifacts"][art]["type"]})
 
             #Pi1 condition in the paper
-            if self.env.step - self.rdvtime < 1.5 * self.max_speed.x * a_star_cost(self.belief_space["occupancy_grid"], start = (int(self.transform.x), int(self.transform.x)), goal = self.rdvspot, env_ease=self.env_ease): #if the time until rdvtime is shorter than 1.5* time to go for it, then, pass in rdv mode
+            if np.abs(self.env.step - self.rdvtime) < 1.5 * self.max_speed.x * a_star_cost(self.belief_space["occupancy_grid"], start = (int(self.transform.x), int(self.transform.y)), goal = (int(self.rdvspot[0]), int(self.rdvspot[1])), env_ease=self.env_ease): #if the time until rdvtime is shorter than 1.5* time to go for it, then, pass in rdv mode
                 self.rdvstate = "rendezvous"
             #Pi4 condition in the paper
             elif len(art_found) > 0:
@@ -653,63 +657,89 @@ class Robot(Sprite):
 
             elif self.target == None: #else, we stay in the explore state and recompute a target if necessary
                 #sobel detection for frontier
-                frontiers = sobel_frontier_detection(self.belief_space["occupancy_grid"], traversable_types= self.traversable_types)
-                fcosts = []
-                for f in frontiers:
-                    if self.current_clustering.predict(f) == self.allocated_cluster: #the cell is in our custer
-                        cost = euclidian_distance((self.transform.x, self.transform.y), f) #eq.6, case2
-                    else: #celll not in allocated cluster
-                        cost =  euclidian_distance((self.transform.x, self.transform.y), f) + delta*euclidian_distance(f, self.current_clustering.cluster_centers_[self.allocated_cluster] ) #eq.6, case1
-                    fcosts.append(cost)
-                
-                explopoint = frontiers[np.argmin(fcosts)] #eq. 7
-                self.target  = (int(explopoint[0]), int(explopoint[1]))
+                frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types= self.traversable_types)
+                if len(frontiers)>0:
+                    fcosts = []
+                    for f in frontiers:
+                        prediction = self.current_clustering.predict([f])[0]
+                        cluster_of_pred = (int(self.current_clustering.cluster_centers_[prediction][0]), int(self.current_clustering.cluster_centers_[prediction][1]))
+
+                        if cluster_of_pred == self.allocated_cluster: #the cell is in our custer
+
+                            cost = euclidian_distance((self.transform.x, self.transform.y), f) #eq.6, case2
+                        else: #celll not in allocated cluster
+                            alloc_cluster_coords = (int(self.allocated_cluster[0]), int(self.allocated_cluster[1]))
+                            cost =  euclidian_distance((self.transform.x, self.transform.y), f) + delta*euclidian_distance(f, alloc_cluster_coords) #eq.6, case1
+                        fcosts.append(cost)
+                    
+                    explopoint = frontiers[np.argmin(fcosts)] #eq. 7
+                    self.target  = (int(explopoint[0]), int(explopoint[1]))
+                else:
+                    self.rdvstate = "rendezvous"
+                #print(self.target)
 
             #explo plus proche, OU ALORS, on garde le kmeans et on fait un predict sur les nouvelles frontieres du sobel???
 
             #explore until rdv time limitation
 
         def rendezvous_subbehavior():
-            #goto rdv TODO TODO TODO
+
             # Set a goal point?
             #check if others are here (with the rdv time limitation)
             missing_robot = []
+            if self.env.step < 10: #pour le tout debut de mission, que les robots aient le temps de se donner l'info qu'ils existent^^
+                return
+        
             for robot in self.belief_space["robot_informations"]:
-                if euclidian_distance((self.transform.x, self.transform.y), self.belief_space["robot_informations"][robot]["position"]) and  self.belief_space["robot_informations"][robot]["step"] > self.env.step - 20: #we check that the robot is actually here and not an old position
+                #if (euclidian_distance((self.transform.x, self.transform.y), self.belief_space["robot_informations"][robot]["position"])<self.communication_range/2 ) and  (self.belief_space["robot_informations"][robot]["step"] > self.env.step - 40): #we check that the robot is actually here and not an old position
+                if (self.belief_space["robot_informations"][robot]["step"] > self.env.step - 20): #test de condition sans distance, juste info recente
                     continue
                 else:
                     missing_robot.append(robot) #if it's not here, he is missing at this point.
-            if len(missing_robot) == 0 or self.rdvtime <= self.env.step : 
+            if len(missing_robot) > 0 and euclidian_distance((self.transform.x, self.transform.y), self.rdvspot) > self.communication_range/2: #goto rdv # TODO TODO TODO TODO TODO mettre un treshold d'acceptation de target pour s'arreter si jamais
+                #self.treshold_for_target = self.communication_range/2
+                self.target = self.rdvspot
+                return
+
+            if len(missing_robot) == 0 or self.rdvtime <= self.env.step :
                 #then with the robots that are here : 
                 #identify actions and explo clusters
-                if self.bid == None:
+                if self.bid == None or (self.env.step - self.bid["step"]) >= 100:#no bid, or bid too old.
                     frontier_bids = {}
                     artifacts_bids = {}
-                    self.current_clustering = cluster_env()
+                    self.current_clustering = cluster_env() #KMeans cluster object
                     cluster_centers = self.current_clustering.cluster_centers_ 
 
                     for cc in cluster_centers:
-                        cost = euclidian_distance((self.transform.x, self.transform.y), cc)
-                        frontier_bids.update({cc:(1/cost)}) #then high cost will make a small bid.
+                        cost = euclidian_distance((self.transform.x, self.transform.y), (int(cc[0]), int(cc[1])))
+                        frontier_bids.update({(int(cc[0]), int(cc[1])):(1/cost)}) #then high cost will make a small bid.
                     if "artifacts" in self.belief_space:
                         for art in self.belief_space["artifacts"]:
                             #check capability
-                            type = self.belief_space["artifacts"][art]["type"]
-                            capability = self.competences[type]
-                            artifacts_bids.update({art:(capability/cost)})
-                    self.bid = {"frontiers":frontier_bids, "artifacts":artifacts_bids}
-                    self.belief_space["robot_informations"][self.robot_id].update({"bids":self.bid}) #TODO : virer les bids avant le comeback au prochain rdv
+                            if self.belief_space["artifacts"][art]["status"] not in ["destroyed", "done"]:
+                                type = self.belief_space["artifacts"][art]["type"]
+                                capability = self.competences[type]
+                                artifacts_bids.update({art:(capability/cost)})
+                    self.bid = {"frontiers":frontier_bids, "artifacts":artifacts_bids, "step": self.env.step}
+                    self.belief_space["robot_informations"][self.robot_id].update({"bids":self.bid})
                     #avec ca, la communication devrait automatiquement partager les bids, vu que les robots envoient leurs infos du belief space en entier.
                 missing_bids = False
-                for robot in self.belief_space["robot_informations"]: 
+                for robot in self.belief_space["robot_informations"]: #TODO : Harmoniser les bids entre les robots.
                     if robot in missing_robot:
                         continue
                     if not("bids" in list(self.belief_space["robot_informations"][robot].keys())):
                         missing_bids = True
                         break
+                    elif self.belief_space["robot_informations"][robot]["bids"]["step"] <= self.env.step - 100:
+                            missing_bids = True
+                            break
                 if not missing_bids: #here, we use hungarian algorithm, so we have a one-shot auction
                     #TODO : faire une matrice avec les bids des robot non-missing, puis identifier la tâche à effectuer pour le robot faisant le calcul.
-                    robots_present = [r for r in self.belief_space["robot_informations"] if r not in missing_robot]
+                    robots_present = []
+                    for r in self.belief_space["robot_informations"]:
+                        if not(r in missing_robot):
+                            robots_present.append(r)
+                    #robots_present = [r for r in self.belief_space["robot_informations"] if r not in missing_robot]
                     tasks_frontiers = list(self.bid["frontiers"].keys())
                     tasks_artifacts = list(self.bid["artifacts"].keys())
 
@@ -719,58 +749,80 @@ class Robot(Sprite):
                     # Remplir la matrice avec les bids des robots pour chaque tâche
                     for i, robot in enumerate(robots_present):
                         # artefacts 
-                        for j, task in enumerate(tasks_artifacts):
-                            artifact_matrix[i, j] = self.belief_space["robot_informations"][robot]["bids"]["artifacts"].get(task, 0)
+                        if len(tasks_artifacts) >0:
+                            for j, task in enumerate(tasks_artifacts):
+                                artifact_matrix[i, j] = self.belief_space["robot_informations"][robot]["bids"]["artifacts"][task]
                         # frontières
-                        for j, task in enumerate(tasks_frontiers):
-                            exploration_matrix[i,j] = self.belief_space["robot_informations"][robot]["bids"]["frontiers"].get(task, 0)
+                        if len(tasks_frontiers) >0:
+                            for j, task in enumerate(tasks_frontiers):
+                                if task not in list(self.belief_space["robot_informations"][robot]["bids"]["frontiers"].keys()):
+                                    #we need to infer which cluster the bid is for
+                                    for cluster in list(self.belief_space["robot_informations"][robot]["bids"]["frontiers"]):
+                                        if self.current_clustering.predict([cluster]) == self.current_clustering.predict([task]):
+                                            exploration_matrix[i,j] = self.belief_space["robot_informations"][robot]["bids"]["frontiers"][cluster]
+                                else:
+                                    exploration_matrix[i,j] = self.belief_space["robot_informations"][robot]["bids"]["frontiers"][task]
 
-                    # Hungarian
-                    m_frontier = Munkres()
-                    m_artifact = Munkres()
-                    cluster_indices = m_frontier.compute(-exploration_matrix)
-                    artifact_indices = m_artifact.compute(-artifact_matrix)
+                    # hungarian affectations robot -> tache :  du robot self
+                    #artefacts
+                    if len(tasks_artifacts) >0:
+                        m_artifact = Munkres()
+                        artifact_indices = m_artifact.compute(-artifact_matrix)
 
+                        for r_idx, t_idx in artifact_indices:
+                            if robots_present[r_idx] == self.robot_id:
+                                #robot_id = robots_present[r_idx]
+                                task_id = tasks_artifacts[t_idx]
+                                self.action_to_perform = {"id": task_id, "type":self.belief_space["artifacts"][task_id]["type"]}
+                                self.rdvstate = "search"
+                                self.bid = None
+                                break
+                    
+                    if len(find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=self.traversable_types))==0 and len(tasks_artifacts)==0 : #if there is no frontier and no task anymore, we finish
+                        self.rdvstate = "finish"
+                        return
 
+                    # explo
+                    if len(tasks_frontiers) >0:
+                        m_frontier = Munkres()
+                        cluster_indices = m_frontier.compute(-exploration_matrix)
+                        for r_idx, t_idx in cluster_indices:
+                            if robots_present[r_idx] == self.robot_id:
+                                task_id = tasks_frontiers[t_idx]
+                                self.allocated_cluster = task_id
+                                if self.rdvstate != "search":
+                                    self.rdvstate = "explore"
+                                    self.bid = None
+                                break
+                    
+                    
+                    #SETUP NEXT RDV SPOT
+                    unknown_mask = self.belief_space["occupancy_grid"] == -1
+                    unknown_coords = np.argwhere(unknown_mask)  # cellules inconnues actuelles
 
-                    # affectations robot -> tache :  du robot self
-                    for r_idx, t_idx in artifact_indices:
-                        if robots_present[r_idx] == self.robot_id:
-                            #robot_id = robots_present[r_idx]
-                            task_id = tasks_artifacts[t_idx]
-                            self.action_to_perform = {"id": task_id, "type":self.belief_space["artifacts"][task_id]["type"]}
-                            self.rdvstate = "search"
-                    for r_idx, t_idx in cluster_indices:
-                        if robots_present[r_idx] == self.robot_id:
-                            task_id = tasks_frontiers[t_idx]
-                            self.allocated_cluster = task_id
-                            if self.rdvstate != "search":
-                                self.rdvstate = "explore"
+                    partition = np.zeros(self.belief_space["occupancy_grid"].shape, dtype=int)
 
-                
-                #TODO SETUP NEXT RDV SPOT
-                partition = np.zeros(self.belief_space["occupancy_grid"].shape, dtype=int)  # shape (m, n)
-                partition[self.belief_space["occupancy_grid"] == -1] = self.current_clustering.labels_ + 1
-                #je traduis du mieux que je peux le code matlab de bramblett sur le gitub. Elle a l'air de faire une moyenne ponderee des centroides
-                #par la taille des partitions.
+                    # partition[self.belief_space["occupancy_grid"] == -1] = self.current_clustering.labels_ + 1
+                    partition[unknown_mask] = self.current_clustering.predict(unknown_coords) + 1 # test
+                    #je traduis du mieux que je peux le code matlab de bramblett sur le gitub. Elle a l'air de faire une moyenne ponderee des centroides
+                    #par la taille des partitions.
 
-                unk_part = partition[partition != 0] 
-                labels, a_counts = np.unique(unk_part, return_counts=True)
-                c_loc = self.current_clustering.cluster_centers_ 
+                    unk_part = partition[partition != 0] 
+                    labels, a_counts = np.unique(unk_part, return_counts=True)
+                    c_loc = self.current_clustering.cluster_centers_ 
 
-                self.rdvspot = np.round(np.sum(c_loc[labels - 1] * a_counts[:, np.newaxis], axis=0) / len(unk_part)).astype(int)
-                #Note :  je fais les rdv de manière decentralisee, normalement chaque robot attends d'avoir l'info que les autres sont dans le cluster
-                #donc EN THEORIE tout le monde a la meme map, les clusters et donc les points de rdv devraient etre les memes.....
-                #en pratique, on verra^^
+                    np_rdvspot = np.round(np.sum(c_loc[labels - 1] * a_counts[:, np.newaxis], axis=0) / len(unk_part)).astype(int)
+                    self.rdvspot = (int(np_rdvspot[0]), int(np_rdvspot[1]))
+                    if not(self.belief_space["occupancy_grid"][self.rdvspot] in self.traversable_types):
+                        self.rdvspot = find_nearest_free(self.belief_space["occupancy_grid"], self.rdvspot, traversable_types=self.traversable_types) #si le rdv est un mur ou une case inconnue, alors, on 
+            
+                    
+                    #Note :  je fais les rdv de manière decentralisee, normalement chaque robot attends d'avoir l'info que les autres sont dans le cluster
+                    #donc EN THEORIE tout le monde a la meme map, les clusters et donc les points de rdv devraient etre les memes.....
+                    #en pratique, on verra^^
 
-                #identify next action todo. si j'ai win sur un artefact: j'y vais et je passe en search puis exploit
-                if self.action_to_perform !=None:
-                    self.rdvstate = "search"
-                else:
-                    self.rdvstate = "explore"
-
-                self.rdvtime = self.env.step + 150 #TODO maybe set a better incrementation value.
-          
+                    self.rdvtime = self.env.step + 300 #TODO maybe set a better incrementation value.
+            
         def search_subbehavior():
             artifact_coordinates = self.belief_space["artifacts"][self.action_to_perform["id"]]["coordinates"]
             if euclidian_distance((int(self.transform.x), int(self.transform.y)), artifact_coordinates) < self.vision_range:
@@ -785,14 +837,29 @@ class Robot(Sprite):
                 self.rdvstate = "explore"
             #make the job until done or rdv time limitation
 
+        def finish_subbehavior():
+            if euclidian_distance((int(self.transform.x),int(self.transform.y)), (int(self.init_transform.x),int(self.init_transform.y))) > self.treshold_for_target:
+                self.target = (int(self.init_transform.x),int(self.init_transform.y))
+                self.last_plan_time = self.env.step
+                return None
+            else:
+                self.finish()
+                return None
+
         if "rdvstate" not in self.__dict__.keys(): #for initialisation, we set rdv originally
             self.rdvstate = "rendezvous"
             self.bid = None
-            self.rdvspot = None
-            self.rdvtime = 0
+            self.rdvspot = (int(self.transform.x), int(self.transform.y))
+            self.rdvtime = 20
             self.allocated_cluster = None
             self.current_clustering = None
 
+            #we have to cheat here cause this method requires the robot to know each other at the beggining of the mission.
+            for r in self.env.agents:
+                if r.robot_id != self.robot_id:
+                    BS_copy = deepcopy(self.belief_space)
+                    r.recieve_belief(BS_copy)
+        
         if self.rdvstate == "explore":
             explore_subbehavior()
         elif self.rdvstate == "rendezvous":
@@ -801,6 +868,9 @@ class Robot(Sprite):
             search_subbehavior()
         elif self.rdvstate == "exploit":
             exploit_subbehavior()
+        elif self.rdvstate == "finish":
+            finish_subbehavior()
+
 
         pass
 
@@ -887,11 +957,12 @@ class Robot(Sprite):
 
         #we should be nearby the first point of the path, else we delete it and we'll compute an other one:
         if euclidian_distance((int(self.transform.x), int(self.transform.y)), (self.path_to_target[0][0], self.path_to_target[0][1])) <= 5: #if we are more than 5 away from the path, we forget the target it in order to recalculate a new one
-            if self.path_to_target[0] == self.target:
+            if euclidian_distance(self.path_to_target[0],self.target) <= self.treshold_for_target:
                 waypoint = self.path_to_target[0]
                 make_the_move(waypoint)
                 
                 self.target = None #forget the target and the path
+                self.treshold_for_target = 1 #we reset the treshold at default value each time a traject is over.
                 self.path_to_target = None
             else:
                 self.path_to_target.pop(0)
@@ -950,7 +1021,7 @@ class Robot(Sprite):
 
         #if we have no interest point anymore (or communication or base_station only), we consider the mission done.*
         if len(interest_points) == 0 or (len(interest_points)==1 and interest_points[0]["type"] == "base_station_com"):
-            if (int(self.transform.x),int(self.transform.y)) != (int(self.init_transform.x),int(self.init_transform.y)):
+            if euclidian_distance((int(self.transform.x),int(self.transform.y)), (int(self.init_transform.x),int(self.init_transform.y))) > self.treshold_for_target:
                 self.target = (int(self.init_transform.x),int(self.init_transform.y))
                 self.last_plan_time = self.env.step
                 return None

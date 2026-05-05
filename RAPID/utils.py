@@ -3,6 +3,7 @@ import heapq
 import random
 from scipy.ndimage import sobel
 from sklearn.cluster import KMeans
+from collections import deque
 
 from .grid_variables import *
 
@@ -105,6 +106,52 @@ def sobel_frontier_detection(grid, traversable_types = [OG_FREE_CELL]):
             frontiers.append((int(x),int(y)))
 
     return frontiers
+
+def find_nearest_free(grid, target, neighborhood='moore', traversable_types = [OG_FREE_CELL]):
+    """
+    Trouve la case libre la plus proche du point cible via BFS.
+    
+    Args:
+        grid       : np.array 2D
+        target     : tuple (x, y) — point cible
+        neighborhood: 'moore' (8 voisins) ou 'vonneumann' (4 voisins)
+        free_value : valeur d'une case libre (défaut 0)
+    
+    Returns:
+        (x, y) de la case libre la plus proche, ou None si aucune trouvée
+    """
+    
+    if neighborhood == 'moore':
+        directions = [(-1,-1),(-1, 0),(-1, 1),
+                      ( 0,-1),         ( 0, 1),
+                      ( 1,-1),( 1, 0),( 1, 1)]
+    else:  # von neumann
+        directions = [(-1, 0),
+                      ( 0,-1), (0, 1),
+                      ( 1, 0)]
+
+    rows, cols = grid.shape
+    visited = set()
+    queue = deque([target])
+    visited.add(target)
+
+    while queue:
+        x, y = queue.popleft()
+
+        # Si la case courante est libre (et ce n'est pas la cible elle-même)
+        if grid[x, y] in traversable_types and (x, y) != target:
+            return (x, y)
+
+        # Sinon, on explore ses voisins
+        for dx, dy in directions:
+            nx, ny = x + dx, y + dy
+            if (0 <= nx < rows and 0 <= ny < cols
+                    and (nx, ny) not in visited):
+                visited.add((nx, ny))
+                queue.append((nx, ny))
+
+    return None  # aucune case libre trouvée
+
 
 def cluster_frontier_cells(grid, frontier_cells, vision_range, traversable_types = [OG_FREE_CELL]):
     """
