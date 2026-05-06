@@ -197,7 +197,7 @@ class Robot(Sprite):
         if not(self.imdone):
             #print(f"robot {self.robot_id}: status {self.status}, target {self.target}")
 
-            self.belief_space["robot_informations"][self.robot_id].update({ "position":(self.transform.x, self.transform.y), "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "step":self.env.step }) #self beliefs update
+            self.belief_space["robot_informations"][self.robot_id].update({ "position":(self.transform.x, self.transform.y), "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "status": self.status, "step":self.env.step }) #self beliefs update
             self.belief_space["last_infos_matrix"][self.robot_id][self.robot_id] = self.env.step
                 
            
@@ -634,7 +634,6 @@ class Robot(Sprite):
         def cluster_env():
             unknowns = np.column_stack(np.where(self.belief_space["occupancy_grid"]==-1))
             robots = list(self.belief_space["robot_informations"].keys())
-            print("NB ROBOOTS : ", len(robots))
             kmeans_clusters = KMeans(n_clusters=len(robots), random_state=0, n_init="auto").fit(unknowns)
 
             return kmeans_clusters
@@ -1019,26 +1018,17 @@ class Robot(Sprite):
         #--------------------------------------
         #------------------------------------------------------------------------------------------
 
-        #if we have no interest point anymore (or communication or base_station only), we consider the mission done.*
-        if len(interest_points) == 0 or (len(interest_points)==1 and interest_points[0]["type"] == "base_station_com"):
-            if euclidian_distance((int(self.transform.x),int(self.transform.y)), (int(self.init_transform.x),int(self.init_transform.y))) > self.treshold_for_target:
-                self.target = (int(self.init_transform.x),int(self.init_transform.y))
-                self.last_plan_time = self.env.step
-                return None
-            else:
-                self.finish()
-                return None
 
         #barycentre de communications----------
         #liste de toutes les positions des robots
 
         robots_pos_list = [] #list of float xy position of all robots
         for robot_id in self.belief_space["robot_informations"]:
-            if robot_id != self.robot_id:  # ComImportance : est ce que je ferais pas un truc spécifique aux robots?
-                if self.communication_range*2 <= self.env.step - self.belief_space["robot_informations"][robot_id]["step"] :#<= (2 * self.env.width) : #limite arbitraire pour voir si la position n'est pas trop obsolete, sinon on ne la prendra pas en compte, TODO : mettre ca en parametrable propre
+            if robot_id != self.robot_id and self.belief_space["robot_informations"][robot_id]["status"]!= "finishing":  # ComImportance : est ce que je ferais pas un truc spécifique aux robots?
+                if self.communication_range*4 <= self.env.step - self.belief_space["robot_informations"][robot_id]["step"] : # < np.max(self.belief_space["occupancy_grid"].shape)/self.max_speed.x :
                     if euclidian_distance((self.transform.x, self.transform.y) ,self.belief_space["robot_informations"][robot_id]["position"]) >=  self.competences["communication"]["distance_treshold"]:
                         robots_pos_list.append(self.belief_space["robot_informations"][robot_id]["position"])
-            else:
+            if len(robots_pos_list)>0:
                 if euclidian_distance((self.transform.x, self.transform.y) , self.last_given_position) >=  self.competences["communication"]["distance_treshold"]:
                         robots_pos_list.append(self.last_given_position)# TODO ComInfo, la last given position, c'est a double trnchant, je sais pas trop
 
@@ -1050,6 +1040,17 @@ class Robot(Sprite):
 
 
         #--------------------------------------        
+
+        #if we have no interest point anymore, we consider the mission done.*
+        if len(interest_points) == 0: # or (len(interest_points)==1 and interest_points[0]["type"] == "base_station_com"):
+            if euclidian_distance((int(self.transform.x),int(self.transform.y)), (int(self.init_transform.x),int(self.init_transform.y))) > self.treshold_for_target:
+                self.status = "finishing"
+                self.target = (int(self.init_transform.x),int(self.init_transform.y))
+                self.last_plan_time = self.env.step
+                return None
+            else:
+                self.finish()
+                return None
 
         #utility calculation-----------------------------------------------------------------------            
         for ip in interest_points:
