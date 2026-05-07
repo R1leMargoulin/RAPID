@@ -632,9 +632,10 @@ class Robot(Sprite):
 
     def behavior_rdv(self): #from Bramblett, 2022
         def cluster_env():
-            unknowns = np.column_stack(np.where(self.belief_space["occupancy_grid"]==-1))
+            # unknowns = np.column_stack(np.where(self.belief_space["occupancy_grid"]==-1))
             robots = list(self.belief_space["robot_informations"].keys())
-            kmeans_clusters = KMeans(n_clusters=len(robots), random_state=0, n_init="auto").fit(unknowns)
+            frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types=self.traversable_types)
+            kmeans_clusters = KMeans(n_clusters=len(robots), random_state=0, n_init="auto").fit(frontiers)
 
             return kmeans_clusters
 
@@ -796,21 +797,30 @@ class Robot(Sprite):
                     
                     
                     #SETUP NEXT RDV SPOT
-                    unknown_mask = self.belief_space["occupancy_grid"] == -1
-                    unknown_coords = np.argwhere(unknown_mask)  # cellules inconnues actuelles
+                    
 
                     partition = np.zeros(self.belief_space["occupancy_grid"].shape, dtype=int)
 
                     # partition[self.belief_space["occupancy_grid"] == -1] = self.current_clustering.labels_ + 1
+                    frontiers = find_frontier_cells(self.belief_space["occupancy_grid"])
+
+                    frows = [f[0] for f in frontiers]
+                    fcols = [f[1] for f in frontiers]
+                    partition[frows, fcols] = -1
+
+                    unknown_mask = partition == -1
+                    unknown_coords = np.argwhere(unknown_mask)  # cellules inconnues actuelles
+
                     partition[unknown_mask] = self.current_clustering.predict(unknown_coords) + 1 # test
                     #je traduis du mieux que je peux le code matlab de bramblett sur le gitub. Elle a l'air de faire une moyenne ponderee des centroides
                     #par la taille des partitions.
 
+                    
                     unk_part = partition[partition != 0] 
                     labels, a_counts = np.unique(unk_part, return_counts=True)
                     c_loc = self.current_clustering.cluster_centers_ 
 
-                    np_rdvspot = np.round(np.sum(c_loc[labels - 1] * a_counts[:, np.newaxis], axis=0) / len(unk_part)).astype(int)
+                    np_rdvspot = np.round(np.sum(c_loc[labels - 1] * a_counts[:, np.newaxis], axis=0) / len(unk_part)).astype(int) #TODO, il faut que je ne prenne plus en compte les zones inconnues inaccessibles. Il faudrait que je les purge en fait...
                     self.rdvspot = (int(np_rdvspot[0]), int(np_rdvspot[1]))
                     if not(self.belief_space["occupancy_grid"][self.rdvspot] in self.traversable_types):
                         self.rdvspot = find_nearest_free(self.belief_space["occupancy_grid"], self.rdvspot, traversable_types=self.traversable_types) #si le rdv est un mur ou une case inconnue, alors, on 
@@ -820,7 +830,7 @@ class Robot(Sprite):
                     #donc EN THEORIE tout le monde a la meme map, les clusters et donc les points de rdv devraient etre les memes.....
                     #en pratique, on verra^^
 
-                    self.rdvtime = self.env.step + 300 #TODO maybe set a better incrementation value.
+                    self.rdvtime = self.env.step + np.max(self.belief_space["occupancy_grid"].shape)*2 #TODO maybe set a better incrementation value.
             
         def search_subbehavior():
             artifact_coordinates = self.belief_space["artifacts"][self.action_to_perform["id"]]["coordinates"]
@@ -859,6 +869,10 @@ class Robot(Sprite):
                     BS_copy = deepcopy(self.belief_space)
                     r.recieve_belief(BS_copy)
         
+        print(self.rdvstate)
+        print(self.rdvspot)
+        print(self.rdvtime)
+
         if self.rdvstate == "explore":
             explore_subbehavior()
         elif self.rdvstate == "rendezvous":
