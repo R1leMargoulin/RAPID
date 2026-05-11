@@ -707,19 +707,22 @@ class Robot(Sprite):
                 if self.bid == None or (self.env.step - self.bid["step"]) >= 100:#no bid, or bid too old.
                     frontier_bids = {}
                     artifacts_bids = {}
-                    self.current_clustering = cluster_env() #KMeans cluster object
-                    cluster_centers = self.current_clustering.cluster_centers_ 
+                    frontiers = find_frontier_cells(self.belief_space["occupancy_grid"], traversable_types = self.traversable_types)
+                    if len(frontiers) >1:
 
-                    for cc in cluster_centers:
-                        cost = euclidian_distance((self.transform.x, self.transform.y), (int(cc[0]), int(cc[1])))
-                        frontier_bids.update({(int(cc[0]), int(cc[1])):(1/cost)}) #then high cost will make a small bid.
-                    if "artifacts" in self.belief_space:
-                        for art in self.belief_space["artifacts"]:
-                            #check capability
-                            if self.belief_space["artifacts"][art]["status"] not in ["destroyed", "done"]:
-                                type = self.belief_space["artifacts"][art]["type"]
-                                capability = self.competences[type]
-                                artifacts_bids.update({art:(capability/cost)})
+                        self.current_clustering = cluster_env() #KMeans cluster object
+                        cluster_centers = self.current_clustering.cluster_centers_ 
+
+                        for cc in cluster_centers:
+                            cost = euclidian_distance((self.transform.x, self.transform.y), (int(cc[0]), int(cc[1])))
+                            frontier_bids.update({(int(cc[0]), int(cc[1])):(1/cost)}) #then high cost will make a small bid.
+                        if "artifacts" in self.belief_space:
+                            for art in self.belief_space["artifacts"]:
+                                #check capability
+                                if self.belief_space["artifacts"][art]["status"] not in ["destroyed", "done"]:
+                                    type = self.belief_space["artifacts"][art]["type"]
+                                    capability = self.competences[type]
+                                    artifacts_bids.update({art:(capability/cost)})
                     self.bid = {"frontiers":frontier_bids, "artifacts":artifacts_bids, "step": self.env.step}
                     self.belief_space["robot_informations"][self.robot_id].update({"bids":self.bid})
                     #avec ca, la communication devrait automatiquement partager les bids, vu que les robots envoient leurs infos du belief space en entier.
