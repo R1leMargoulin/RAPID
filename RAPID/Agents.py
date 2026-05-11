@@ -871,10 +871,6 @@ class Robot(Sprite):
                 if r.robot_id != self.robot_id:
                     BS_copy = deepcopy(self.belief_space)
                     r.recieve_belief(BS_copy)
-        
-        print(self.rdvstate)
-        print(self.rdvspot)
-        print(self.rdvtime)
 
         if self.rdvstate == "explore":
             explore_subbehavior()
