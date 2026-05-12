@@ -196,6 +196,7 @@ class Robot(Sprite):
 
         if not(self.imdone):
             #print(f"robot {self.robot_id}: status {self.status}, target {self.target}")
+            #print(f"robot {self.robot_id} : performing {self.action_to_perform}")
 
             self.belief_space["robot_informations"][self.robot_id].update({ "position":(self.transform.x, self.transform.y), "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "status": self.status, "step":self.env.step }) #self beliefs update
             self.belief_space["last_infos_matrix"][self.robot_id][self.robot_id] = self.env.step
@@ -522,7 +523,7 @@ class Robot(Sprite):
             self.action_to_perform = None     
         else: #we'll consider than everything else is consider as an artifact
             for a in self.env.interest_points["artifacts"]:
-                if a.id == self.action_to_perform["id"] and (euclidian_distance((int(a.coordinates[0]), int(a.coordinates[1])), (int(self.transform.x), int(self.transform.y)) ) < a.needed_robots):
+                if a.id == self.action_to_perform["id"] and (euclidian_distance((int(a.coordinates[0]), int(a.coordinates[1])), (int(self.transform.x), int(self.transform.y)) ) < 1.5*a.needed_robots):
                     
                     result = a.interact(self.competences[self.action_to_perform["type"]]["capability"])
                     if result :
