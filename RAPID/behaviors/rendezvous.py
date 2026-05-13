@@ -18,8 +18,11 @@ def rendezvous(selfrobot): #from Bramblett, 2022
             if "artifacts" in selfrobot.belief_space: #check artifacts for pi4 condition
                     for art in selfrobot.belief_space["artifacts"]:
                         #INTEREST POINT CREATION
-                        if selfrobot.belief_space["artifacts"][art]["status"] not in ["done", "destroyed"] and selfrobot.current_clustering.predict(selfrobot.belief_space["artifacts"][art]["coordinates"]) == selfrobot.allocated_cluster:
-                            art_found.append({"id": art, "type":selfrobot.belief_space["artifacts"][art]["type"]})
+                        artprediction = selfrobot.current_clustering.predict([selfrobot.belief_space["artifacts"][art]["coordinates"]])[0]
+                        art_cluster = (int(selfrobot.current_clustering.cluster_centers_[artprediction][0]), int(selfrobot.current_clustering.cluster_centers_[artprediction][1]))
+                        #print(f"robot : {selfrobot.robot_id} , allocated cluster : {selfrobot.allocated_cluster}\n clusters : {selfrobot.current_clustering.cluster_centers_}\n")
+                        if selfrobot.belief_space["artifacts"][art]["status"] not in ["done", "destroyed"] and art_cluster == selfrobot.allocated_cluster:
+                            art_found.append({"id": art, "type":selfrobot.belief_space["artifacts"][art]["type"], "coordinates": selfrobot.belief_space["artifacts"][art]["coordinates"]})
 
             #Pi1 condition in the paper
             if np.abs(selfrobot.env.step - selfrobot.rdvtime) < 1.5 * selfrobot.max_speed.x * a_star_cost(selfrobot.belief_space["occupancy_grid"], start = (int(selfrobot.transform.x), int(selfrobot.transform.y)), goal = (int(selfrobot.rdvspot[0]), int(selfrobot.rdvspot[1])), env_ease=selfrobot.env_ease): #if the time until rdvtime is shorter than 1.5* time to go for it, then, pass in rdv mode
@@ -27,7 +30,8 @@ def rendezvous(selfrobot): #from Bramblett, 2022
             #Pi4 condition in the paper
             elif len(art_found) > 0:
                 selfrobot.action_to_perform = art_found[0] #TODO : Use equation 10 of the paper to decide if and which task to use????
-                selfrobot.rdvstate = "search"
+                selfrobot.target = art_found[0]["coordinates"]
+                selfrobot.rdvstate = "exploit"#"search"
 
             elif selfrobot.target == None: #else, we stay in the explore state and recompute a target if necessary
                 #sobel detection for frontier
@@ -70,7 +74,7 @@ def rendezvous(selfrobot): #from Bramblett, 2022
                     continue
                 else:
                     missing_robot.append(robot) #if it's not here, he is missing at this point.
-            if len(missing_robot) > 0 and euclidian_distance((selfrobot.transform.x, selfrobot.transform.y), selfrobot.rdvspot) > selfrobot.communication_range/2: #goto rdv # TODO TODO TODO TODO TODO mettre un treshold d'acceptation de target pour s'arreter si jamais
+            if len(missing_robot) > 0 and euclidian_distance((selfrobot.transform.x, selfrobot.transform.y), selfrobot.rdvspot) > selfrobot.communication_range/2: #goto rdv 
                 #selfrobot.treshold_for_target = selfrobot.communication_range/2
                 selfrobot.target = selfrobot.rdvspot
                 return
@@ -82,21 +86,22 @@ def rendezvous(selfrobot): #from Bramblett, 2022
                     frontier_bids = {}
                     artifacts_bids = {}
                     frontiers = find_frontier_cells(selfrobot.belief_space["occupancy_grid"], traversable_types = selfrobot.traversable_types)
-                    if len(frontiers) >1:
-
+                    if len(frontiers) > len(selfrobot.belief_space["robot_informations"]):
+                        
                         selfrobot.current_clustering = cluster_env() #KMeans cluster object
                         cluster_centers = selfrobot.current_clustering.cluster_centers_ 
 
                         for cc in cluster_centers:
                             cost = euclidian_distance((selfrobot.transform.x, selfrobot.transform.y), (int(cc[0]), int(cc[1])))
                             frontier_bids.update({(int(cc[0]), int(cc[1])):(1/cost)}) #then high cost will make a small bid.
-                        if "artifacts" in selfrobot.belief_space:
-                            for art in selfrobot.belief_space["artifacts"]:
-                                #check capability
-                                if selfrobot.belief_space["artifacts"][art]["status"] not in ["destroyed", "done"]:
-                                    type = selfrobot.belief_space["artifacts"][art]["type"]
-                                    capability = selfrobot.competences[type]
-                                    artifacts_bids.update({art:(capability/cost)})
+                    if "artifacts" in selfrobot.belief_space:
+                        for art in selfrobot.belief_space["artifacts"]:
+                            #check capability
+                            if selfrobot.belief_space["artifacts"][art]["status"] not in ["destroyed", "done"]:
+                                type = selfrobot.belief_space["artifacts"][art]["type"]
+                                capability = selfrobot.competences[type]["capability"]
+                                #print(capability)
+                                artifacts_bids.update({art:(capability/cost)})
                     selfrobot.bid = {"frontiers":frontier_bids, "artifacts":artifacts_bids, "step": selfrobot.env.step}
                     selfrobot.belief_space["robot_informations"][selfrobot.robot_id].update({"bids":selfrobot.bid})
                     #avec ca, la communication devrait automatiquement partager les bids, vu que les robots envoient leurs infos du belief space en entier.
@@ -124,12 +129,39 @@ def rendezvous(selfrobot): #from Bramblett, 2022
                     exploration_matrix = np.zeros((len(robots_present), len(tasks_frontiers)))
                     artifact_matrix = np.zeros((len(robots_present), len(tasks_artifacts)))
                     # Remplir la matrice avec les bids des robots pour chaque tâche
+
+
+                    if len(tasks_artifacts) > 0:
+                        m_artifact = Munkres()
+
+                        # Padding : rendre la matrice carrée si moins de tâches que de robots
+                        n_robots = len(robots_present)
+                        n_tasks = len(tasks_artifacts)
+                        if n_robots > n_tasks:
+                            pad = np.zeros((n_robots, n_robots - n_tasks))
+                            artifact_matrix_square = np.hstack([artifact_matrix, pad])
+                        else:
+                            artifact_matrix_square = artifact_matrix
+
+                        artifact_indices = m_artifact.compute(-artifact_matrix_square)
+
+                        for r_idx, t_idx in artifact_indices:
+                            if t_idx >= n_tasks:  # padding, on ignore
+                                continue
+                            if robots_present[r_idx] == selfrobot.robot_id:
+                                task_id = tasks_artifacts[t_idx]
+                                selfrobot.action_to_perform = {
+                                    "id": task_id,
+                                    "type": selfrobot.belief_space["artifacts"][task_id]["type"],
+                                    "coordinates": selfrobot.belief_space["artifacts"][task_id]["coordinates"]
+                                }
+                                selfrobot.rdvstate = "exploit"
+                                selfrobot.target = selfrobot.action_to_perform["coordinates"]
+                                selfrobot.bid = None
+                                break
+
                     for i, robot in enumerate(robots_present):
-                        # artefacts 
-                        if len(tasks_artifacts) >0:
-                            for j, task in enumerate(tasks_artifacts):
-                                artifact_matrix[i, j] = selfrobot.belief_space["robot_informations"][robot]["bids"]["artifacts"][task]
-                        # frontières
+
                         if len(tasks_frontiers) >0:
                             for j, task in enumerate(tasks_frontiers):
                                 if task not in list(selfrobot.belief_space["robot_informations"][robot]["bids"]["frontiers"].keys()):
@@ -140,20 +172,6 @@ def rendezvous(selfrobot): #from Bramblett, 2022
                                 else:
                                     exploration_matrix[i,j] = selfrobot.belief_space["robot_informations"][robot]["bids"]["frontiers"][task]
 
-                    # hungarian affectations robot -> tache :  du robot selfrobot
-                    #artefacts
-                    if len(tasks_artifacts) >0:
-                        m_artifact = Munkres()
-                        artifact_indices = m_artifact.compute(-artifact_matrix)
-
-                        for r_idx, t_idx in artifact_indices:
-                            if robots_present[r_idx] == selfrobot.robot_id:
-                                #robot_id = robots_present[r_idx]
-                                task_id = tasks_artifacts[t_idx]
-                                selfrobot.action_to_perform = {"id": task_id, "type":selfrobot.belief_space["artifacts"][task_id]["type"]}
-                                selfrobot.rdvstate = "search"
-                                selfrobot.bid = None
-                                break
                     
                     if len(find_frontier_cells(selfrobot.belief_space["occupancy_grid"], traversable_types=selfrobot.traversable_types))==0 and len(tasks_artifacts)==0 : #if there is no frontier and no task anymore, we finish
                         selfrobot.rdvstate = "finish"
@@ -167,7 +185,7 @@ def rendezvous(selfrobot): #from Bramblett, 2022
                             if robots_present[r_idx] == selfrobot.robot_id:
                                 task_id = tasks_frontiers[t_idx]
                                 selfrobot.allocated_cluster = task_id
-                                if selfrobot.rdvstate != "search":
+                                if selfrobot.rdvstate != "exploit":
                                     selfrobot.rdvstate = "explore"
                                     selfrobot.bid = None
                                 break
@@ -217,9 +235,8 @@ def rendezvous(selfrobot): #from Bramblett, 2022
                 selfrobot.target = artifact_coordinates
 
         def exploit_subbehavior():
-            artifact_status = selfrobot.belief_space["artifacts"][selfrobot.action_to_perform["id"]]["status"]
-            #TODO : EQUATION 9 to check if rdv is locally optimal, then make the transition if so
-            if artifact_status in ["done", "destroyed"]:
+            #print("AAAAAAAAAAAAAAAAAAAAAAAAAA")
+            if selfrobot.action_to_perform == None:
                 selfrobot.rdvstate = "explore"
             #make the job until done or rdv time limitation
 
