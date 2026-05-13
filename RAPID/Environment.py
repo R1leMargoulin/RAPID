@@ -284,6 +284,9 @@ class Environment():
                 for cr in a.connected_robots:
                     pygame.draw.line(self.screen, (255, 255, 255), (a.transform.x * self.scaling_factor, a.transform.y * self.scaling_factor), (cr.transform.x * self.scaling_factor, cr.transform.y * self.scaling_factor))
         pass
+
+    def break_robot(self, robot_id):
+        self.agents[robot_id].status = "destroyed"
     
 
 class TargetPointEnvironment(Environment):
