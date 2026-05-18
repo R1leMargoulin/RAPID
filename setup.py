@@ -11,7 +11,7 @@ setup(
         'numpy',
         'pygame',
         'pillow',
-        'skimage',
+        'scikit-image',
         'scipy',
         'shapely',
     ],
