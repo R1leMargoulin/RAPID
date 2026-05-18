@@ -13,6 +13,6 @@ setup(
         'pillow',
         'skimage',
         'scipy',
-        'shapely,'
+        'shapely',
     ],
 )
