@@ -588,6 +588,7 @@ class Robot(Sprite):
                 "action":action,
                 "transform":{"x":self.transform.x, "y":self.transform.y, "w":self.transform.w},
                 "last_infos_matrix" : deepcopy(self.belief_space["last_infos_matrix"]),
+                "known_environment_portion" : np.count_nonzero(self.belief_space["occupancy_grid"]!=-1)/(self.env.width*self.env.height),
                 "target": self.target
             }
         })
