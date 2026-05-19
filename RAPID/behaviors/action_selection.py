@@ -49,7 +49,7 @@ def action_selection(selfrobot):
     robots_pos_list = [] #list of float xy position of all robots
     for robot_id in selfrobot.belief_space["robot_informations"]:
         if robot_id != selfrobot.robot_id and selfrobot.belief_space["robot_informations"][robot_id]["status"]!= "finishing":  # ComImportance : est ce que je ferais pas un truc spécifique aux robots?
-            if selfrobot.communication_range*4 <= selfrobot.env.step - selfrobot.belief_space["robot_informations"][robot_id]["step"] : # < np.max(selfrobot.belief_space["occupancy_grid"].shape)/selfrobot.max_speed.x :
+            if selfrobot.communication_range*3/selfrobot.max_speed.x <= selfrobot.env.step - selfrobot.belief_space["robot_informations"][robot_id]["step"] < 4 * ( np.max(selfrobot.belief_space["occupancy_grid"].shape)/selfrobot.max_speed.x ) : #time = dist/speed
                 if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) ,selfrobot.belief_space["robot_informations"][robot_id]["position"]) >=  selfrobot.competences["communication"]["distance_treshold"]:
                     robots_pos_list.append(selfrobot.belief_space["robot_informations"][robot_id]["position"])
         if len(robots_pos_list)>0:
@@ -184,6 +184,7 @@ def action_selection(selfrobot):
         print("problem")
 
 def reshape_com_importance_for_action_selection(selfrobot, mode="default"):
+
     capability = selfrobot.competences["communication"]["capability"] #same, doesnt change
     distance_treshold = selfrobot.communication_range 
 
@@ -226,3 +227,4 @@ def reshape_com_importance_for_action_selection(selfrobot, mode="default"):
         importance = np.exp(com_time/ selfrobot.communication_range)  #value to be changed
     else:
         raise Exception(f"incorrect importance com mode in agent {selfrobot.robot_id}")
+    selfrobot.shape_competence("communication", capability=capability , importance=importance, distance_treshold=distance_treshold)
