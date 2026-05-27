@@ -44,7 +44,7 @@ def local_frontier(selfrobot):
                 selected_frontier = lf
         selfrobot.target = selected_frontier
     else: #else if there is no frontier:
-        if (int(selfrobot.transform.x), int(selfrobot.transform.y)) == (int(selfrobot.init_transform.x), int(selfrobot.init_transform.y)): #if we are back at the init pose, the robot has finished.
+        if euclidian_distance((int(selfrobot.transform.x),int(selfrobot.transform.y)), (int(selfrobot.init_transform.x),int(selfrobot.init_transform.y))) <= selfrobot.treshold_for_target: #if we are back at the init pose, the robot has finished.
             if selfrobot.belief_space["second_chance_usage"] == True:
                 selfrobot.finish()
             else:

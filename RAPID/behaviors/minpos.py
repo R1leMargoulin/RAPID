@@ -17,7 +17,7 @@ def minpos(selfrobot): #from Bautin, 2012
     frontiers = find_frontier_cells(selfrobot.belief_space["occupancy_grid"], traversable_types=selfrobot.traversable_types) #from utils
 
     if list(frontiers) == None or len(list(frontiers))==0: #si on a pas de frontieres explo finie?
-        if (int(selfrobot.transform.x),int(selfrobot.transform.y)) != (int(selfrobot.init_transform.x),int(selfrobot.init_transform.y)):
+        if euclidian_distance((int(selfrobot.transform.x),int(selfrobot.transform.y)), (int(selfrobot.init_transform.x),int(selfrobot.init_transform.y))) > selfrobot.treshold_for_target:
             selfrobot.target = (int(selfrobot.init_transform.x),int(selfrobot.init_transform.y))
             selfrobot.last_plan_time = selfrobot.env.step
         else:
