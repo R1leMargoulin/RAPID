@@ -209,8 +209,18 @@ def reshape_com_importance_for_action_selection(selfrobot, mode="default"):
         importance = np.exp(com_time/ selfrobot.env.width) #value to be changed
     elif mode =="constant":
         importance = 1
+    elif mode =="constant2":
+        importance = 2
+    elif mode =="constant0.5":
+        importance = 0.5
+    elif mode =="linear0.5":
+        importance = 0.5*com_time - selfrobot.env.step
     elif mode =="linear":
-        importance = 1.5*com_time - selfrobot.env.step #/ selfrobot.env.width  #???????????????????
+        importance = com_time - selfrobot.env.step #/ selfrobot.env.width  #???????????????????
+    elif mode =="linear1.5":
+        importance = 1.5*com_time - selfrobot.env.step
+    elif mode =="linear2":
+        importance = 2*com_time - selfrobot.env.step
     elif mode =="polynomial2":
         importance = ((com_time/selfrobot.communication_range)**2)-selfrobot.env.step
     elif mode =="polynomial3":
