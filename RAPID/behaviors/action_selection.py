@@ -80,7 +80,8 @@ def action_selection(selfrobot):
     for ip in interest_points:
         #individual utility
         #cost = euclidian_distance(ip["coordinates"], (selfrobot.transform.x, selfrobot.transform.y)) #euclidian distance for the moment (C in the model)
-        cost = a_star_cost(selfrobot.belief_space["occupancy_grid"], (int(selfrobot.transform.x), int(selfrobot.transform.y)), (int(ip["coordinates"][0]), int(ip["coordinates"][1])), selfrobot.env_ease, traversable_types=selfrobot.traversable_types)
+        #cost = a_star_cost(selfrobot.belief_space["occupancy_grid"], (int(selfrobot.transform.x), int(selfrobot.transform.y)), (int(ip["coordinates"][0]), int(ip["coordinates"][1])), selfrobot.env_ease, traversable_types=selfrobot.traversable_types)
+        cost = cost_distance_calculation((int(selfrobot.transform.x), int(selfrobot.transform.y)), (int(ip["coordinates"][0]), int(ip["coordinates"][1])), selfrobot.belief_space["occupancy_grid"], selfrobot.env_ease,  raversable_types=selfrobot.traversable_types, mode = selfrobot.cost_calculation_mode)
         if cost < 1:
             cost = 1 #avoid divide by 0
 
