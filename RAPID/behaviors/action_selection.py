@@ -100,7 +100,7 @@ def action_selection(selfrobot):
                 other_robot_pos = (int(selfrobot.belief_space["robot_informations"][robot]["position"][0]),int(selfrobot.belief_space["robot_informations"][robot]["position"][1]))
 
                 #ocost = euclidian_distance(ip["coordinates"], other_robot_pos)
-                ocost = a_star_cost(selfrobot.belief_space["occupancy_grid"], other_robot_pos, (int(ip["coordinates"][0]), int(ip["coordinates"][1])), selfrobot.belief_space["robot_informations"][robot]["env_ease"], traversable_types=selfrobot.belief_space["robot_informations"][robot]["traversable_types"])
+                ocost = cost_distance_calculation(other_robot_pos, (int(ip["coordinates"][0]), int(ip["coordinates"][1])), selfrobot.belief_space["occupancy_grid"], selfrobot.belief_space["robot_informations"][robot]["env_ease"],  traversable_types=selfrobot.belief_space["robot_informations"][robot]["traversable_types"], mode = selfrobot.cost_calculation_mode)
                 if ocost <1:
                     ocost = 1 #avoid divide by 0
 
@@ -240,3 +240,12 @@ def reshape_com_importance_for_action_selection(selfrobot, mode="default"):
     else:
         raise Exception(f"incorrect importance com mode in agent {selfrobot.robot_id}")
     selfrobot.shape_competence("communication", capability=capability , importance=importance, distance_treshold=distance_treshold)
+
+
+def cost_distance_calculation(pointA, pointB, grid, env_ease, traversable_types, mode="euclidian"):
+    if mode == "astar":
+        return float(a_star_cost(grid, pointA, pointB, env_ease, traversable_types))
+    elif mode == "euclidian":
+        return float(euclidian_distance(pointA, pointB))
+    elif mode == "manhathan":
+        return float(manhathan_distance(pointA, pointB))

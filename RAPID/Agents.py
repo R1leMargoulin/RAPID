@@ -160,6 +160,7 @@ class Robot(Sprite):
         self.logs = {}
 
         self.com_importance_mode = "default" #ComImportance
+        self.cost_calculation_mode = "euclidian"
         
         #Ready!
         self.status = "ready"

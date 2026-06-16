@@ -426,6 +426,10 @@ def euclidian_distance(point1,point2):
     """
     return np.sqrt((point1[0]-point2[0])**2+(point1[1]-point2[1])**2)
 
+def manhathan_distance(point1, point2):
+    return np.absolute(point1[0]-point2[0])+np.absolute(point1[1]-point2[1])
+
+
 def heuristic_frontier_distance(start, goal, grid, traversable_types = [OG_FREE_CELL]):
     """
     Calculate a heuristic distance by considering obstacles.
