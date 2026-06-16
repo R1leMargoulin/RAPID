@@ -32,7 +32,7 @@ NB_AERIAL_AGENTS = 0
 #pos_list = [[50,10,0], [50,12,0], [50,14,0], [50,16,0], [50,18,0], [53,10,0], [53,12,0], [53,14,0], [53,16,0], [53,18,0], [55,10,0], [55,12,0], [55,14,0], [55,16,0], [55,18,0], [57,10,0], [57,12,0], [57,14,0], [57,16,0], [57,18,0], [60,10,0], [60,12,0], [60,14,0], [60,16,0], [60,18,0], [63,10,0], [63,12,0], [63,14,0], [63,16,0], [63,18,0]]
 
 #labyrinth
-pos_list = [[5,5,0], [5,8,0], [5,12,0], [5,15,0]]
+pos_list = [[5,5,0], [5,8,0], [5,12,0], [5,15,0], [7,5,0], [7,8,0], [7,12,0], [7,15,0], [9,5,0], [9,8,0], [9,12,0], [9,15,0]]
 
 #heterocross
 #pos_list = [[5,95,0], [7,95,0], [9,95,0], [11,95,0]]
@@ -51,7 +51,7 @@ def main():
     
     #env = TargetPointEnvironment(background_color= BACKGROUND_COLOR, env_image=img, amount_of_agents_goal=2, scaling_factor=2)
     #env = ExplorationEnvironment(render= True, background_color= BACKGROUND_COLOR, env_image=img, full_knowledge=False, scaling_factor=4)
-    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, env_image=img, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=4, communication_mode="limited", communication_reliability=0.15, render=True, end_at_full_exploation=False, save_img_steps=video_saving_path)
+    env = ExplorationEnvironment(width=SCREEN_WIDTH, height=SCREEN_HEIGHT, env_image=img, background_color= BACKGROUND_COLOR, full_knowledge=False, scaling_factor=4, communication_mode="limited", communication_reliability=0.9, render=True, end_at_full_exploation=False, save_img_steps=video_saving_path)
 
 
     for i in range(NB_GROUND_AGENTS):
@@ -68,14 +68,15 @@ def main():
                                     robot_id=len(env.agents)+1, 
                                     init_transform=init_pos,
                                     max_speed=(1,1,0.5), #warning : adapt max speeds if you use aerial or ground robots
-                                    behavior_to_use="action_selection", 
+                                    behavior_to_use="minpos", 
                                     vision_range=25,
-                                    communication_range=35,
+                                    communication_range=20,
                                     communication_period=5,
                                     energy_amount=1e6, #place a huge amount for no energy limitations 
-                                    delta_replan= 10
+                                    delta_replan= 30
                                 ))
         env.agents[-1].shape_competence("exploration", 1, 1)
+        env.agents[-1].cost_calculation_mode = "manhathan"
 
     for i in range(NB_AERIAL_AGENTS):
         #random init position
