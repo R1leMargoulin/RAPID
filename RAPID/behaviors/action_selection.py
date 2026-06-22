@@ -125,7 +125,7 @@ def action_selection(selfrobot):
         if len(other_individual_values) >= ip["needed_robots"]:
             collective_sufficiency = float(max_k(other_individual_values, ip["needed_robots"]))
         elif len(other_individual_values) == ip["needed_robots"]-1:
-            collective_sufficiency = 1 #TODO TODO TODO: MultiRobotTask: je ne suis pas sur sur de cette valeur la, quesque j'ai foutu?????
+            collective_sufficiency = 1 
         else:
             collective_sufficiency = np.inf
         #collective_sufficiency = testproduct
@@ -135,7 +135,7 @@ def action_selection(selfrobot):
 
 
 
-        bests_others = [] #TODO MultiRobotTask: test ca
+        bests_others = []
         required_assist = 0
         if ip["needed_robots"] > 1: 
             # #required_assist = 1
