@@ -141,16 +141,21 @@ def action_selection(selfrobot):
             # #required_assist = 1
             if len(other_individual_values) >= ip["needed_robots"]-1:
                 nbcloser = 0
-                for i in range (ip["needed_robots"] -1):
+                for i in range (len(selfrobot.belief_space["robot_informations"])):
                     value = float(max_k(other_individual_values, i+1))
-                    bests_others.append(value)
+                    if i < ip["needed_robots"] -1:
+                        bests_others.append(value)
+                    #print(f"value indiv : {individual_utility} /// Other : {value}")
                     if value > individual_utility:
                         nbcloser+=1
-
-                #TODO TODO TODO TODO TODO : MultiRobotTask: il faut vraiment ajuster le required assist
-                required_assist = (float(np.sum(bests_others)) - (1+nbcloser - ip["needed_robots"])) * ((selfrobot.env.step - ip["discovery_time"])/selfrobot.env.step) #TODO ajuster le delta discovery
+                #print(nbcloser)
+                if nbcloser >= ip["needed_robots"]:
+                    required_assist = -np.inf
+                else:
+                    required_assist = (float(np.sum(bests_others)) - ((selfrobot.env.step - ip["discovery_time"]))/selfrobot.env.step) #- (1+nbcloser - ip["needed_robots"])) * ((selfrobot.env.step - ip["discovery_time"])/selfrobot.env.step) #TODO ajuster le delta discovery
+                    #required_assist = (float(np.sum(bests_others)) - (1+nbcloser - ip["needed_robots"])) * ((selfrobot.env.step - ip["discovery_time"])/selfrobot.env.step) #TODO ajuster le delta discovery
             else:
-                required_assist = - individual_utility
+                required_assist = - np.inf
             
             #required_assist = 1 + float(max_k(other_individual_values, ip["needed_robots"] -1)) #equivalent to the commented above...
         
