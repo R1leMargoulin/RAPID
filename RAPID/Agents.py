@@ -342,9 +342,10 @@ class Robot(Sprite):
                 if a.id in self.belief_space["artifacts"]:
                     discovery_time = self.belief_space["artifacts"][a.id]["discovery_time"] #keeping the discov time
                     awared = self.belief_space["artifacts"][a.id]["awared"] #keeping awared
-                    self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step, "needed_robots":a.needed_robots, "discovery_time": discovery_time, "awared":awared}}) 
+                    done_time =  self.belief_space["artifacts"][a.id]["donetime"]
+                    self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step, "needed_robots":a.needed_robots, "discovery_time": discovery_time, "awared":awared, "donetime":done_time}}) 
                 else:
-                    self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step, "needed_robots":a.needed_robots, "discovery_time": self.env.step, "awared": [self.robot_id]}}) 
+                    self.belief_space["artifacts"].update({ a.id:{"name":a.name, "type":a.type, "status":a.status, "coordinates":a.coordinates, "step":self.env.step, "needed_robots":a.needed_robots, "discovery_time": self.env.step, "awared": [self.robot_id], "donetime":None}}) 
 
     def get_neighbors_pixels(self, distance:int, stop_at_wall = False, self_inclusion = True):
         """
@@ -482,9 +483,20 @@ class Robot(Sprite):
                 #keeping the global discovery time
                 discovery_time = np.min([self.belief_space["artifacts"][artifact]["discovery_time"], sender_belief_space["artifacts"][artifact]["discovery_time"]])
 
+                #donetime
+                if sender_belief_space["artifacts"][artifact]["donetime"] != self.belief_space["artifacts"][artifact]["donetime"]:
+                    #merging the robots id of robots awared of the tasks
+                    if sender_belief_space["artifacts"][artifact]["donetime"] != None:
+                        global_donetime = sender_belief_space["artifacts"][artifact]["donetime"]
+                    else: 
+                        global_donetime = self.belief_space["artifacts"][artifact]["donetime"]
+                    self.belief_space["artifacts"][artifact].update({"donetime": global_donetime})
+
+                
                 #update
                 self.belief_space["artifacts"].update({artifact: sender_belief_space["artifacts"][artifact]})
                 self.belief_space["artifacts"][artifact].update({"discovery_time": discovery_time})
+                
 
             if sender_belief_space["artifacts"][artifact]["awared"] != self.belief_space["artifacts"][artifact]["awared"]:
                 #merging the robots id of robots awared of the tasks
@@ -493,6 +505,17 @@ class Robot(Sprite):
                 global_awared = list(set(self_awared + sender_awared))
 
                 self.belief_space["artifacts"][artifact].update({"awared": global_awared})
+            
+            #donetime
+            if sender_belief_space["artifacts"][artifact]["donetime"] != self.belief_space["artifacts"][artifact]["donetime"]:
+                #merging the robots id of robots awared of the tasks
+                if sender_belief_space["artifacts"][artifact]["donetime"] != None:
+                    global_donetime = sender_belief_space["artifacts"][artifact]["donetime"]
+                else: 
+                    global_donetime = self.belief_space["artifacts"][artifact]["donetime"]
+                self.belief_space["artifacts"][artifact].update({"donetime": global_donetime})
+            
+            
 
         #ARTIFACTS-----------------------------------------------------------
 
@@ -528,6 +551,7 @@ class Robot(Sprite):
                     
                     result = a.interact(self.competences[self.action_to_perform["type"]]["capability"])
                     if result :
+                        self.belief_space["artifacts"][self.action_to_perform["id"]]["donetime"] = self.env.step
                         self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
                         self.belief_space["artifacts"][self.action_to_perform["id"]]["step"] = self.env.step + 1
                         self.action_to_perform = None

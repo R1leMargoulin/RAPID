@@ -152,7 +152,7 @@ def action_selection(selfrobot):
                 if nbcloser >= ip["needed_robots"]:
                     required_assist = -np.inf
                 else:
-                    required_assist = (float(np.sum(bests_others)) - ((selfrobot.env.step - ip["discovery_time"]))/selfrobot.env.step) #- (1+nbcloser - ip["needed_robots"])) * ((selfrobot.env.step - ip["discovery_time"])/selfrobot.env.step) #TODO ajuster le delta discovery
+                    required_assist = float(np.sum(bests_others)) #- ((selfrobot.env.step - ip["discovery_time"]))/selfrobot.env.step) #- (1+nbcloser - ip["needed_robots"])) * ((selfrobot.env.step - ip["discovery_time"])/selfrobot.env.step) #TODO ajuster le delta discovery
                     #required_assist = (float(np.sum(bests_others)) - (1+nbcloser - ip["needed_robots"])) * ((selfrobot.env.step - ip["discovery_time"])/selfrobot.env.step) #TODO ajuster le delta discovery
             else:
                 required_assist = - np.inf
