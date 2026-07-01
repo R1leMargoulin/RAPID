@@ -220,13 +220,13 @@ def reshape_com_importance_for_action_selection(selfrobot, mode="default"):
     elif mode =="constant0.5":
         importance = 0.5
     elif mode =="linear0.5":
-        importance = 0.5*com_time - selfrobot.env.step
+        importance = 0.5*com_time - selfrobot.env.step/3
     elif mode =="linear":
-        importance = com_time - selfrobot.env.step #/ selfrobot.env.width  #???????????????????
+        importance = com_time - selfrobot.env.step/2 #/ selfrobot.env.width  #???????????????????
     elif mode =="linear1.5":
-        importance = 1.5*com_time - selfrobot.env.step
+        importance = 1.5*com_time - selfrobot.env.step/2
     elif mode =="linear2":
-        importance = 2*com_time - selfrobot.env.step
+        importance = 2*com_time - selfrobot.env.step/2
     elif mode =="polynomial2":
         importance = ((com_time/selfrobot.communication_range)**2)-selfrobot.env.step
     elif mode =="polynomial3":
