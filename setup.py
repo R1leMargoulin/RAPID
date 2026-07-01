@@ -15,5 +15,6 @@ setup(
         'scikit-learn',
         'scipy',
         'shapely',
+        'munkres',
     ],
 )
