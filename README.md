@@ -41,6 +41,9 @@ Then install the package with pip:
 ```bash
 cd RAPID
 
+#requirement for pygame
+sudo apt install libsdl1.2-dev
+
 #if you just want to install the package
 pip install .
 
