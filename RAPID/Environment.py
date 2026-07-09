@@ -21,7 +21,7 @@ COMMUNICATION_MODE_LIST = ["blackboard", "limited"]
 
 
 class Environment():
-    def __init__(self, render = True, width:int=100, height:int=100, background_color = (200,200,200), caption = f'RAPID', env_image:Image.Image = None, full_knowledge:bool=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, save_img_steps = None):
+    def __init__(self, render = True, width:int=100, height:int=100, background_color = (200,200,200), caption = f'RAPID', env_image:Image.Image = None, full_knowledge:bool=True, robot_block = True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, save_img_steps = None):
         """
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         Params : 
@@ -60,6 +60,7 @@ class Environment():
         self.agents_tools = {}
 
         self.full_knowledge= full_knowledge
+        self.robot_block = robot_block
 
         self.limit_of_steps = limit_of_steps
 
@@ -362,7 +363,7 @@ class TargetPointEnvironment(Environment):
             return has_to_stop
 
 class ExplorationEnvironment(Environment):
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, exploration_proportion_goal=0.995, end_at_full_exploation=True, save_img_steps = None):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, exploration_proportion_goal=0.995, end_at_full_exploation=True, save_img_steps = None):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
@@ -386,7 +387,7 @@ class ExplorationEnvironment(Environment):
         - end_at_full_exploation:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when the exploration proportion goal is reached.
         - exploration_proportion_goal : float in [0,1] = if at least this proportion of the environment is explored, the goal condition of the env will be true.
         """
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps)
         exp_map = np.zeros((self.width, self.height))
         self.interest_points.update({"exploration_map":exp_map})
         #on va pas mettre de fog sur les murs parce que la vision ne les traverse pas, si on a des murs plus épais que 2, alors il y aura toujours de la fog.
@@ -494,7 +495,7 @@ class MineClearingEnvironment(Environment):
             else:
                 return False
 
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
@@ -515,7 +516,7 @@ class MineClearingEnvironment(Environment):
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
         - end_at_full_exploation:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when the exploration proportion goal is reached.
         """
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps)
 
         self.end_at_full_clear = end_at_full_clear
 
@@ -730,7 +731,7 @@ class MultiRobotTasksEnvironment(Environment):
             self.interacted = []
             return super().update(screen)
 
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
@@ -751,7 +752,7 @@ class MultiRobotTasksEnvironment(Environment):
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
         - end_at_full_exploation:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when the exploration proportion goal is reached.
         """
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps)
 
         self.end_at_full_clear = end_at_full_clear
 

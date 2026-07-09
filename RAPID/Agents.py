@@ -312,13 +312,14 @@ class Robot(Sprite):
         self.rect.centery = int(self.transform.y)
 
         #AGENTS COLLISION detection : 
-        agent_collision = spritecollide(self, self.env.agent_group, False)
-        #print(agent_collision)
-        if (len(agent_collision)> 1) :
-            self.transform.x = old_tfx
-            self.transform.y = old_tfy
-            self.rect.centerx = int(self.transform.x)
-            self.rect.centery = int(self.transform.y)
+        if self.env.robot_block:
+            agent_collision = spritecollide(self, self.env.agent_group, False)
+            #print(agent_collision)
+            if (len(agent_collision)> 1) :
+                self.transform.x = old_tfx
+                self.transform.y = old_tfy
+                self.rect.centerx = int(self.transform.x)
+                self.rect.centery = int(self.transform.y)
 
 
 
