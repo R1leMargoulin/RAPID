@@ -633,7 +633,7 @@ class WasteCleaningEnvironment(Environment):
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
         - end_at_full_exploation:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when the exploration proportion goal is reached.
         """
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge=full_knowledge, limit_of_steps=limit_of_steps, scaling_factor=scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps)
 
         self.end_at_full_clear = end_at_full_clear
 
