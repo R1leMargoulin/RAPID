@@ -9,3 +9,4 @@ configs/
 old_programs/
 data_analysis/
 experiments_figures/
+.vscode/

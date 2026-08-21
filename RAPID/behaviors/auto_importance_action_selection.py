@@ -8,7 +8,7 @@ def ai_action_selection(selfrobot):
 
     
     # fonction a part, je met un parametre en string "default" par defaut et un mode pour chaque expe tentée?
-    reshape_com_importance_for_action_selection(selfrobot, mode = selfrobot.com_importance_mode)
+    importance_online_configuraton(selfrobot)
 
     #selfrobot.check_communication_importance()
 
@@ -194,64 +194,26 @@ def ai_action_selection(selfrobot):
     else:
         print("problem")
 
-def reshape_com_importance_for_action_selection(selfrobot, mode="default"):
 
-    #TODO: Refaire le reshape, en incluant l'apprentissage.
+def importance_online_configuraton(selfrobot):
+    #TODO Faire une satisfaction de la completion de la tache???
 
-    capability = selfrobot.competences["communication"]["capability"] #same, doesnt change
-    distance_treshold = selfrobot.communication_range 
+    satisfactions = {}
+    G_satisfaction = 0
+    for task_type in selfrobot.competences:
+        task_satisfaction = selfrobot.competences[task_type]["satisfaction_calculation"](selfrobot)
+        satisfactions.update({task_type: task_satisfaction})
+        pass # TODO
+        G_satisfaction += task_satisfaction
 
-    longest_infotime = 0
-    for robot in selfrobot.belief_space["last_infos_matrix"][selfrobot.robot_id]:
-        if robot == selfrobot.robot_id:
-            continue
-        else:
-            #if self.belief_space["last_infos_matrix"][selfrobot.robot_id][robot] < selfrobot.env.width :#treshold to regulate : definir quel treshold est pertinent maintenant
-            infotime = selfrobot.belief_space["last_infos_matrix"][selfrobot.robot_id][robot]
-            #print(infotime)
-            if selfrobot.env.step - infotime > longest_infotime:
-                longest_infotime = selfrobot.env.step - infotime
+    # TODO REWARD WITH THE OLD_G_SATISFACTION, STILL NEED TO INIT THE FIRST
 
-    com_time = longest_infotime #longest synchro from every robots synchro time # ComImportance
-    #com_time =  selfrobot.time_from_last_communication #time of last communication with any robots
+    #TODO Faire le calcul de nouvelle importance a t en fonction
+    importance = 0 #TODO
 
-    
-    #ComInfo : faire un truc coherent pour lancer les expes. Bien identifier ce qui marche, et ce qui ne marche pas.
-    
-    if mode == "default":
-        importance = np.exp(com_time/ selfrobot.env.width) #value to be changed
-    elif mode =="constant":
-        importance = 1
-    elif mode =="constant2":
-        importance = 2
-    elif mode =="constant0.5":
-        importance = 0.5
-    elif mode =="linear0.5":
-        importance = 0.5*com_time - selfrobot.env.step/3
-    elif mode =="linear":
-        importance = com_time - selfrobot.env.step/2 #/ selfrobot.env.width  #???????????????????
-    elif mode =="linear1.5":
-        importance = 1.5*com_time - selfrobot.env.step/2
-    elif mode =="linear2":
-        importance = 2*com_time - selfrobot.env.step/2
-    elif mode =="polynomial2":
-        importance = ((com_time/selfrobot.communication_range)**2)-selfrobot.env.step
-    elif mode =="polynomial3":
-        importance = ((com_time/selfrobot.communication_range)**3)-selfrobot.env.step
-    elif mode =="exponential":
-        importance = np.exp(com_time/ selfrobot.communication_range)/selfrobot.env.step #value to be changed
-    elif mode =="rule-based":
-        if com_time < 30: #treshold for no need at all
-            importance = 0
-        elif com_time >= np.sqrt(np.count_nonzero(selfrobot.belief_space["occupancy_grid"] != -1))/np.mean([selfrobot.max_speed.x, selfrobot.max_speed.y]): # s'adapte en fonction de la taille de l'env decouvert.
-            #print("aaa")
-            importance = np.inf
-        else:
-            importance = 1.5*com_time - selfrobot.env.step #linear otherwise
-    elif mode =="test":
-        importance = np.exp(com_time/ selfrobot.communication_range)  #value to be changed
-    else:
-        raise Exception(f"incorrect importance com mode in agent {selfrobot.robot_id}")
+    #TODO MAJ de l'importance, a adapter...
+    capability = selfrobot.competences[CHANGER]["capability"] #same, doesnt change
+    distance_treshold = selfrobot.competences[CHANGER]["distance_treshold"]
     selfrobot.shape_competence("communication", capability=capability , importance=importance, distance_treshold=distance_treshold)
 
 

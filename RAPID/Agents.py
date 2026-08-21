@@ -8,6 +8,7 @@ from .Graph import Graph, Node
 from .Artifacts import Artifact
 from .utils import *
 from .grid_variables import *
+from .tasks_satisfaction import *
 from .behaviors import action_selection, local_frontier, rendezvous, minpos, nearest_frontier, random_wiggle, auto_importance_action_selection
 
 
@@ -93,8 +94,8 @@ class Robot(Sprite):
         for i in range(len(self.traversable_types)):#we have the string name of the cells types, lets get the int values
             self.traversable_types[i] = ENV_CELL_TYPES[self.traversable_types[i]]
 
-        self.competences = {"exploration":{"capability": 1, "importance":1, "distance_treshold":0, "dispersion":1},
-                            "communication":{"capability": 1, "importance":1, "distance_treshold":self.communication_range, "dispersion":0}} #to add depending of the case and the robot
+        self.competences = {"exploration":{"capability": 1, "importance":1, "distance_treshold":0, "satisfaction":0, "satisfaction_calculation": get_exploration_satisfaction}, 
+                            "communication":{"capability": 1, "importance":1, "distance_treshold":self.communication_range, "satisfaction":0, "satisfaction_calculation": get_communication_satisfaction}} #to add depending of the case and the robot
     
         #Metrics
         self.total_distance_made = 0.0
@@ -528,7 +529,7 @@ class Robot(Sprite):
         """Method that has to be redefined for each type of robot because they don't have the same movement mechanism."""
         print("move has to be implemented in the class.")
 
-    def shape_competence(self, type, capability, importance, distance_treshold = 0, dispersion = 1):
+    def shape_competence(self, type, capability, importance, distance_treshold = 0, satisfaction_calculation_function=None):
         """
         Shape the competence for a robot
         
@@ -536,9 +537,16 @@ class Robot(Sprite):
         :param capability: Float [0,1], measure how the robot is capable of performing the action of the given type
         :param importance: Float, Measure the perception of the robot of the importance of the given task type
         :param distance_treshold: distance where the robot will be able to detect the task, for example in communication, we don't want to take into account robots in range. default 0
-        :param dispersion: Not currently used, may be removed soon TODO
+        :param satisfaction_calculation_function: Function, supposed to return a satisfaction regarding a task type in globality.
         """
-        self.competences.update({type:{"capability": capability, "importance":importance, "distance_treshold":distance_treshold, "dispersion":dispersion}})
+        if satisfaction_calculation_function == None:
+            if type in self.competences:
+                satisfaction_calculation = self.competences[type]["satisfaction_calculation"]
+            else :
+                satisfaction_calculation = None
+            self.competences.update({type:{"capability": capability, "importance":importance, "distance_treshold":distance_treshold, "satisfaction_calculation": satisfaction_calculation}})
+        else:
+            self.competences.update({type:{"capability": capability, "importance":importance, "distance_treshold":distance_treshold, "satisfaction_calculation":satisfaction_calculation_function}})
     
     def perform_target_action(self):
         """simulate an artifact action with an interaction."""
@@ -618,7 +626,6 @@ class Robot(Sprite):
                 "target": self.target
             }
         })
-
 
 
 class Ground(Robot):
