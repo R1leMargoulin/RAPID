@@ -7,7 +7,7 @@ def ai_action_selection(selfrobot):
 
 
     
-    # fonction a part, je met un parametre en string "default" par defaut et un mode pour chaque expe tentée?
+    # TODO :  bien mettre un délai pour les iteration d'adaptation des parametres...... ADAPTATION_DELAY
     importance_online_configuraton(selfrobot)
 
     #selfrobot.check_communication_importance()
@@ -194,27 +194,44 @@ def ai_action_selection(selfrobot):
     else:
         print("problem")
 
+    print("-----")
+    print(selfrobot.action_to_perform)
+    print((int(selfrobot.transform.x), int(selfrobot.transform.y)))
+    print("-----")
+
 
 def importance_online_configuraton(selfrobot):
     #TODO Faire une satisfaction de la completion de la tache???
+
+    if not("old_G_satisfaction" in selfrobot.belief_space): #INIT the global satisfaction and satisfactions
+        selfrobot.belief_space.update({"old_G_satisfaction":0})
+        selfrobot.belief_space.update({"old_satisfactions":{}})
 
     satisfactions = {}
     G_satisfaction = 0
     for task_type in selfrobot.competences:
         task_satisfaction = selfrobot.competences[task_type]["satisfaction_calculation"](selfrobot)
         satisfactions.update({task_type: task_satisfaction})
-        pass # TODO
+
         G_satisfaction += task_satisfaction
+    G_reward = G_satisfaction - selfrobot.belief_space["old_G_satisfaction"]
 
-    # TODO REWARD WITH THE OLD_G_SATISFACTION, STILL NEED TO INIT THE FIRST
+    if G_reward <=0:
+        pass
+        for task_type in selfrobot.competences:
+            capability = selfrobot.competences[task_type]["capability"] #same, doesnt change
+            distance_treshold = selfrobot.competences[task_type]["distance_treshold"]
 
-    #TODO Faire le calcul de nouvelle importance a t en fonction
-    importance = 0 #TODO
+            taskreward = satisfactions[task_type] - selfrobot.belief_space["old_satisfactions"][task_type]
+            if taskreward<= 0:
+                importance = selfrobot.competences[task_type]["importance"] + (abs(G_reward)+ abs(taskreward))
+                selfrobot.shape_competence("communication", capability=capability , importance=importance, distance_treshold=distance_treshold)
+            else:
+                importance = selfrobot.competences[task_type]["importance"] - (abs(G_reward) ) #+ abs(taskreward)
+                selfrobot.shape_competence("communication", capability=capability , importance=importance, distance_treshold=distance_treshold)
 
-    #TODO MAJ de l'importance, a adapter...
-    capability = selfrobot.competences[CHANGER]["capability"] #same, doesnt change
-    distance_treshold = selfrobot.competences[CHANGER]["distance_treshold"]
-    selfrobot.shape_competence("communication", capability=capability , importance=importance, distance_treshold=distance_treshold)
+    selfrobot.belief_space.update({"old_G_satisfaction": G_satisfaction})
+    selfrobot.belief_space.update({"old_satisfactions": satisfactions})
 
 
 def cost_distance_calculation(pointA, pointB, grid, env_ease, traversable_types, mode="euclidian"):
