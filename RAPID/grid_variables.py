@@ -30,6 +30,9 @@ ENV_CELL_TYPES[OG_GRASS_GROUP_NAME] = OG_GRASS
 
 OG_TARGET_POINT = 100
 
+ENV_CELL_TYPE_NAMES = {value: name for name, value in ENV_CELL_TYPES.items()}
+ENV_CELL_TYPE_NAMES[OG_TARGET_POINT] = OG_FREE_CELL_GROUP_NAME #the target point has the traversability ease of the free floor
+
 OG_UNKNOWN_CELL = -1
 
 

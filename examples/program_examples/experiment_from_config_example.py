@@ -11,7 +11,7 @@ import itertools
 
 
 
-config_file = "/home/erwan/Documents/RAPID/tests/config_experiments.json"
+config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config_examples", "config_variation_heterogeneous_example.json")
 
 with open(config_file, "r") as outfile:
     json_from_file = outfile.read()

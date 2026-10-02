@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='RAPID',
-    version='0.18',
+    version='1.0',
     packages=find_packages(),
     description='Robotics Agent Prototyping for Intelligence Development',
     author='Erwan MARTIN',
@@ -15,6 +15,7 @@ setup(
         'scikit-learn',
         'scipy',
         'shapely',
-        'munkres',
+        'matplotlib',
     ],
+    python_requires='>=3.12',
 )

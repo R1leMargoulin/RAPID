@@ -11,7 +11,7 @@ import seaborn as sns
 
 
 
-result_file_path = "/home/erwan/Documents/tests_simulations/RAPID/experiments/" #CHANGE PATH
+result_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "experiments_results") + os.sep #CHANGE PATH
 
 #example for an empty env 100x100, where we just variated the number of heterogeneous robot using a nearest frontier behavior with a blackboard com method.
 

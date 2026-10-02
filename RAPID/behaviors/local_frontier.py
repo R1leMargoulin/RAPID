@@ -1,6 +1,11 @@
-from ..utils import *
-
 import numpy as np
+
+from ..utils import euclidian_distance, get_direct_neighbors
+from ..grid_variables import OG_UNKNOWN_CELL, OG_WALL
+
+def mean_trace_position(selfrobot):
+    traces = selfrobot.belief_space["traces"].keys()
+    return (int(np.mean([c[0] for c in traces])), int(np.mean([c[1] for c in traces])))
 
 def local_frontier(selfrobot):
     """
@@ -14,10 +19,8 @@ def local_frontier(selfrobot):
         #init second chance used as False
         selfrobot.belief_space["second_chance_usage"] = False
 
-    #SENSING
-    selfrobot.sense()
     #LOCAL FRONTIER DETECTION -----------------------------------------------------
-    vision_range = selfrobot.get_neighbors_pixels(distance=selfrobot.vision_range, stop_at_wall=True, selfrobot_inclusion=True)
+    vision_range = selfrobot.get_neighbors_pixels(distance=selfrobot.vision_range, stop_at_wall=True, self_inclusion=True)
     local_frontier_list = []
     for cell in vision_range:
         if not(selfrobot.belief_space["occupancy_grid"][cell[0]][cell[1]] in selfrobot.traversable_types):
@@ -37,7 +40,7 @@ def local_frontier(selfrobot):
     #go to the most far local frontier from the traces
         max_dist_of_lf = 0
         selected_frontier = None
-        mean_traces_coordinates = (int(np.mean([c[0] for c in selfrobot.belief_space["traces"].keys()])), int(np.mean([c[1] for c in selfrobot.belief_space["traces"].keys()]))) #mean coordinates of all the traces.
+        mean_traces_coordinates = mean_trace_position(selfrobot)
         for lf in local_frontier_list:
             if euclidian_distance(lf, mean_traces_coordinates)> max_dist_of_lf: #if the distance (we take euclidian) of the LF from the robot is greater, then we select it
                 max_dist_of_lf = euclidian_distance(lf, mean_traces_coordinates)
@@ -51,7 +54,7 @@ def local_frontier(selfrobot):
                 #we use a second chance:
                 selfrobot.belief_space["second_chance_usage"] = True
                 
-                mean_traces_coordinates = (int(np.mean([c[0] for c in selfrobot.belief_space["traces"].keys()])), int(np.mean([c[1] for c in selfrobot.belief_space["traces"].keys()]))) #mean coordinates of all the traces.
+                mean_traces_coordinates = mean_trace_position(selfrobot)
                 max_dist = 0
                 second_chance_target = None
                 for cell in vision_range:
@@ -64,7 +67,7 @@ def local_frontier(selfrobot):
 
         else: #else go back to the previous trace -> set it as target
             # pour les cases voisine de distance ou le robot à pu se déplacer sur un step de simulation (sur une periode de temps donné, on récolte les voisins)
-            move_possible_neighbors =  selfrobot.get_neighbors_pixels(distance=int(max(4*selfrobot.max_speed.x, 4*selfrobot.max_speed.y)), stop_at_wall=True, selfrobot_inclusion=False)
+            move_possible_neighbors =  selfrobot.get_neighbors_pixels(distance=int(max(4*selfrobot.max_speed.x, 4*selfrobot.max_speed.y)), stop_at_wall=True, self_inclusion=False)
             chosen_trace = None
             oldest_timestep = np.inf
             for cell in move_possible_neighbors : #on va prendre la trace la plus ancienne possible dans ce champs
@@ -74,5 +77,3 @@ def local_frontier(selfrobot):
                         oldest_timestep = selfrobot.belief_space["traces"][cell]
             selfrobot.target = chosen_trace #on definit la trace la plus ancienne dans le rayon restreint défini.
             selfrobot.last_plan_time = selfrobot.env.step
-
-    selfrobot.belief_transfer() #belief transfer management.

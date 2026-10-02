@@ -1,8 +1,10 @@
-from ..utils import *
 import numpy as np
-from munkres import Munkres
+from scipy.optimize import linear_sum_assignment
 from sklearn.cluster import KMeans
 from copy import deepcopy
+
+from ..utils import find_frontier_cells, euclidian_distance, a_star_cost, find_nearest_free
+from .common import return_home_or_finish
 
 def rendezvous(selfrobot): #from Bramblett, 2022
         def cluster_env():
@@ -17,17 +19,16 @@ def rendezvous(selfrobot): #from Bramblett, 2022
             selfrobot.delta_replan = 10
             art_found = []
             if "artifacts" in selfrobot.belief_space: #check artifacts for pi4 condition
-                    for art in selfrobot.belief_space["artifacts"]:
-                        if selfrobot.belief_space["artifacts"][art]["needed_robots"] < 2:
-                            #INTEREST POINT CREATION
-                            artprediction = selfrobot.current_clustering.predict([selfrobot.belief_space["artifacts"][art]["coordinates"]])[0]
-                            art_cluster = (int(selfrobot.current_clustering.cluster_centers_[artprediction][0]), int(selfrobot.current_clustering.cluster_centers_[artprediction][1]))
-                            #print(f"robot : {selfrobot.robot_id} , allocated cluster : {selfrobot.allocated_cluster}\n clusters : {selfrobot.current_clustering.cluster_centers_}\n")
-                            if selfrobot.belief_space["artifacts"][art]["status"] not in ["done", "destroyed"] and art_cluster == selfrobot.allocated_cluster:
-                                art_found.append({"id": art, "type":selfrobot.belief_space["artifacts"][art]["type"], "coordinates": selfrobot.belief_space["artifacts"][art]["coordinates"]})
+                single_arts = [art for art in selfrobot.belief_space["artifacts"] if selfrobot.belief_space["artifacts"][art]["needed_robots"] < 2]
+                if len(single_arts) > 0:
+                    art_labels = selfrobot.current_clustering.predict([selfrobot.belief_space["artifacts"][art]["coordinates"] for art in single_arts])
+                    for art, artprediction in zip(single_arts, art_labels):
+                        art_cluster = (int(selfrobot.current_clustering.cluster_centers_[artprediction][0]), int(selfrobot.current_clustering.cluster_centers_[artprediction][1]))
+                        if selfrobot.belief_space["artifacts"][art]["status"] not in ["done", "destroyed"] and art_cluster == selfrobot.allocated_cluster:
+                            art_found.append({"id": art, "type":selfrobot.belief_space["artifacts"][art]["type"], "coordinates": selfrobot.belief_space["artifacts"][art]["coordinates"]})
 
             #Pi1 condition in the paper
-            if np.abs(selfrobot.env.step - selfrobot.rdvtime) < 1.5 * selfrobot.max_speed.x * a_star_cost(selfrobot.belief_space["occupancy_grid"], start = (int(selfrobot.transform.x), int(selfrobot.transform.y)), goal = (int(selfrobot.rdvspot[0]), int(selfrobot.rdvspot[1])), env_ease=selfrobot.env_ease): #if the time until rdvtime is shorter than 1.5* time to go for it, then, pass in rdv mode
+            if np.abs(selfrobot.env.step - selfrobot.rdvtime) < 1.5 * selfrobot.max_speed.x * a_star_cost(selfrobot.belief_space["occupancy_grid"], start = (int(selfrobot.transform.x), int(selfrobot.transform.y)), goal = (int(selfrobot.rdvspot[0]), int(selfrobot.rdvspot[1])), env_ease=selfrobot.env_ease, traversable_types=selfrobot.traversable_types): #if the time until rdvtime is shorter than 1.5* time to go for it, then, pass in rdv mode
                 selfrobot.rdvstate = "rendezvous"
             #Pi4 condition in the paper
             elif len(art_found) > 0:
@@ -40,19 +41,15 @@ def rendezvous(selfrobot): #from Bramblett, 2022
                 #sobel detection for frontier
                 frontiers = find_frontier_cells(selfrobot.belief_space["occupancy_grid"], traversable_types= selfrobot.traversable_types)
                 if len(frontiers)>0:
-                    fcosts = []
-                    for f in frontiers:
-                        prediction = selfrobot.current_clustering.predict([f])[0]
-                        cluster_of_pred = (int(selfrobot.current_clustering.cluster_centers_[prediction][0]), int(selfrobot.current_clustering.cluster_centers_[prediction][1]))
+                    labels = selfrobot.current_clustering.predict(frontiers)
+                    centers = selfrobot.current_clustering.cluster_centers_[labels]
+                    centers_int = np.column_stack((centers[:, 0].astype(int), centers[:, 1].astype(int)))
+                    in_allocated_cluster = np.all(centers_int == np.array(selfrobot.allocated_cluster), axis=1)
+                    position = (selfrobot.transform.x, selfrobot.transform.y)
+                    base_cost = euclidian_distance(position, frontiers.T) #eq.6, case2
+                    alloc_cluster_coords = (int(selfrobot.allocated_cluster[0]), int(selfrobot.allocated_cluster[1]))
+                    fcosts = np.where(in_allocated_cluster, base_cost, base_cost + delta*euclidian_distance(frontiers.T, alloc_cluster_coords)) #eq.6, case1
 
-                        if cluster_of_pred == selfrobot.allocated_cluster: #the cell is in our custer
-
-                            cost = euclidian_distance((selfrobot.transform.x, selfrobot.transform.y), f) #eq.6, case2
-                        else: #celll not in allocated cluster
-                            alloc_cluster_coords = (int(selfrobot.allocated_cluster[0]), int(selfrobot.allocated_cluster[1]))
-                            cost =  euclidian_distance((selfrobot.transform.x, selfrobot.transform.y), f) + delta*euclidian_distance(f, alloc_cluster_coords) #eq.6, case1
-                        fcosts.append(cost)
-                    
                     explopoint = frontiers[np.argmin(fcosts)] #eq. 7
                     selfrobot.target  = (int(explopoint[0]), int(explopoint[1]))
                     selfrobot.last_plan_time = selfrobot.env.step
@@ -170,22 +167,8 @@ def rendezvous(selfrobot): #from Bramblett, 2022
 
 
                     if len(tasks_artifacts) > 0:
-                        m_artifact = Munkres()
-
-                        # Padding : rendre la matrice carrée si moins de tâches que de robots
-                        n_robots = len(robots_present)
-                        n_tasks = len(tasks_artifacts)
-                        if n_robots > n_tasks:
-                            pad = np.zeros((n_robots, n_robots - n_tasks))
-                            artifact_matrix_square = np.hstack([artifact_matrix, pad])
-                        else:
-                            artifact_matrix_square = artifact_matrix
-
-                        artifact_indices = m_artifact.compute(-artifact_matrix_square)
-                        #print(artifact_indices)
+                        artifact_indices = zip(*linear_sum_assignment(artifact_matrix, maximize=True))
                         for r_idx, t_idx in artifact_indices:
-                            if t_idx >= n_tasks:  # padding, on ignore
-                                continue
                             if robots_present[r_idx] == selfrobot.robot_id: #if robots_present[r_idx]+1 == selfrobot.robot_id:
                                 task_id = tasks_artifacts[t_idx]
                                 selfrobot.action_to_perform = {
@@ -202,27 +185,27 @@ def rendezvous(selfrobot): #from Bramblett, 2022
                                 #print(selfrobot.target)
                                 break
                     # print(f"robot id : {selfrobot.robot_id} : {selfrobot.action_to_perform}")
-                    for i, robot in enumerate(robots_present):
-
-                        if len(tasks_frontiers) >0:
+                    if len(tasks_frontiers) > 0:
+                        bid_keys = {robot: list(selfrobot.belief_space["robot_informations"][robot]["bids"]["frontiers"]) for robot in robots_present}
+                        all_keys = list(dict.fromkeys(tasks_frontiers + [k for keys in bid_keys.values() for k in keys]))
+                        key_labels = dict(zip(all_keys, selfrobot.current_clustering.predict(all_keys)))
+                        for i, robot in enumerate(robots_present):
+                            robot_bids = selfrobot.belief_space["robot_informations"][robot]["bids"]["frontiers"]
                             for j, task in enumerate(tasks_frontiers):
-                                if task not in list(selfrobot.belief_space["robot_informations"][robot]["bids"]["frontiers"].keys()):
-                                    #we need to infer which cluster the bid is for
-                                    for cluster in list(selfrobot.belief_space["robot_informations"][robot]["bids"]["frontiers"]):
-                                        if selfrobot.current_clustering.predict([cluster]) == selfrobot.current_clustering.predict([task]):
-                                            exploration_matrix[i,j] = selfrobot.belief_space["robot_informations"][robot]["bids"]["frontiers"][cluster]
+                                if task not in robot_bids:
+                                    for cluster in bid_keys[robot]:
+                                        if key_labels[cluster] == key_labels[task]:
+                                            exploration_matrix[i,j] = robot_bids[cluster]
                                 else:
-                                    exploration_matrix[i,j] = selfrobot.belief_space["robot_informations"][robot]["bids"]["frontiers"][task]
+                                    exploration_matrix[i,j] = robot_bids[task]
 
-                    
                     if len(tasks_frontiers)==0 and len(tasks_artifacts)==0 : #if there is no frontier and no task anymore, we finish
                         selfrobot.rdvstate = "finish"
                         return
 
                     # explo
                     if len(tasks_frontiers) >0:
-                        m_frontier = Munkres()
-                        cluster_indices = m_frontier.compute(-exploration_matrix)
+                        cluster_indices = zip(*linear_sum_assignment(exploration_matrix, maximize=True))
                         for r_idx, t_idx in cluster_indices:
                             if robots_present[r_idx] == selfrobot.robot_id:
                                 task_id = tasks_frontiers[t_idx]
@@ -240,9 +223,9 @@ def rendezvous(selfrobot): #from Bramblett, 2022
                     partition = np.zeros(selfrobot.belief_space["occupancy_grid"].shape, dtype=int)
 
                     # partition[selfrobot.belief_space["occupancy_grid"] == -1] = selfrobot.current_clustering.labels_ + 1
-                    frontiers = find_frontier_cells(selfrobot.belief_space["occupancy_grid"])
+                    frontiers = find_frontier_cells(selfrobot.belief_space["occupancy_grid"], traversable_types=selfrobot.traversable_types)
 
-                    if len(frontiers) > 0:
+                    if len(frontiers) > 0 and selfrobot.current_clustering is not None:
 
                         frows = [f[0] for f in frontiers]
                         fcols = [f[1] for f in frontiers]
@@ -284,15 +267,9 @@ def rendezvous(selfrobot): #from Bramblett, 2022
             #make the job until done or rdv time limitation
 
         def finish_subbehavior():
-            if euclidian_distance((int(selfrobot.transform.x),int(selfrobot.transform.y)), (int(selfrobot.init_transform.x),int(selfrobot.init_transform.y))) > selfrobot.treshold_for_target:
-                selfrobot.target = (int(selfrobot.init_transform.x),int(selfrobot.init_transform.y))
-                selfrobot.last_plan_time = selfrobot.env.step
-                return None
-            else:
-                selfrobot.finish()
-                return None
+            return_home_or_finish(selfrobot)
 
-        if "rdvstate" not in selfrobot.__dict__.keys(): #for initialisation, we set rdv originally
+        if not hasattr(selfrobot, "rdvstate"): #for initialisation, we set rdv originally
             selfrobot.rdvstate = "rendezvous"
             selfrobot.bid = None
             selfrobot.rdvspot = (int(selfrobot.transform.x), int(selfrobot.transform.y))
