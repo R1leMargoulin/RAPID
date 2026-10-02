@@ -5,7 +5,7 @@ from pygame import Surface, SRCALPHA, Rect
 
 
 class Artifact:
-    def __init__(self, env, id, name, type, coordinates, size = 1, color=(255,0,0)):
+    def __init__(self, env, id, name, type, coordinates, size = 1, color=(255,0,0), needed_robots=1):
         """
         Artifact placed on the environment, that can be detected and that the robots can interact with
         
@@ -23,6 +23,7 @@ class Artifact:
         self.name = name
         self.type = type
         self.coordinates = coordinates
+        self.needed_robots = needed_robots
 
         self.surf = Surface((2*size, 2*size), SRCALPHA, 32)
         circle(self.surf, color, (size, size), 2*size)

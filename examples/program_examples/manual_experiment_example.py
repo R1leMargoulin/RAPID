@@ -12,7 +12,7 @@ import json
 #ENVIRONMENT PARAMETERS----------------------------------------------------------------------------------------------------------------------------------
 GROUP_EXPERIMENT_NAME = "minpos_empty_100x100/"
 EXPERIMENT_NAME = '3_robots'
-RESULT_PATH = "/home/erwan/Documents/tests_simulations/RAPID/experiments/"#select an existing folder
+RESULT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "experiments_results") + os.sep#select an existing folder
 NB_SIMULATION = 10
 
 
@@ -24,7 +24,7 @@ SCREEN_WIDTH = 100
 SCREEN_HEIGHT = 100
 BACKGROUND_COLOR = (200, 200, 200)
 #if there is an environment image, it will override the screen width and height.
-#ENV_IMAGE_PATH = "/home/erwan/Documents/tests_simulations/RAPID/images_env/forest_100_100.png" #CHANGE THE PATH
+#ENV_IMAGE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "env_images_example", "forest_100_100.png") #CHANGE THE PATH
 ENV_IMAGE_PATH = None
 STEP_LIMITATION = None
 

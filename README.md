@@ -41,6 +41,9 @@ Then install the package with pip:
 ```bash
 cd RAPID
 
+#requirement for pygame
+sudo apt install libsdl1.2-dev
+
 #if you just want to install the package
 pip install .
 
@@ -54,7 +57,7 @@ In the **examples/program_examples** directory, you can find three programs:
 
 - **simulation_example.py**: In this file, we simply run a simulation.
 - **manual_experiment_example.py**: In this file, we run a serie of simulations, and write some evaluation metrics in a file.
-- **data_usage.py**: This file draws figure from what's generated from the "manual_experiment_example.py" file
+- **data_usage_example.py**: This file draws figure from what's generated from the "manual_experiment_example.py" file
 - **experiment_from_config_example.py** : in this file, we use a config file in the form of files in the **examples/config_examples** directory
 
 Environment can be made with images, here are some examples:
