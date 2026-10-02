@@ -6,7 +6,7 @@ from pygame import Surface, SRCALPHA, Rect
 from .Environment import Environment
 from .Artifacts import Artifact
 from .utils import Transform2d, a_star_search, euclidian_distance, DIRECTIONS
-from .grid_variables import (ENV_CELL_TYPES, BLOCKING_SENSOR_TYPES, OG_UNKNOWN_CELL, OG_FREE_CELL_GROUP_NAME,
+from .grid_variables import (ENV_CELL_TYPES, ENV_CELL_TYPE_NAMES, BLOCKING_SENSOR_TYPES, OG_UNKNOWN_CELL, OG_FREE_CELL_GROUP_NAME,
                              OG_WALL_GROUP_NAME, OG_HIGH_WALL_GROUP_NAME, OG_SAND_GROUP_NAME,
                              OG_WATER_GROUP_NAME, OG_GRASS_GROUP_NAME)
 from .behaviors import action_selection, local_frontier, rendezvous, minpos, nearest_frontier, random_wiggle
@@ -120,6 +120,7 @@ class Robot(Sprite):
                 self.env.agents_tools["blackboard"]={} #create the BB in the env.
                 self.env.agents_tools["blackboard"]["occupancy_grid"]=np.full((self.env.width, env.height), OG_UNKNOWN_CELL) #Create the occupancy grid belief in the BB
                 self.env.agents_tools["blackboard"]["robot_informations"]={} #create the robot position dict belief in the BB
+                self.env.agents_tools["blackboard"]["artifacts"]={}
                 if self.env.full_knowledge:
                     self.env.agents_tools["blackboard"]["occupancy_grid"] = self.env.real_occupancy_grid #make the blackboard equans to the env grid if the env is known
 
@@ -175,13 +176,13 @@ class Robot(Sprite):
                 self.last_graph_generation = self.env.step
 
         self.belief_transfer() #after sensing, transfer beliefs if applicable
-        if np.any(self.target):
+        if self.target is not None:
             self.navigate()
         elif self.action_to_perform != None:
             self.perform_target_action()
         else:
             self.behave() #in order to determine what to do.
-            if not self.imdone and np.any(self.target):
+            if not self.imdone and self.target is not None:
                 self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
                 if self.path_to_target != None:
                     self.navigate_through_target_path() 
@@ -266,8 +267,7 @@ class Robot(Sprite):
 
 
         current_cell_type  = self.env.real_occupancy_grid[int(self.transform.x)][int(self.transform.y)]# get the current cell type in order to adapt the speed depending of the traversability ease of the robot
-        current_cell_type_name = list(ENV_CELL_TYPES.keys())[list(ENV_CELL_TYPES.values()).index(int(current_cell_type))]
-        movement_ease = self.env_ease[current_cell_type_name]
+        movement_ease = self.env_ease[ENV_CELL_TYPE_NAMES[int(current_cell_type)]]
 
         #noise to mvt
         noise = round(random.uniform(0.0, 0.05),5)
@@ -414,11 +414,35 @@ class Robot(Sprite):
                     self.time_from_last_communication +=1
 
             elif self.communication_mode == "blackboard":
-                self.env.agents_tools["blackboard"]["occupancy_grid"] = np.maximum.reduce([self.env.agents_tools["blackboard"]["occupancy_grid"], self.belief_space["occupancy_grid"]]) #Maj de la grille d'occupation
-                self.env.agents_tools["blackboard"]["robot_informations"].update({self.robot_id:self.belief_space["robot_informations"][self.robot_id]}) #Maj des infos perso du robot pour le blackboard
-                self.belief_space = self.env.agents_tools["blackboard"] #on tire le blackboard dans nos beliefs space une fois l'avoir mis a jour.
+                self._blackboard_sync()
                 self.time_from_last_communication = 0
                 self.last_given_position = (int(self.transform.x), int(self.transform.y))
+
+    def _blackboard_sync(self):
+        """Merge the robot's belief into the blackboard, then share the blackboard's grid, robot infos and artifacts (by reference) in the robot's belief. self_id and last_infos_matrix stay private."""
+        blackboard = self.env.agents_tools["blackboard"]
+        belief = self.belief_space
+        blackboard["occupancy_grid"] = np.maximum.reduce([blackboard["occupancy_grid"], belief["occupancy_grid"]])
+        blackboard["robot_informations"][self.robot_id] = belief["robot_informations"][self.robot_id]
+        for artifact_id, artifact in belief["artifacts"].items():
+            known = blackboard["artifacts"].get(artifact_id)
+            if known is None or artifact["step"] > known["step"]:
+                blackboard["artifacts"][artifact_id] = artifact
+        for artifact in blackboard["artifacts"].values():
+            if self.robot_id not in artifact["awared"]:
+                artifact["awared"].append(self.robot_id)
+
+        for key in ("occupancy_grid", "robot_informations", "artifacts"):
+            belief[key] = blackboard[key]
+
+        matrix = belief["last_infos_matrix"]
+        for robot_id, infos in blackboard["robot_informations"].items():
+            if robot_id not in matrix:
+                matrix[robot_id] = {other: 0 for other in matrix} | {robot_id: 0}
+                for other in matrix:
+                    matrix[other].setdefault(robot_id, 0)
+            matrix[self.robot_id][robot_id] = infos["step"]
+            matrix[robot_id][self.robot_id] = self.env.step
 
     def _belief_message(self):
         """Copy of the part of the belief space read by recieve_belief (the occupancy grid is not copied, the receiver builds a new one)."""
@@ -474,8 +498,8 @@ class Robot(Sprite):
                 self.belief_space["last_infos_matrix"].update({agent : newrobot})
             
         # maj des coms du sender et reciever dans la matrice
-        self.belief_space["last_infos_matrix"][sender_belief_space["self_id"]].update({self.robot_id : self.belief_space["robot_informations"][agent]["step"]})
-        self.belief_space["last_infos_matrix"][self.robot_id].update({sender_belief_space["self_id"] : self.belief_space["robot_informations"][agent]["step"]})     
+        self.belief_space["last_infos_matrix"][sender_belief_space["self_id"]].update({self.robot_id : self.env.step})
+        self.belief_space["last_infos_matrix"][self.robot_id].update({sender_belief_space["self_id"] : self.env.step})
         #fusion
         for agent in self.belief_space["last_infos_matrix"].keys() | sender_belief_space["last_infos_matrix"].keys():
             if agent in sender_belief_space["last_infos_matrix"]:
@@ -486,51 +510,20 @@ class Robot(Sprite):
             
 
         #ARTIFACTS-----------------------------------------------------------
-        for artifact in sender_belief_space["artifacts"]: #artifact update based on the newest timestamp
-            if not (artifact in self.belief_space["artifacts"]):
-                awared = sender_belief_space["artifacts"][artifact]["awared"]
-                awared.append(self.robot_id)
-                self.belief_space["artifacts"].update({artifact: sender_belief_space["artifacts"][artifact]})
-                self.belief_space["artifacts"][artifact].update({"awared": awared})
-                #self.belief_space["artifacts"][artifact].update({"discovery_time": self.env.step}) #each robot has it's own discovery time of the artifact. => the discovery time is supposed to be local
-            
-            elif sender_belief_space["artifacts"][artifact]["step"] > self.belief_space["artifacts"][artifact]["step"]:
-                #keeping the global discovery time
-                discovery_time = np.min([self.belief_space["artifacts"][artifact]["discovery_time"], sender_belief_space["artifacts"][artifact]["discovery_time"]])
+        for artifact, received in sender_belief_space["artifacts"].items():
+            known = self.belief_space["artifacts"].get(artifact)
+            if known is None:
+                received["awared"].append(self.robot_id)
+                self.belief_space["artifacts"][artifact] = received
+                continue
 
-                #donetime
-                if sender_belief_space["artifacts"][artifact]["donetime"] != self.belief_space["artifacts"][artifact]["donetime"]:
-                    #merging the robots id of robots awared of the tasks
-                    if sender_belief_space["artifacts"][artifact]["donetime"] != None:
-                        global_donetime = sender_belief_space["artifacts"][artifact]["donetime"]
-                    else: 
-                        global_donetime = self.belief_space["artifacts"][artifact]["donetime"]
-                    self.belief_space["artifacts"][artifact].update({"donetime": global_donetime})
-
-                
-                #update
-                self.belief_space["artifacts"].update({artifact: sender_belief_space["artifacts"][artifact]})
-                self.belief_space["artifacts"][artifact].update({"discovery_time": discovery_time})
-                
-
-            if sender_belief_space["artifacts"][artifact]["awared"] != self.belief_space["artifacts"][artifact]["awared"]:
-                #merging the robots id of robots awared of the tasks
-                sender_awared = sender_belief_space["artifacts"][artifact]["awared"]
-                self_awared = self.belief_space["artifacts"][artifact]["awared"]
-                global_awared = list(set(self_awared + sender_awared))
-
-                self.belief_space["artifacts"][artifact].update({"awared": global_awared})
-            
-            #donetime
-            if sender_belief_space["artifacts"][artifact]["donetime"] != self.belief_space["artifacts"][artifact]["donetime"]:
-                #merging the robots id of robots awared of the tasks
-                if sender_belief_space["artifacts"][artifact]["donetime"] != None:
-                    global_donetime = sender_belief_space["artifacts"][artifact]["donetime"]
-                else: 
-                    global_donetime = self.belief_space["artifacts"][artifact]["donetime"]
-                self.belief_space["artifacts"][artifact].update({"donetime": global_donetime})
-            
-            
+            discovery_time = min(known["discovery_time"], received["discovery_time"])
+            donetimes = [t for t in (known["donetime"], received["donetime"]) if t is not None]
+            donetime = min(donetimes) if donetimes else None
+            awared = sorted(set(known["awared"]) | set(received["awared"]))
+            if received["step"] > known["step"]:
+                known = self.belief_space["artifacts"][artifact] = received
+            known.update({"discovery_time": discovery_time, "donetime": donetime, "awared": awared})
 
         #ARTIFACTS-----------------------------------------------------------
 
@@ -561,19 +554,16 @@ class Robot(Sprite):
         elif self.action_to_perform["type"] == "communication":
             self.action_to_perform = None     
         else: #we'll consider than everything else is consider as an artifact
-            for a in self.env.interest_points["artifacts"]:
-                if a.id == self.action_to_perform["id"] and (euclidian_distance((int(a.coordinates[0]), int(a.coordinates[1])), (int(self.transform.x), int(self.transform.y)) ) < 1.5*a.needed_robots):
-                    
-                    result = a.interact(self.competences[self.action_to_perform["type"]]["capability"])
-                    if result :
-                        self.belief_space["artifacts"][self.action_to_perform["id"]]["donetime"] = self.env.step
-                        self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
-                        self.belief_space["artifacts"][self.action_to_perform["id"]]["step"] = self.env.step + 1
-                        self.action_to_perform = None
-                        self.belief_transfer()
-                        return None
-                    else:
-                        return None
+            a = self.env.artifacts_by_id.get(self.action_to_perform["id"])
+            if a is not None and euclidian_distance((int(a.coordinates[0]), int(a.coordinates[1])), (int(self.transform.x), int(self.transform.y))) < 1.5*a.needed_robots:
+                result = a.interact(self.competences[self.action_to_perform["type"]]["capability"])
+                if result :
+                    self.belief_space["artifacts"][self.action_to_perform["id"]]["donetime"] = self.env.step
+                    self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
+                    self.belief_space["artifacts"][self.action_to_perform["id"]]["step"] = self.env.step + 1
+                    self.action_to_perform = None
+                    self.belief_transfer()
+                return None
             #si on ne voit pas l'artefact une fois sur place
             if euclidian_distance((int(self.belief_space["artifacts"][self.action_to_perform["id"]]["coordinates"][0]), int(self.belief_space["artifacts"][self.action_to_perform["id"]]["coordinates"][1])), (int(self.transform.x), int(self.transform.y))) <= self.vision_range:
                 self.belief_space["artifacts"][self.action_to_perform["id"]]["status"] = "done"
@@ -723,7 +713,7 @@ class BaseStation(Robot):
             if self.base.robot_id in robot.belief_space["last_infos_matrix"]:
                 for agent in robot.belief_space["last_infos_matrix"][self.base.robot_id]:
                     if agent != self.base.robot_id:
-                        total_base_timestamp += robot.belief_space["last_infos_matrix"][robot.robot_id][agent] #we add all timesteps of the other robots except the base
+                        total_base_timestamp += robot.belief_space["last_infos_matrix"][self.base.robot_id][agent]
             
             total_deltas_com = total_timestamps - ((len(robot.belief_space["last_infos_matrix"])-1) * self.env.step)  # delte = la somme des timestamps - n * le max des steps possible (soit le temps actuel) et n = le nb de robot dans la flotte sans la base.
             total_base_deltas_com = total_base_timestamp - ((len(robot.belief_space["last_infos_matrix"])-1) * self.env.step)
@@ -775,4 +765,4 @@ class BaseStation(Robot):
                                                  name="base_station",
                                                  coordinates=(self.transform.x, self.transform.y),
                                                  associated_agent=self)
-        self.env.interest_points["artifacts"].append(self.artifact)
+        self.env.register_artifact(self.artifact)

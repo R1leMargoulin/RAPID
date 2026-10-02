@@ -1,7 +1,7 @@
 import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
-from pygame.sprite import Sprite, spritecollide, collide_circle
+from pygame.sprite import Sprite
 from pygame.locals import (K_ESCAPE, KEYDOWN)
 
 from .utils import *
@@ -57,6 +57,7 @@ class Environment():
         self.cell_feature_groups = {}
         self.present_cell_types = set()
         self.interest_points = {"artifacts":[]}
+        self.artifacts_by_id = {}
         self.agents_tools = {}
 
         self.full_knowledge= full_knowledge
@@ -89,8 +90,7 @@ class Environment():
 
         # handling of the communication mode string
         if self.communication_mode not in COMMUNICATION_MODE_LIST:
-            logging.error(f"unknown communication mode for robot {self.robot_id}.\n list of available communication mode : {COMMUNICATION_MODE_LIST}")
-            exit()
+            raise ValueError(f"unknown communication mode '{self.communication_mode}', available modes : {COMMUNICATION_MODE_LIST}")
 
         if self.render:
             pygame.display.set_caption(caption)
@@ -143,12 +143,12 @@ class Environment():
                     scaled_rect = pygame.Rect(o.rect.x * self.scaling_factor, o.rect.y * self.scaling_factor, o.rect.width * self.scaling_factor, o.rect.height * self.scaling_factor)
                     self.screen.blit(pygame.transform.scale(o.image, scaled_rect.size), scaled_rect)
 
-        for a in self.interest_points["artifacts"]:
-            if a.status == "destroyed": #if the artifact is destoyed, we remove it from the list.
-                self.interest_points["artifacts"].remove(a)
-                continue
-            a.update(self.screen) #will update the artifact display
-        
+        artifacts = self.interest_points["artifacts"]
+        for a in artifacts:
+            if a.status != "destroyed":
+                a.update(self.screen)
+        artifacts[:] = [a for a in artifacts if a.status != "destroyed"]
+        self.artifacts_by_id = {a.id: a for a in artifacts}
 
         for a in self.agents: 
             a.update()
@@ -164,6 +164,10 @@ class Environment():
         if self.communication_mode == "limited":
             self.limited_communication_update()
         
+    def register_artifact(self, artifact):
+        self.interest_points["artifacts"].append(artifact)
+        self.artifacts_by_id[artifact.id] = artifact
+
     def add_agent(self, agent):
         """
         Add a new agent in the environment. An agent HAS to be added to be taken into account in the simulation.
@@ -206,7 +210,7 @@ class Environment():
                 case 2:
                     self.create_cell(o,l, type=OG_HIGH_WALL, group_name=OG_HIGH_WALL_GROUP_NAME, color=color)
                 case 3:
-                    self.create_cell(o,l, type=OG_SAND, group_name=OG_SAND, color=color, visibility=0.5)
+                    self.create_cell(o,l, type=OG_SAND, group_name=OG_SAND_GROUP_NAME, color=color, visibility=0.5)
                 case 4:
                     self.create_cell(o,l, type=OG_WATER, group_name=OG_WATER_GROUP_NAME, color=color, visibility=0.5)
                 case 5:
@@ -226,10 +230,7 @@ class Environment():
         sprite.image.fill((color[0], color[1], color[2], byte_visibility))
         sprite.rect = pygame.Rect(coord_x,coord_y, 1,1)
 
-        if group_name in self.cell_feature_groups:
-            self.cell_feature_groups[group_name].add(sprite)
-        else:
-            self.cell_feature_groups.update({group_name: pygame.sprite.Group()})
+        self.cell_feature_groups.setdefault(group_name, pygame.sprite.Group()).add(sprite)
     
     def goal_condition(self):
         """
@@ -247,38 +248,36 @@ class Environment():
         """
         Available only with "limited" communication mode. Will handle the communication links between agents.
         """
-        potential_links_dict = {} #in this dict, we'll append all unidirectional links : if agent B is in the com range of agent A, then the link A->B is created.
-        for a in self.agents :
-            a.connected_robots = [] #reset of the list of connected robots for the agent.
-            potential_links_dict.update({str(a.robot_id):[]})
-            in_range = spritecollide(a.communication_halo, self.agent_group, False, collide_circle) #we detect collision between communication_halo and other agents
-            for robot in in_range:
-                potential_links_dict[str(a.robot_id)].append(str(robot.robot_id)) #we append the robot if it's in range, the link A->B is created. 
+        for a in self.agents:
+            a.connected_robots = []
 
-        #for each agent if it has a connexion, we'll check the reciprocity of it.
-        for agent in self.agents:
-            for link in potential_links_dict[str(agent.robot_id)]:
-                if str(agent.robot_id) in potential_links_dict[link] : #if reciprocity
-                    #find the linked robot and append the loop robot to it.                    
-                    for r in self.agents:
-                        connection_error = random.uniform(0,1) > self.communication_reliability
-                        if str(r.robot_id) == link and r.robot_id != agent.robot_id and not(connection_error):
-                            r.connected_robots.append(agent) #append mutually the robots in their connected robot list
-                            agent.connected_robots.append(r)
-                            break
-                    potential_links_dict[link].remove(str(agent.robot_id)) #we remove the agent in the other agent's list in order to avoid double links.
+        reach = self._communication_reach()
+        for i, j in np.argwhere(np.triu(reach & reach.T, 1)): #one draw per reciprocal pair
+            if not random.uniform(0,1) > self.communication_reliability:
+                self.agents[i].connected_robots.append(self.agents[j])
+                self.agents[j].connected_robots.append(self.agents[i])
 
         if self.render:
             for a in self.agents:
                 for cr in a.connected_robots:
                     pygame.draw.line(self.screen, (255, 255, 255), (a.transform.x * self.scaling_factor, a.transform.y * self.scaling_factor), (cr.transform.x * self.scaling_factor, cr.transform.y * self.scaling_factor))
 
+    def _communication_reach(self):
+        """reach[i, j] is True when agent j is within the communication range of agent i (distance between the cell centres)."""
+        if not self.agents:
+            return np.zeros((0, 0), dtype=bool)
+        halo_centers = np.array([a.communication_halo.rect.center for a in self.agents])
+        agent_centers = np.array([a.rect.center for a in self.agents])
+        ranges = np.array([a.communication_range for a in self.agents])
+        distances_squared = ((halo_centers[:, None, :] - agent_centers[None, :, :]) ** 2).sum(axis=2)
+        return distances_squared <= ranges[:, None] ** 2
+
     def break_robot(self, robot_id):
-        self.agents[robot_id].status = "destroyed"
+        next(a for a in self.agents if a.robot_id == robot_id).status = "destroyed"
     
 
 class TargetPointEnvironment(Environment):
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, scaling_factor:int=1, communication_mode="blackboard", target_point:tuple[int,int]=None, amount_of_agents_goal=1, save_img_steps = None, verbose = True):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, scaling_factor:int=1, communication_mode="blackboard", target_point:tuple[int,int]=None, amount_of_agents_goal=1, save_img_steps = None, verbose = True, end_at_full_exploation=True, full_knowledge=True, robot_block=True, communication_reliability=1):
         """"
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         In this Environment, the Agents has to reach a target point in order to complete the mission.
@@ -297,9 +296,12 @@ class TargetPointEnvironment(Environment):
             - "limited":  Robots cannot share information on the blackboard, they need to keep their own belief of the environment state and share it with other robots when possible
         - target_point:tuple:(int,int) (default : random) : target points that has to be reached by agents
         - amount_of_agents:int (default : 1) : amount of agents that needs to reach the point in order to complete the mission.
+        - end_at_full_exploation:bool (default True) : if False, the simulation ends when all robots are done instead of when the target is reached.
+        - full_knowledge, robot_block, communication_reliability : see Environment.
         """
+        self.end_at_full_exploation = end_at_full_exploation
 
-        super().__init__(render, width, height, background_color, caption, env_image, limit_of_steps=limit_of_steps, scaling_factor=scaling_factor, communication_mode=communication_mode, save_img_steps=save_img_steps, verbose=verbose)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge=full_knowledge, robot_block=robot_block, limit_of_steps=limit_of_steps, scaling_factor=scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps, verbose=verbose)
         if target_point :
             self.init_target_point(x=target_point[0], y=target_point[1])
         else : #s'il n'y a pas de target point, on en génère un aléatoirement:
@@ -421,12 +423,12 @@ class FogEnvironment(Environment):
         if len(cells) == 0:
             return
         idx = np.asarray(cells)
-        self.interest_points["exploration_map"][idx[:, 0] - 1, idx[:, 1] - 1] = 1
+        self.interest_points["exploration_map"][idx[:, 0], idx[:, 1]] = 1
 
     def _add_artifact(self, artifact_class, name_prefix, type, coords, **kwargs):
         artifact_id = len(self.interest_points["artifacts"])
         artifact = artifact_class(self, id=artifact_id, name=f"{name_prefix}{artifact_id}", type=type, coordinates=coords, **kwargs)
-        self.interest_points["artifacts"].append(artifact)
+        self.register_artifact(artifact)
 
 
 class ExplorationEnvironment(FogEnvironment):
@@ -544,15 +546,14 @@ class WasteCleaningEnvironment(FogEnvironment):
                 return False
 
 
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None, verbose = True):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None, verbose = True):
         """
         WasteCleaningEnvironment Class : the agents have to clean every waste of the environment (see ExplorationEnvironment for the common params).\\
         Params specific to this class :
         - end_at_full_clear:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when every waste is cleaned.
         - fog:bool = currently ignored.
         """
-        #FIXME P4.3 : limit_of_steps and scaling_factor land in robot_block and limit_of_steps, kept until the bug-fix commit.
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block=limit_of_steps, limit_of_steps=scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, end_at_goal=end_at_full_clear, save_img_steps=save_img_steps, verbose=verbose)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, end_at_goal=end_at_full_clear, save_img_steps=save_img_steps, verbose=verbose)
 
     def add_waste(self, coords):
         self._add_artifact(self.Waste, "waste", "clean", coords)

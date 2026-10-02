@@ -15,7 +15,6 @@ setup(
         'scikit-learn',
         'scipy',
         'shapely',
-        'munkres',
         'matplotlib',
     ],
     python_requires='>=3.12',

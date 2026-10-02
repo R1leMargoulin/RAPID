@@ -1,4 +1,3 @@
-import logging
 
 import numpy as np
 
@@ -19,8 +18,9 @@ def action_selection(selfrobot):
     if "artifacts" in selfrobot.belief_space:
         for art in selfrobot.belief_space["artifacts"]:
             #IMPORTANCE CHECK
-            if art +1 <= len(selfrobot.env.interest_points["artifacts"]): #ouais c'est degueu
-                selfrobot.env.interest_points["artifacts"][art].check_importance(selfrobot)
+            artifact = selfrobot.env.artifacts_by_id.get(art)
+            if artifact is not None:
+                artifact.check_importance(selfrobot)
 
             #INTEREST POINT CREATION
             if selfrobot.belief_space["artifacts"][art]["status"] not in ["done", "destroyed"] :
@@ -45,9 +45,9 @@ def action_selection(selfrobot):
             if selfrobot.communication_range*3/selfrobot.max_speed.x <= selfrobot.env.step - selfrobot.belief_space["robot_informations"][robot_id]["step"] < 4 * ( np.max(selfrobot.belief_space["occupancy_grid"].shape)/selfrobot.max_speed.x ) : #time = dist/speed
                 if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) ,selfrobot.belief_space["robot_informations"][robot_id]["position"]) >=  selfrobot.competences["communication"]["distance_treshold"]:
                     robots_pos_list.append(selfrobot.belief_space["robot_informations"][robot_id]["position"])
-        if len(robots_pos_list)>0:
-            if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) , selfrobot.last_given_position) >=  selfrobot.competences["communication"]["distance_treshold"]:
-                    robots_pos_list.append(selfrobot.last_given_position)# TODO ComInfo, la last given position, c'est a double trnchant, je sais pas trop
+    if len(robots_pos_list)>0:
+        if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) , selfrobot.last_given_position) >=  selfrobot.competences["communication"]["distance_treshold"]:
+            robots_pos_list.append(selfrobot.last_given_position)# TODO ComInfo, la last given position, c'est a double trnchant, je sais pas trop
 
     communication_clusters = simple_clustering(robots_pos_list, selfrobot.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
     for cc in communication_clusters:
@@ -78,7 +78,7 @@ def action_selection(selfrobot):
         selfrobot.target = (int(selfrobot.action_to_perform["coordinates"][0]), int(selfrobot.action_to_perform["coordinates"][1]))
         selfrobot.last_plan_time = selfrobot.env.step
     else:
-        logging.warning("action_selection: no best action found")
+        return_home_or_finish(selfrobot, set_finishing_status=True)
 
 
 def kth_largest(sorted_desc, k):

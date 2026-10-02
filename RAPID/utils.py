@@ -192,79 +192,57 @@ def cluster_frontier_cells(grid, frontier_cells, vision_range, traversable_types
 
     return np.round(cluster_centers)
 
+def bfs_distances(passable, start, max_distance=np.inf):
+    """4-connected BFS distances from start over the passable cells (bool array), as a flat list indexed x*height+y with -1 for unreached cells."""
+    width, height = passable.shape
+    flat_passable = passable.ravel().tolist()
+    distances = [-1] * (width * height)
+    start_index = start[0] * height + start[1]
+    distances[start_index] = 0
+    queue = deque([start_index])
+    while queue:
+        index = queue.popleft()
+        distance = distances[index] + 1
+        if distance > max_distance:
+            break
+        x, y = divmod(index, height)
+        for neighbor, inside in ((index - height, x > 0), (index + height, x < width - 1), (index - 1, y > 0), (index + 1, y < height - 1)):
+            if inside and distances[neighbor] == -1 and flat_passable[neighbor]:
+                distances[neighbor] = distance
+                queue.append(neighbor)
+    return distances
+
 def wavefront_propagation_algorithm(grid, self_position, robot_positions, frontier_clusters, weight_of_closer_robots = 10, traversable_types = (OG_FREE_CELL,)):
     """
-    Perform wavefront propagation from frontiers clusters (also works with simple frontiers) to determine their score depending on it's distance and the robots closer to the one computing this algorithm.
+    MinPos frontier scores (Bautin et al., 2012): BFS distance of the robot to the frontier, plus a penalty for each other robot strictly closer to this frontier.
 
     parameters:
     - grid: 2D numpy array representing the grid.
     - self_position:(int,int) = position xy of the robot computing this algorithm.
-    - robot_positions: List of robot positions (row, col).
+    - robot_positions: positions (int,int) of the other robots.
     - frontier_clusters: List of frontier cluster centers (row, col).
-    - weight_of_closer_robots:int(default 10) = degree of penalty on a frontier score caused by closer robot on a frontier
+    - weight_of_closer_robots:int(default 10) = penalty per closer robot
+    - traversable_types: cell types the BFS can cross (unknown cells are crossed as well).
 
     returns:
-    - frontier_scores: Dictionary with frontier cluster centers as keys and scores as values.
+    - frontier_scores: Dictionary with frontier cluster centers as keys and scores as values (np.inf when the robot cannot reach the frontier).
     """
-    def propagate(start_pos):
-        """Propagate the wavefront from the start position."""
-        width, height = grid.shape
-        wavefront_map = np.full_like(grid, -1, dtype=int)  #this keeps tracks of explored cells by the WPA, in order to avoid multiple calculations for a cell.
-        wavefront_map[start_pos] = 0
-        next_queue = [start_pos]
-        queue = []
+    passable = np.isin(grid, traversable_types) | (grid == OG_UNKNOWN_CELL)
+    frontiers = [(int(frontier[0]), int(frontier[1])) for frontier in frontier_clusters]
+    height = grid.shape[1]
 
-        robots_touched = 0 #keeps tracks of the closer robots to the frontier
-        frontier_distance_score = 0 #keeps track of the distance from the frontier to the robot doing this calculation
-        reached_robot = False #propagation happens until a robot is reached
-
-        # print(next_queue)
-
-        while not reached_robot:
-            
-            if(len(queue) == 0):
-                queue = next_queue
-                next_queue = []
-                if len(queue) == 0:
-                    return np.inf, robots_touched
-            #add 1 distance at each propagations
-            frontier_distance_score += 1
-
-            for i in queue:
-                current = queue.pop(0)
-                current_value = wavefront_map[current]
-                neighbours = get_direct_neighbors(current, width, height)
-
-                for n in neighbours:
-                    if 0 <= n[0] < width and 0 <= n[1] < height: #verif that the neighbor is inbound
-                        #If the neighbor is correct, we add the neighbors to the queue and we add 1 to the distance metric
-                        if wavefront_map[n[0], n[1]] == -1:  # Unvisited cell on the wavefront map
-                            if grid[n[0], n[1]] in traversable_types or grid[n[0], n[1]] == OG_UNKNOWN_CELL:  # Free cell in real env
-                                wavefront_map[n[0], n[1]] = current_value + 1
-                                next_queue.append((n[0], n[1])) #we append the correct neighbour to the next queue.
-                            else:
-                                wavefront_map[n[0], n[1]] = current_value + 1 #we update the wavefront map but not append the wall to the next_queue
-
-                            #print(f"{(n[0], n[1])}//{self_position}") #TODO : trouver pourquoi ca y est jamais
-                            if (n[0], n[1]) == self_position: # Stop if the wavefront reaches the "main" robot (the one doing the calculations)
-                                # print("found")
-                                reached_robot = True
-                            #if a robot is touched by the propagation, we add it's coordinates to the list
-                            elif (n[0], n[1]) in robot_positions:  # Robot cell
-                                robots_touched += 1
-
-        return frontier_distance_score, robots_touched
+    self_distances = bfs_distances(passable, self_position)
+    max_distance = max((self_distances[x * height + y] for x, y in frontiers), default=-1)
+    other_distances = [bfs_distances(passable, position, max_distance) for position in robot_positions]
 
     frontier_scores = {}
-
-        #
-    
-
-    for frontier in frontier_clusters:
-        fx, fy = int(frontier[0]), int(frontier[1])
-        frontier_distance_score, robots_touched = propagate((fx, fy))
-        
-        frontier_scores[(fx, fy)] = frontier_distance_score + robots_touched * weight_of_closer_robots
+    for x, y in frontiers:
+        distance = self_distances[x * height + y]
+        if distance == -1:
+            frontier_scores[(x, y)] = np.inf
+            continue
+        closer_robots = sum(1 for distances in other_distances if 0 <= distances[x * height + y] < distance)
+        frontier_scores[(x, y)] = distance + closer_robots * weight_of_closer_robots
 
     return frontier_scores
 
@@ -322,8 +300,7 @@ def a_star_cost(grid, start, goal, env_ease, traversable_types=(OG_FREE_CELL,)):
         for p in path:
             pvalue = int(grid[p])
             if pvalue != -1:
-                current_cell_type_name = list(ENV_CELL_TYPES.keys())[list(ENV_CELL_TYPES.values()).index(pvalue)] #return the string name of the env type
-                costs.append( 1/(env_ease[current_cell_type_name]+1e-8) ) #we make a cost for the cell only
+                costs.append( 1/(env_ease[ENV_CELL_TYPE_NAMES[pvalue]]+1e-8) ) #we make a cost for the cell only
             else:
                 costs.append(1) # unknown cell costs 1, permitting exploration
         cost = np.sum(costs)

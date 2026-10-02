@@ -17,8 +17,7 @@ def minpos(selfrobot): #from Bautin, 2012
     else:
         cluster_centers = cluster_frontier_cells(selfrobot.belief_space["occupancy_grid"], frontiers, int(selfrobot.vision_range/2), traversable_types=selfrobot.traversable_types)
 
-        pos_list_float = [pos["position"] for pos in list(selfrobot.belief_space["robot_informations"].values())]
-        pos_list_int = [(int(x), int(y)) for x,y in pos_list_float]
+        pos_list_int = [(int(infos["position"][0]), int(infos["position"][1])) for robot_id, infos in selfrobot.belief_space["robot_informations"].items() if robot_id != selfrobot.robot_id]
         weighted_clusters = wavefront_propagation_algorithm(selfrobot.belief_space["occupancy_grid"], (int(selfrobot.transform.x), int(selfrobot.transform.y)), pos_list_int, cluster_centers, weight_of_closer_robots=selfrobot.env.width, traversable_types=selfrobot.traversable_types)
         selfrobot.target = min(weighted_clusters, key=weighted_clusters.get)
         selfrobot.last_plan_time = selfrobot.env.step

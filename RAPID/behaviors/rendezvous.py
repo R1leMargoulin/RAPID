@@ -1,5 +1,5 @@
 import numpy as np
-from munkres import Munkres
+from scipy.optimize import linear_sum_assignment
 from sklearn.cluster import KMeans
 from copy import deepcopy
 
@@ -28,7 +28,7 @@ def rendezvous(selfrobot): #from Bramblett, 2022
                             art_found.append({"id": art, "type":selfrobot.belief_space["artifacts"][art]["type"], "coordinates": selfrobot.belief_space["artifacts"][art]["coordinates"]})
 
             #Pi1 condition in the paper
-            if np.abs(selfrobot.env.step - selfrobot.rdvtime) < 1.5 * selfrobot.max_speed.x * a_star_cost(selfrobot.belief_space["occupancy_grid"], start = (int(selfrobot.transform.x), int(selfrobot.transform.y)), goal = (int(selfrobot.rdvspot[0]), int(selfrobot.rdvspot[1])), env_ease=selfrobot.env_ease): #if the time until rdvtime is shorter than 1.5* time to go for it, then, pass in rdv mode
+            if np.abs(selfrobot.env.step - selfrobot.rdvtime) < 1.5 * selfrobot.max_speed.x * a_star_cost(selfrobot.belief_space["occupancy_grid"], start = (int(selfrobot.transform.x), int(selfrobot.transform.y)), goal = (int(selfrobot.rdvspot[0]), int(selfrobot.rdvspot[1])), env_ease=selfrobot.env_ease, traversable_types=selfrobot.traversable_types): #if the time until rdvtime is shorter than 1.5* time to go for it, then, pass in rdv mode
                 selfrobot.rdvstate = "rendezvous"
             #Pi4 condition in the paper
             elif len(art_found) > 0:
@@ -167,22 +167,8 @@ def rendezvous(selfrobot): #from Bramblett, 2022
 
 
                     if len(tasks_artifacts) > 0:
-                        m_artifact = Munkres()
-
-                        # Padding : rendre la matrice carrée si moins de tâches que de robots
-                        n_robots = len(robots_present)
-                        n_tasks = len(tasks_artifacts)
-                        if n_robots > n_tasks:
-                            pad = np.zeros((n_robots, n_robots - n_tasks))
-                            artifact_matrix_square = np.hstack([artifact_matrix, pad])
-                        else:
-                            artifact_matrix_square = artifact_matrix
-
-                        artifact_indices = m_artifact.compute(-artifact_matrix_square)
-                        #print(artifact_indices)
+                        artifact_indices = zip(*linear_sum_assignment(artifact_matrix, maximize=True))
                         for r_idx, t_idx in artifact_indices:
-                            if t_idx >= n_tasks:  # padding, on ignore
-                                continue
                             if robots_present[r_idx] == selfrobot.robot_id: #if robots_present[r_idx]+1 == selfrobot.robot_id:
                                 task_id = tasks_artifacts[t_idx]
                                 selfrobot.action_to_perform = {
@@ -219,8 +205,7 @@ def rendezvous(selfrobot): #from Bramblett, 2022
 
                     # explo
                     if len(tasks_frontiers) >0:
-                        m_frontier = Munkres()
-                        cluster_indices = m_frontier.compute(-exploration_matrix)
+                        cluster_indices = zip(*linear_sum_assignment(exploration_matrix, maximize=True))
                         for r_idx, t_idx in cluster_indices:
                             if robots_present[r_idx] == selfrobot.robot_id:
                                 task_id = tasks_frontiers[t_idx]
@@ -238,9 +223,9 @@ def rendezvous(selfrobot): #from Bramblett, 2022
                     partition = np.zeros(selfrobot.belief_space["occupancy_grid"].shape, dtype=int)
 
                     # partition[selfrobot.belief_space["occupancy_grid"] == -1] = selfrobot.current_clustering.labels_ + 1
-                    frontiers = find_frontier_cells(selfrobot.belief_space["occupancy_grid"])
+                    frontiers = find_frontier_cells(selfrobot.belief_space["occupancy_grid"], traversable_types=selfrobot.traversable_types)
 
-                    if len(frontiers) > 0:
+                    if len(frontiers) > 0 and selfrobot.current_clustering is not None:
 
                         frows = [f[0] for f in frontiers]
                         fcols = [f[1] for f in frontiers]

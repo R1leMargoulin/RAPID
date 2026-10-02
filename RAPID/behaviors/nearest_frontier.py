@@ -7,8 +7,6 @@ def nearest_frontier(selfrobot):
     """
     compute a greedy nearest frontier algorithm: the target is the frontier with the lowest heuristic distance.
     """
-    selfrobot.belief_transfer()
-
     frontiers = find_frontier_cells(selfrobot.belief_space["occupancy_grid"], traversable_types=selfrobot.traversable_types)
 
     if len(frontiers) == 0:

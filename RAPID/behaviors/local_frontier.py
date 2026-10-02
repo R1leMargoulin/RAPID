@@ -19,8 +19,6 @@ def local_frontier(selfrobot):
         #init second chance used as False
         selfrobot.belief_space["second_chance_usage"] = False
 
-    #SENSING
-    selfrobot.sense()
     #LOCAL FRONTIER DETECTION -----------------------------------------------------
     vision_range = selfrobot.get_neighbors_pixels(distance=selfrobot.vision_range, stop_at_wall=True, self_inclusion=True)
     local_frontier_list = []
@@ -79,5 +77,3 @@ def local_frontier(selfrobot):
                         oldest_timestep = selfrobot.belief_space["traces"][cell]
             selfrobot.target = chosen_trace #on definit la trace la plus ancienne dans le rayon restreint défini.
             selfrobot.last_plan_time = selfrobot.env.step
-
-    selfrobot.belief_transfer() #belief transfer management.
