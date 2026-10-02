@@ -2,7 +2,6 @@ from . import utils
 
 import numpy as np
 import heapq
-import matplotlib.pyplot as plt
 #from scipy.ndimage import binary_dilation, generate_binary_structure
 from scipy.ndimage import distance_transform_edt
 from skimage.morphology import skeletonize, medial_axis
@@ -18,7 +17,7 @@ from collections import defaultdict
 #TODO : ajouter des artefacts aux nodes??? pas necessairement besoin car on a les coordonnees des artefacts, on peut les relier via la zone.
 
 class Node():
-    def __init__(self, coordinates, agent:list, creation_time, zone=None, neighbors={}, type= None, explored = False):
+    def __init__(self, coordinates, agent:list, creation_time, zone=None, neighbors=None, type= None, explored = False):
         """
         Docstring for __init__
         
@@ -34,7 +33,7 @@ class Node():
         """
         self.coordinates = coordinates
         self.agents = agent
-        self.neighbors = neighbors
+        self.neighbors = neighbors if neighbors is not None else {}
         self.explored = explored
         self.zone = zone
         self.type = type
@@ -240,7 +239,7 @@ class Graph():
             if agent_id not in nodes_backup[nb].agents:
                 unseen_nodes.update({nb:nodes_backup[nb]})
         #graph regeneration
-        self.graph_generation(occupancy_grid)
+        self.graph_generation(occupancy_grid, traversable_types=traversable_types)
         self.allocate_polygons(occupancy_grid, traversable_types)
 
         
@@ -323,52 +322,8 @@ class Graph():
                                 self.remove_node(neighbor)
 
                                 changed = True
-                    #             break
-                    # if changed:
-                    #     break
                     
                        
-                    # for deg2 in deg2neighbors:
-                    #     if deg2 == node or deg2 not in self.nodes:
-                    #         continue
-                    #     nx, ny = deg2
-
-                    #     if utils.euclidian_distance((x, y), (nx, ny)) <= self.dist_treshold*2 and node in self.nodes:
-                    #         # Calcul du point moyen
-                    #         moyen = ((x + nx) / 2, (y + ny) / 2)
-
-                    #         # Récupération des autres voisins
-                    #         other_neighbors = []
-                    #         for other in self.nodes[node].neighbors:
-                    #             if other != deg2 and other in self.nodes:
-                    #                 other_neighbors.append(other)
-                    #         for other in self.nodes[deg2].neighbors:
-                    #             if other != node and other not in other_neighbors and other in self.nodes:
-                    #                 other_neighbors.append(other)
-
-                    #         # Suppression des anciens nœuds et ajout du nouveau
-                    #         for other in other_neighbors:
-                    #             # if other not in self.nodes:
-                    #             #     continue
-                    #             if node in self.nodes[other].neighbors:
-                    #                 self.nodes[other].add_neighbor(id=moyen, distance=utils.euclidian_distance(other, moyen) )
-                    #             if deg2 in self.nodes[other].neighbors:
-                    #                 self.nodes[other].add_neighbor(id=moyen, distance=utils.euclidian_distance(other, moyen) )
-                                
-                    #         observer_agents = list(np.unique( observer_agents + self.nodes[deg2].agents)) #merge agents that have seen those two merged nodes
-
-                    #         # Ajout du nœud moyen au graph
-                    #         self.add_node(moyen, other_neighbors, observers=observer_agents)
-                            
-
-                    #         # Suppression des anciens nœuds
-                    #         self.remove_node(node)
-                    #         self.remove_node(deg2)
-
-                    #         changed = True
-                    #         break
-                    # if changed:
-                    #     break
                     
 
         return None
@@ -450,17 +405,14 @@ class Graph():
         nodelist=[]
         external_nodes = []
         for node in self.nodes:
-            print(self.nodes[node].zone)
             if self.nodes[node].zone == None:
                 nodelist.append(node)
             else:
                 external_nodes.append(node)
-        print(nodelist)
-        print(external_nodes)
         allocaton_map = self.allocate_cells_to_nodes(nodelist, occupancy_grid, traversable_types=traversable_types)
 
         for en in external_nodes:
-            zonepoints = self.nodes[en].get_zone_points
+            zonepoints = self.nodes[en].get_zone_points()
             for p in zonepoints:
                 allocaton_map[p] = -1
 

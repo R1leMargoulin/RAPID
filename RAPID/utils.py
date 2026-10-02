@@ -1,6 +1,8 @@
+import math
 import numpy as np
 import heapq
 import random
+from dataclasses import dataclass
 from scipy.ndimage import sobel
 from sklearn.cluster import KMeans
 from collections import deque
@@ -9,87 +11,60 @@ from .grid_variables import *
 
 
 
-class Transform2d():
-        """
-        2D transform regrouping :
-        - x : position of the entity on the x axis
-        - y : position of the entity on the y axis
-        - w : yaw -> rotation of the entity on the z axis
-        """
-        def __init__(self, x:float = 0.0, y:float = 0.0, w:float = 0.0):
-                self.x = x
-                self.y = y
-                self.w = w
+@dataclass(eq=False)
+class Transform2d:
+    """
+    2D transform regrouping :
+    - x : position of the entity on the x axis
+    - y : position of the entity on the y axis
+    - w : yaw -> rotation of the entity on the z axis
+    """
+    x: float = 0.0
+    y: float = 0.0
+    w: float = 0.0
 
 DIRECTIONS = [(-1, 0), (1, 0), (0, -1), (0, 1)]
 
-def djikstra(occupancy_grid:np.ndarray, target_coord:tuple[int,int]):
-    # Dimensions of the occupancy grid
+def dijkstra(occupancy_grid:np.ndarray, target_coord:tuple[int,int]):
     rows, cols = occupancy_grid.shape
+    distances = np.full((rows, cols), np.inf)
 
-    # Initialize the distance map with infinity (unreachable)
-    djikstra = np.full((rows, cols), np.inf)
-
-    # Queue for BFS, starting from the target coordinate
-    queue = [target_coord]
-    djikstra[target_coord] = 0
+    queue = deque([target_coord])
+    distances[target_coord] = 0
 
     while queue:
-        current = queue.pop(0)  # Pop from the front of the list
-        current_distance = djikstra[current]
+        current = queue.popleft()
+        current_distance = distances[current]
 
-        # Explore neighbors
         for direction in DIRECTIONS:
             neighbor = (current[0] + direction[0], current[1] + direction[1])
 
-            # Check if the neighbor is within bounds and not an obstacle
             if 0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols:
                 if occupancy_grid[neighbor] == 0:
                     new_distance = current_distance + 1
-                    if new_distance < djikstra[neighbor]:
-                        djikstra[neighbor] = new_distance
+                    if new_distance < distances[neighbor]:
+                        distances[neighbor] = new_distance
                         queue.append(neighbor)
 
-    return djikstra
+    return distances
 
-def find_frontier_cells(grid, traversable_types = [OG_FREE_CELL]):
+djikstra = dijkstra
+
+def find_frontier_cells(grid, traversable_types = (OG_FREE_CELL,)):
     """
-    Find frontier cells in a (-1/0/1) array where:
-    - -1 is an unknown cell
-    - 0 is a free cell
-    - 1 is an obstacle
+    Find frontier cells: traversable cells with at least one unknown 4-neighbor.
+    Returns an (n, 2) array in row-major order.
     """
-    # Get the dimensions of the grid
-    width, height = grid.shape
+    traversable = np.isin(grid, traversable_types)
+    unknown = grid == OG_UNKNOWN_CELL
+    next_to_unknown = np.zeros_like(unknown)
+    next_to_unknown[1:, :] |= unknown[:-1, :]
+    next_to_unknown[:-1, :] |= unknown[1:, :]
+    next_to_unknown[:, 1:] |= unknown[:, :-1]
+    next_to_unknown[:, :-1] |= unknown[:, 1:]
+    return np.column_stack(np.where(traversable & next_to_unknown))
 
-    # Define shifts for neighbors
-    shifts = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-
-    # Initialize a mask for frontier cells
-    frontier_mask = np.zeros_like(grid, dtype=bool)
-
-    # Iterate over each cell in the grid
-    for r in range(width):
-        for c in range(height):
-            # Check if the current cell is known (0 or 1)
-            #if grid[r, c] == 0 or grid[r, c] == 1:
-            if grid[r, c] in traversable_types: #la case peut elle etre traversee?
-                # Check the neighbors of the current cell
-                for dr, dc in shifts:
-                    nr, nc = r + dr, c + dc
-                    # Check if the neighbor is within the grid bounds
-                    if 0 <= nr < width and 0 <= nc < height:
-                        # Check if the neighbor is unknown (-1)
-                        if grid[nr, nc] == OG_UNKNOWN_CELL:
-                            frontier_mask[r, c] = True
-                            break  # No need to check other neighbors
-
-    # Get the coordinates of frontier cells
-    frontier_cells = np.column_stack(np.where(frontier_mask))
-
-    return frontier_cells
-
-def sobel_frontier_detection(grid, traversable_types = [OG_FREE_CELL]):
+def sobel_frontier_detection(grid, traversable_types = (OG_FREE_CELL,)):
     explo_grid = grid==-1 #returns true if free and false if obstacle
     sobel_h = sobel(explo_grid, 0)  # horizontal gradient
     sobel_v = sobel(explo_grid, 1)  # vertical gradient
@@ -107,7 +82,7 @@ def sobel_frontier_detection(grid, traversable_types = [OG_FREE_CELL]):
 
     return frontiers
 
-def find_nearest_free(grid, target, neighborhood='moore', traversable_types = [OG_FREE_CELL]):
+def find_nearest_free(grid, target, neighborhood='moore', traversable_types = (OG_FREE_CELL,)):
     """
     Trouve la case libre la plus proche du point cible via BFS.
     
@@ -153,7 +128,7 @@ def find_nearest_free(grid, target, neighborhood='moore', traversable_types = [O
     return None  # aucune case libre trouvée
 
 
-def cluster_frontier_cells(grid, frontier_cells, vision_range, traversable_types = [OG_FREE_CELL]):
+def cluster_frontier_cells(grid, frontier_cells, vision_range, traversable_types = (OG_FREE_CELL,)):
     """
     Cluster frontier cells into groups considering walls and vision range.
 
@@ -165,53 +140,51 @@ def cluster_frontier_cells(grid, frontier_cells, vision_range, traversable_types
     Returns:
     - cluster_centers: List of cluster center coordinates.
     """
-    def is_within_range(cell1, cell2, vision_range):
-        """Check if two cells are within the vision range."""
-        return np.linalg.norm(np.array(cell1) - np.array(cell2)) <= vision_range
+    cells = np.asarray(frontier_cells)
+    traversable = np.isin(grid, traversable_types)
 
-    def is_path_clear(grid, start, end):
+    def distances_from(index):
+        return np.sqrt(((cells - cells[index]) ** 2).sum(1))
+
+    def is_path_clear(start, end):
         """Check if there is a clear path between start and end cells."""
-        rr, cc = zip(start, end)
-        cells_between = zip(np.linspace(rr[0], rr[1], num=max(abs(rr[0]-rr[1]), abs(cc[0]-cc[1]))+1, dtype=int),
-                            np.linspace(cc[0], cc[1], num=max(abs(rr[0]-rr[1]), abs(cc[0]-cc[1]))+1, dtype=int))
-        for cell in cells_between:
-            if not (grid[cell] in traversable_types):
-                return False
-        return True
+        num = max(abs(start[0]-end[0]), abs(start[1]-end[1])) + 1
+        rows = np.linspace(start[0], end[0], num=num, dtype=int)
+        cols = np.linspace(start[1], end[1], num=num, dtype=int)
+        return traversable[rows, cols].all()
 
-    def form_clusters(frontier_cells, vision_range):
+    def form_clusters():
         """Form clusters based on vision range and walls."""
         clusters = []
-        visited = set()
+        visited = np.zeros(len(cells), dtype=bool)
 
-        for cell in frontier_cells:
-            if tuple(cell) not in visited:
-                cluster = [cell]
-                visited.add(tuple(cell))
-                stack = [cell]
+        for first in range(len(cells)):
+            if visited[first]:
+                continue
+            cluster = [first]
+            visited[first] = True
+            stack = [first]
 
-                while stack:
-                    current_cell = stack.pop()
-                    for other_cell in frontier_cells:
-                        if tuple(other_cell) not in visited and is_within_range(current_cell, other_cell, vision_range):
-                            # Check if there is a direct path not blocked by walls
-                            if is_path_clear(grid, current_cell, other_cell):
-                                # Ensure the new cell is within vision range of all cells in the cluster
-                                if all(is_within_range(other_cell, c, vision_range) for c in cluster):
-                                    cluster.append(other_cell)
-                                    visited.add(tuple(other_cell))
-                                    stack.append(other_cell)
+            while stack:
+                current = stack.pop()
+                candidates = np.flatnonzero((distances_from(current) <= vision_range) & ~visited)
+                for other in candidates:
+                    if visited[other]:
+                        continue
+                    if is_path_clear(cells[current], cells[other]) and (distances_from(other)[cluster] <= vision_range).all():
+                        cluster.append(other)
+                        visited[other] = True
+                        stack.append(other)
 
-                clusters.append(cluster)
+            clusters.append(cells[cluster])
 
         return clusters
 
-    clusters = form_clusters(frontier_cells, vision_range)
-    #cluster_centers = [np.mean(cluster, axis=0) for cluster in clusters]
+    clusters = form_clusters()
     cluster_centers = []
     for i in range(len(clusters)) :
         cluster_center = np.round(np.mean(clusters[i], axis=0))
-        if not(grid[int(cluster_center[0]), int(cluster_center[1])] in(traversable_types)): #si le baricentre est dans un obstacle, alors on prends juste une des case frontières.
+        if not(grid[int(cluster_center[0]), int(cluster_center[1])] in(traversable_types)): # barycenter inside an obstacle: use a random frontier cell instead
             index = random.randint(0, len(clusters[i])-1 )
             cluster_centers.append(clusters[i][index])
         else:
@@ -219,7 +192,7 @@ def cluster_frontier_cells(grid, frontier_cells, vision_range, traversable_types
 
     return np.round(cluster_centers)
 
-def wavefront_propagation_algorithm(grid, self_position, robot_positions, frontier_clusters, weight_of_closer_robots = 10, traversable_types = [OG_FREE_CELL]):
+def wavefront_propagation_algorithm(grid, self_position, robot_positions, frontier_clusters, weight_of_closer_robots = 10, traversable_types = (OG_FREE_CELL,)):
     """
     Perform wavefront propagation from frontiers clusters (also works with simple frontiers) to determine their score depending on it's distance and the robots closer to the one computing this algorithm.
 
@@ -252,6 +225,8 @@ def wavefront_propagation_algorithm(grid, self_position, robot_positions, fronti
             if(len(queue) == 0):
                 queue = next_queue
                 next_queue = []
+                if len(queue) == 0:
+                    return np.inf, robots_touched
             #add 1 distance at each propagations
             frontier_distance_score += 1
 
@@ -300,7 +275,7 @@ def heuristic(a, b):
     """
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
-def a_star_search(grid, start, goal, traversable_types = [OG_FREE_CELL]):
+def a_star_search(grid, start, goal, traversable_types = (OG_FREE_CELL,)):
     """
     A star search algorithm\\
     parameters:
@@ -312,49 +287,32 @@ def a_star_search(grid, start, goal, traversable_types = [OG_FREE_CELL]):
     - A list of tuples representing the path from the start to the goal, or None if no path is found.
     """
     rows, cols = grid.shape
-    open_set = []
-
-    # Push the start cell into the priority queue with a cost of 0
-    heapq.heappush(open_set, (0, start))    
-    came_from = {} # Dictionary to keep track of the path
-
-    # Dictionary to store the cost of the cheapest path to each cell
+    passable_types = set(traversable_types) | {OG_UNKNOWN_CELL}
+    open_set = [(0, start)]
+    came_from = {}
     g_score = {start: 0}
 
-    # Dictionary to store the estimated total cost to reach the goal from each cell
-    f_score = {start: heuristic(start, goal)}
-
     while open_set:
-        current = heapq.heappop(open_set)[1]  # Pop the cell with the lowest f_score value
+        current = heapq.heappop(open_set)[1]
 
-        # If the goal is reached, reconstruct and return the path
         if current == goal:
             return reconstruct_path(came_from, current)
 
-        # Iterate over the neighbors of the current cell
         for neighbor in get_direct_neighbors(current, rows, cols):
-            # Calculate the tentative g_score for the neighbor
             tentative_g_score = g_score[current] + 1
 
-            # Skip obstacle cells
-            # if grid[neighbor] == 1 or grid[neighbor] == -1:
-            if not (grid[neighbor] in traversable_types or grid[neighbor]==OG_UNKNOWN_CELL): #if it's an obstacle:
+            if grid[neighbor] not in passable_types:
                 continue
 
-            # If the neighbor is not in g_score or the tentative g_score is lower, update the scores
             if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g_score
-                f_score[neighbor] = tentative_g_score + heuristic(neighbor, goal)
+                heapq.heappush(open_set, (tentative_g_score + heuristic(neighbor, goal), neighbor))
 
-                # Push the neighbor into the priority queue with the updated f_score
-                heapq.heappush(open_set, (f_score[neighbor], neighbor))
-
-    # If the open set is empty and the goal was not reached, return None
     return None
 
 
-def a_star_cost(grid, start, goal, env_ease, traversable_types=[OG_FREE_CELL]):
+def a_star_cost(grid, start, goal, env_ease, traversable_types=(OG_FREE_CELL,)):
     """
     this function will calculate a a* cost from a goal point, and will then return the cost to go to this point
     """
@@ -367,9 +325,8 @@ def a_star_cost(grid, start, goal, env_ease, traversable_types=[OG_FREE_CELL]):
                 current_cell_type_name = list(ENV_CELL_TYPES.keys())[list(ENV_CELL_TYPES.values()).index(pvalue)] #return the string name of the env type
                 costs.append( 1/(env_ease[current_cell_type_name]+1e-8) ) #we make a cost for the cell only
             else:
-                p = costs.append(1) #p will be equal to 1 if we don't know it's value, permitting exploration
-        #then we sum all the costs to get a final cost
-        cost = np.sum(costs) #TODO check if that works
+                costs.append(1) # unknown cell costs 1, permitting exploration
+        cost = np.sum(costs)
     else:
         cost = np.inf
     return cost
@@ -388,9 +345,8 @@ def get_direct_neighbors(cell, width, height):
     - A list of tuples representing the valid neighbors cells.
     """
     neighbors = []
-    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # Up, Down, Left, Right
 
-    for direction in directions:
+    for direction in DIRECTIONS:
         neighbor = (cell[0] + direction[0], cell[1] + direction[1])
         if 0 <= neighbor[0] < width and 0 <= neighbor[1] < height:
             neighbors.append(neighbor)
@@ -424,13 +380,16 @@ def euclidian_distance(point1,point2):
     return : 
     - euclidian_distance:float
     """
-    return np.sqrt((point1[0]-point2[0])**2+(point1[1]-point2[1])**2)
+    dx = point1[0]-point2[0]
+    dy = point1[1]-point2[1]
+    if isinstance(dx, np.ndarray) or isinstance(dy, np.ndarray):
+        return np.sqrt(dx*dx+dy*dy)
+    return math.sqrt(dx*dx+dy*dy)
 
-def manhathan_distance(point1, point2):
-    return np.absolute(point1[0]-point2[0])+np.absolute(point1[1]-point2[1])
+manhathan_distance = heuristic
 
 
-def heuristic_frontier_distance(start, goal, grid, traversable_types = [OG_FREE_CELL]):
+def heuristic_frontier_distance(start, goal, grid, traversable_types = (OG_FREE_CELL,)):
     """
     Calculate a heuristic distance by considering obstacles.
 
@@ -473,11 +432,11 @@ def simple_clustering(coordinates, max_distance):
         unvisited.remove(start_point)
 
         # Trouver tous les points à une distance inférieure ou égale à max_distance
-        queue = [start_point]
+        queue = deque([start_point])
         cluster = []
 
         while queue:
-            point_idx = queue.pop(0)
+            point_idx = queue.popleft()
             cluster.append(point_idx)
 
             for unvisited_point in list(unvisited):

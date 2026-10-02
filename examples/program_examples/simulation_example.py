@@ -1,3 +1,4 @@
+import os
 from RAPID.Environment import Environment, TargetPointEnvironment, ExplorationEnvironment
 from RAPID import Agents
 
@@ -13,13 +14,13 @@ SCREEN_WIDTH = 100
 SCREEN_HEIGHT = 100
 BACKGROUND_COLOR = (200, 200, 200)
 
-ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/examples/env_images_example/labyrinth_100_100.png"# CHANGE THE PATH
-#ENV_IMAGE_PATH = "/home/erwan/Documents/RAPID/tests/test_envs/large_indoor_half1.png"# CHANGE THE PATH
+ENV_IMAGE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "env_images_example", "labyrinth_100_100.png")# CHANGE THE PATH
+#ENV_IMAGE_PATH = "path/to/large_indoor_half1.png"# CHANGE THE PATH
 
-#video_saving_path = "/home/erwan/Documents/RAPID/tests/records/4grounds_lowcom/"
+#video_saving_path = "path/to/records/4grounds_lowcom/"
 video_saving_path = None
 
-NB_GROUND_AGENTS = 4
+NB_GROUND_AGENTS = 12
 NB_AERIAL_AGENTS = 0
 
 #cave
