@@ -1,6 +1,6 @@
 from ..utils import *
 
-def ai_action_selection(selfrobot): 
+def ai_action_selection(selfrobot, adaptation_delay = 10, selections_buffer_time=100): 
     #reshape importance of communication depending of the time from last communication:
     #print(f"robot {self.robot_id} : last com : {self.time_from_last_communication}")
 
@@ -8,7 +8,12 @@ def ai_action_selection(selfrobot):
 
     
     # TODO :  bien mettre un délai pour les iteration d'adaptation des parametres...... ADAPTATION_DELAY
-    importance_online_configuraton(selfrobot)
+    if "last_adaptation" not in selfrobot.__dict__.keys():
+        selfrobot.last_adaptation = 0
+
+    if selfrobot.env.step - adaptation_delay >= selfrobot.last_adaptation:
+        importance_online_configuraton(selfrobot)
+        selfrobot.last_adaptation = selfrobot.env.step
 
     #selfrobot.check_communication_importance()
 
@@ -49,9 +54,9 @@ def ai_action_selection(selfrobot):
     robots_pos_list = [] #list of float xy position of all robots
     for robot_id in selfrobot.belief_space["robot_informations"]:
         if robot_id != selfrobot.robot_id and selfrobot.belief_space["robot_informations"][robot_id]["status"]!= "finishing":  # ComImportance : est ce que je ferais pas un truc spécifique aux robots?
-            if selfrobot.communication_range*3/selfrobot.max_speed.x <= selfrobot.env.step - selfrobot.belief_space["robot_informations"][robot_id]["step"] < 4 * ( np.max(selfrobot.belief_space["occupancy_grid"].shape)/selfrobot.max_speed.x ) : #time = dist/speed
-                if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) ,selfrobot.belief_space["robot_informations"][robot_id]["position"]) >=  selfrobot.competences["communication"]["distance_treshold"]:
-                    robots_pos_list.append(selfrobot.belief_space["robot_informations"][robot_id]["position"])
+            #if selfrobot.communication_range*3/selfrobot.max_speed.x <= selfrobot.env.step - selfrobot.belief_space["robot_informations"][robot_id]["step"] < 4 * ( np.max(selfrobot.belief_space["occupancy_grid"].shape)/selfrobot.max_speed.x ) : #time = dist/speed
+            if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) ,selfrobot.belief_space["robot_informations"][robot_id]["position"]) >=  selfrobot.competences["communication"]["distance_treshold"]:
+                robots_pos_list.append(selfrobot.belief_space["robot_informations"][robot_id]["position"])
         if len(robots_pos_list)>0:
             if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) , selfrobot.last_given_position) >=  selfrobot.competences["communication"]["distance_treshold"]:
                     robots_pos_list.append(selfrobot.last_given_position)# TODO ComInfo, la last given position, c'est a double trnchant, je sais pas trop
@@ -188,47 +193,97 @@ def ai_action_selection(selfrobot):
     
     #action perform
     if best_action != None:
+        # First, we make the robot do the action by setting target and/or action to perform
         selfrobot.action_to_perform = best_action
         selfrobot.target = (int(selfrobot.action_to_perform["coordinates"][0]), int(selfrobot.action_to_perform["coordinates"][1]))
         selfrobot.last_plan_time = selfrobot.env.step
+
+        if "selections_buffer" not in selfrobot.belief_space: #tehn we update the selections buffer to keep a track of what the robot did choose the last k steps -> useful for adaptation
+            selfrobot.belief_space.update({"selections_buffer":{selfrobot.env.step:best_action["type"]}})
+        else:
+            selfrobot.belief_space["selections_buffer"].update({selfrobot.env.step:best_action["type"]})
+            times = list(selfrobot.belief_space["selections_buffer"].keys())
+            for time in times:
+                if (selfrobot.env.step - time) > selections_buffer_time:
+                    del selfrobot.belief_space["selections_buffer"][time] #we remove the element n the buffer only it's too old for te settled selections buffer time.
     else:
         print("problem")
 
     print("-----")
-    print(selfrobot.action_to_perform)
-    print((int(selfrobot.transform.x), int(selfrobot.transform.y)))
+    print(f"ROBOT : {selfrobot.robot_id}")
+    #print(selfrobot.action_to_perform)
+    #print((int(selfrobot.transform.x), int(selfrobot.transform.y)))
+    if "old_satisfactions" in selfrobot.belief_space.keys():
+        print(f"SATISFACTIONS {selfrobot.belief_space["old_satisfactions"]}")
+    print(f"IMPORTANCES : communication : {selfrobot.competences["communication"]["importance"]} | | Exploration : {selfrobot.competences["exploration"]["importance"]}")
+    #print(selfrobot.belief_space["selections_buffer"])
     print("-----")
 
 
 def importance_online_configuraton(selfrobot):
-    #TODO Faire une satisfaction de la completion de la tache???
 
     if not("old_G_satisfaction" in selfrobot.belief_space): #INIT the global satisfaction and satisfactions
         selfrobot.belief_space.update({"old_G_satisfaction":0})
         selfrobot.belief_space.update({"old_satisfactions":{}})
+        selfrobot.belief_space.update({"best_satisfactions":{}})
+
 
     satisfactions = {}
     G_satisfaction = 0
-    for task_type in selfrobot.competences:
+    for task_type in selfrobot.competences: #Global satisfaction reward loop
         task_satisfaction = selfrobot.competences[task_type]["satisfaction_calculation"](selfrobot)
         satisfactions.update({task_type: task_satisfaction})
-
-        G_satisfaction += task_satisfaction
+        if task_type in selfrobot.belief_space["best_satisfactions"].keys():
+            if task_satisfaction > selfrobot.belief_space["best_satisfactions"][task_type]: #if we have the best satisf, we update
+                 selfrobot.belief_space["best_satisfactions"].update({task_type:task_satisfaction})
+        else:
+            selfrobot.belief_space["best_satisfactions"].update({task_type:task_satisfaction}) #if the task doesnt exist yet in the dict
+            selfrobot.belief_space["old_satisfactions"].update({task_type:0})
+        G_satisfaction += task_satisfaction + (satisfactions[task_type] - selfrobot.belief_space["best_satisfactions"][task_type]) # test gap
     G_reward = G_satisfaction - selfrobot.belief_space["old_G_satisfaction"]
 
-    if G_reward <=0:
-        pass
-        for task_type in selfrobot.competences:
-            capability = selfrobot.competences[task_type]["capability"] #same, doesnt change
-            distance_treshold = selfrobot.competences[task_type]["distance_treshold"]
 
-            taskreward = satisfactions[task_type] - selfrobot.belief_space["old_satisfactions"][task_type]
-            if taskreward<= 0:
-                importance = selfrobot.competences[task_type]["importance"] + (abs(G_reward)+ abs(taskreward))
-                selfrobot.shape_competence("communication", capability=capability , importance=importance, distance_treshold=distance_treshold)
-            else:
-                importance = selfrobot.competences[task_type]["importance"] - (abs(G_reward) ) #+ abs(taskreward)
-                selfrobot.shape_competence("communication", capability=capability , importance=importance, distance_treshold=distance_treshold)
+    for task_type in selfrobot.competences:
+        capability = selfrobot.competences[task_type]["capability"] #same, doesnt change
+        distance_treshold = selfrobot.competences[task_type]["distance_treshold"] #same, doesnt change
+
+        actions = list(selfrobot.belief_space["selections_buffer"].values()) #TODO, faire le count et ratio d'occupations
+        # print(f"ACTIOOOONS : {actions}")
+        # print(task_type)
+        ratio_task_occ = actions.count(task_type) / len(actions)
+        
+
+        taskreward = (satisfactions[task_type] - selfrobot.belief_space["old_satisfactions"][task_type]) #+ (satisfactions[task_type] - selfrobot.belief_space["best_satisfactions"][task_type])
+        #print(f"TASK TYPE OCC : {ratio_task_occ}")
+        if (ratio_task_occ <= 0.4) and (taskreward<=0):
+            #importance = selfrobot.competences[task_type]["importance"] + (abs(G_reward)+ abs(taskreward))
+            importance = np.clip(selfrobot.competences[task_type]["importance"] + 0.1, 0, 1)
+            selfrobot.shape_competence(task_type, capability=capability , importance=importance, distance_treshold=distance_treshold)
+        #elif ((ratio_task_occ >=0.8)  and (taskreward > 0 or satisfactions[task_type]>0.5)):
+        elif (ratio_task_occ >0.7)  or (taskreward > 0):
+            #importance = selfrobot.competences[task_type]["importance"] - (abs(G_reward) ) #+ abs(taskreward)
+            importance = np.clip(selfrobot.competences[task_type]["importance"] - 0.1, 0, 1)
+            selfrobot.shape_competence(task_type, capability=capability , importance=importance, distance_treshold=distance_treshold)
+    #BACKUP
+    # if G_reward <=0:
+    #     print("AAAAAAAAAAAAAAAAAAAAAAAAAa")
+    #     for task_type in selfrobot.competences:
+    #         capability = selfrobot.competences[task_type]["capability"] #same, doesnt change
+    #         distance_treshold = selfrobot.competences[task_type]["distance_treshold"] #same, doesnt change
+
+    #         actions = list(selfrobot.belief_space["selections_buffer"].values()) #TODO, faire le count et ratio d'occupations
+    #         ratio_task_occ = np.count_nonzero(actions==task_type) / len(actions)
+            
+
+    #         taskreward = (satisfactions[task_type] - selfrobot.belief_space["old_satisfactions"][task_type]) #+ (satisfactions[task_type] - selfrobot.belief_space["best_satisfactions"][task_type])
+    #         if taskreward<= 0:
+    #             #importance = selfrobot.competences[task_type]["importance"] + (abs(G_reward)+ abs(taskreward))
+    #             importance = selfrobot.competences[task_type]["importance"] + 0.1
+    #             selfrobot.shape_competence(task_type, capability=capability , importance=importance, distance_treshold=distance_treshold)
+    #         else:
+    #             #importance = selfrobot.competences[task_type]["importance"] - (abs(G_reward) ) #+ abs(taskreward)
+    #             importance = selfrobot.competences[task_type]["importance"] - 0.1
+    #             selfrobot.shape_competence(task_type, capability=capability , importance=importance, distance_treshold=distance_treshold)
 
     selfrobot.belief_space.update({"old_G_satisfaction": G_satisfaction})
     selfrobot.belief_space.update({"old_satisfactions": satisfactions})
