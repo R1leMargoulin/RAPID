@@ -92,8 +92,8 @@ class Robot(Sprite):
         self.env_ease = _ease(1, 0, 0, 0.4, 0, 0.6)
         self.traversable_types = _traversable_types(self.env_ease)
 
-        self.competences = {"exploration":{"capability": 1, "importance":1, "distance_treshold":0, "dispersion":1},
-                            "communication":{"capability": 1, "importance":1, "distance_treshold":self.communication_range, "dispersion":0}} #to add depending of the case and the robot
+        self.competences = {"exploration":{"capability": 1, "importance":1, "distance_treshold":0, "substituable":True}, 
+                            "communication":{"capability": 1, "importance":1, "distance_treshold":self.communication_range, "substituable":False}} #com is substituable because knowledge cannot be replaced.
     
         #Metrics
         self.total_distance_made = 0.0
@@ -535,7 +535,7 @@ class Robot(Sprite):
         """Method that has to be redefined for each type of robot because they don't have the same movement mechanism."""
         raise NotImplementedError(f"move has to be implemented in {type(self).__name__}")
 
-    def shape_competence(self, type, capability, importance, distance_treshold = 0, dispersion = 1):
+    def shape_competence(self, type, capability, importance, distance_treshold = 0, substituable = True):
         """
         Shape the competence for a robot
         
@@ -543,9 +543,9 @@ class Robot(Sprite):
         :param capability: Float [0,1], measure how the robot is capable of performing the action of the given type
         :param importance: Float, Measure the perception of the robot of the importance of the given task type
         :param distance_treshold: distance where the robot will be able to detect the task, for example in communication, we don't want to take into account robots in range. default 0
-        :param dispersion: Not currently used, may be removed soon TODO
+        :param substituable: Boolean : Can another robot carry this kind of tasks (default : True)
         """
-        self.competences.update({type:{"capability": capability, "importance":importance, "distance_treshold":distance_treshold, "dispersion":dispersion}})
+        self.competences.update({type:{"capability": capability, "importance":importance, "distance_treshold":distance_treshold, "substituable":substituable}})
     
     def perform_target_action(self):
         """simulate an artifact action with an interaction."""

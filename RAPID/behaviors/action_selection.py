@@ -42,17 +42,19 @@ def action_selection(selfrobot):
     robots_pos_list = [] #list of float xy position of all robots
     for robot_id in selfrobot.belief_space["robot_informations"]:
         if robot_id != selfrobot.robot_id and selfrobot.belief_space["robot_informations"][robot_id]["status"]!= "finishing":  # ComImportance : est ce que je ferais pas un truc spécifique aux robots?
-            if selfrobot.communication_range*3/selfrobot.max_speed.x <= selfrobot.env.step - selfrobot.belief_space["robot_informations"][robot_id]["step"] < 4 * ( np.max(selfrobot.belief_space["occupancy_grid"].shape)/selfrobot.max_speed.x ) : #time = dist/speed
+            if selfrobot.communication_range*3/selfrobot.max_speed.x <= selfrobot.env.step - selfrobot.belief_space["robot_informations"][robot_id]["step"] < 6 * ( np.max(selfrobot.belief_space["occupancy_grid"].shape)/selfrobot.max_speed.x ) : #time = dist/speed
+            #if selfrobot.env.step - selfrobot.belief_space["robot_informations"][robot_id]["step"] < 6 * ( np.max(selfrobot.belief_space["occupancy_grid"].shape)/selfrobot.max_speed.x ) : #time = dist/speed
                 if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) ,selfrobot.belief_space["robot_informations"][robot_id]["position"]) >=  selfrobot.competences["communication"]["distance_treshold"]:
                     robots_pos_list.append(selfrobot.belief_space["robot_informations"][robot_id]["position"])
     if len(robots_pos_list)>0:
         if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) , selfrobot.last_given_position) >=  selfrobot.competences["communication"]["distance_treshold"]:
             robots_pos_list.append(selfrobot.last_given_position)# TODO ComInfo, la last given position, c'est a double trnchant, je sais pas trop
 
-    communication_clusters = simple_clustering(robots_pos_list, selfrobot.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
-    for cc in communication_clusters:
-            interest_points.append({"type":"communication","coordinates":cc, "needed_robots":1})#adding those clusters in the communication points
-            #TODO MultiRobotTask : try different values of needed robots
+    #communication_clusters = simple_clustering(robots_pos_list, selfrobot.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
+    #for cc in communication_clusters:
+    for cc in robots_pos_list:
+        interest_points.append({"type":"communication","coordinates":cc, "needed_robots":1})#adding those clusters in the communication points
+        #TODO MultiRobotTask : try different values of needed robots
 
 
     #--------------------------------------        
@@ -67,7 +69,7 @@ def action_selection(selfrobot):
     best_action = None
     best_weighted_utility = -np.inf
     for ip in interest_points:
-        weighted_utility = ip["utility"] * selfrobot.competences[ip["type"]]["importance"]
+        weighted_utility = ip["utility"] * selfrobot.competences[ip["type"]]["importance"] #alpha
 
         if weighted_utility >= best_weighted_utility:
             best_weighted_utility = weighted_utility
@@ -108,8 +110,8 @@ def compute_utilities(selfrobot, interest_points):
         capability = selfrobot.competences[ip["type"]]["capability"]
         individual_utility = capability/costs[0][n]
 
-        if single_robot:
-            other_values = [1.0]
+        if single_robot or selfrobot.competences[ip["type"]]["substituable"]==False :
+            other_values = [1/selfrobot.env.width]
         else:
             other_values = []
             for k, robot in enumerate(others, start=1):
@@ -170,6 +172,7 @@ def reshape_com_importance_for_action_selection(selfrobot, mode="default"):
         raise ValueError(f"incorrect importance com mode in agent {selfrobot.robot_id}")
 
     capability = selfrobot.competences["communication"]["capability"]
+    substituable = selfrobot.competences["communication"]["substituable"]
     distance_treshold = selfrobot.communication_range 
 
     longest_infotime = 0
@@ -183,7 +186,7 @@ def reshape_com_importance_for_action_selection(selfrobot, mode="default"):
 
     com_time = longest_infotime #longest synchro from every robots synchro time # ComImportance
     importance = COM_IMPORTANCE_MODES[mode](selfrobot, com_time)
-    selfrobot.shape_competence("communication", capability=capability , importance=importance, distance_treshold=distance_treshold)
+    selfrobot.shape_competence("communication", capability=capability , importance=importance, distance_treshold=distance_treshold, substituable=substituable)
 
 
 def _rule_based_importance(selfrobot, com_time):
