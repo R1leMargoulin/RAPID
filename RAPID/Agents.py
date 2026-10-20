@@ -9,7 +9,7 @@ from .utils import Transform2d, a_star_search, euclidian_distance, DIRECTIONS
 from .grid_variables import (ENV_CELL_TYPES, ENV_CELL_TYPE_NAMES, BLOCKING_SENSOR_TYPES, OG_UNKNOWN_CELL, OG_FREE_CELL_GROUP_NAME,
                              OG_WALL_GROUP_NAME, OG_HIGH_WALL_GROUP_NAME, OG_SAND_GROUP_NAME,
                              OG_WATER_GROUP_NAME, OG_GRASS_GROUP_NAME)
-from .behaviors import action_selection, local_frontier, rendezvous, minpos, nearest_frontier, random_wiggle
+from .behaviors import action_selection, local_frontier, rendezvous, minpos, nearest_frontier, random_wiggle, alpha_adapt_action_selection
 
 
 import numpy as np
@@ -531,6 +531,18 @@ class Robot(Sprite):
         # self.target = None
         # self.path_to_target = None
 
+    def confidence_estimation(self):
+        """
+        Confidence estiomation regarding beliefs, depending on the last sync time with pairs.
+        """
+        if len(self.belief_space["robot_informations"].keys())>1:
+            infotimes = [self.belief_space["last_infos_matrix"][self.robot_id][i] for i in self.belief_space["last_infos_matrix"] if i!= self.robot_id]
+            mean_infotime = np.mean(infotimes)
+
+            return float(mean_infotime/self.env.step)
+        else:
+            return 1
+
     def move(self, vector_x, vector_y):
         """Method that has to be redefined for each type of robot because they don't have the same movement mechanism."""
         raise NotImplementedError(f"move has to be implemented in {type(self).__name__}")
@@ -627,6 +639,7 @@ class Ground(Robot):
         "local_frontier": local_frontier.local_frontier,
         "action_selection": action_selection.action_selection,
         "rendezvous": rendezvous.rendezvous,
+        "alpha_adapt_action_selection": alpha_adapt_action_selection.alpha_adapt_action_selection
     }
 
     def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False, graph_mode=False, graph_delta=50):
@@ -667,6 +680,7 @@ class Aerial(Robot):
         "minpos": minpos.minpos,
         "local_frontier": local_frontier.local_frontier,
         "action_selection": action_selection.action_selection,
+        "alpha_adapt_action_selection": alpha_adapt_action_selection.alpha_adapt_action_selection
     }
     def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False, graph_mode=False, graph_delta=50):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs, graph_mode=graph_mode, graph_delta=graph_delta)
