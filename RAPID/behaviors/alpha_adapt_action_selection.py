@@ -83,13 +83,17 @@ def alpha_adapt_action_selection(selfrobot):
         selfrobot.target = (int(selfrobot.action_to_perform["coordinates"][0]), int(selfrobot.action_to_perform["coordinates"][1]))
         selfrobot.last_plan_time = selfrobot.env.step
 
-        #Reduction du delta, l'action ayant ete choisie
+        #Reduction du delta arbitraire (TODO changer ca apres), l'action ayant ete choisie
+        DELTA_ALPHA=0.1
         atype = selfrobot.action_to_perform["type"]
-        newimportance = np.maximum(selfrobot.competences[atype]["importance"] - 0.1, 0) #delta=0.1, dur pour le moment
+        newimportance = np.maximum(selfrobot.competences[atype]["importance"] - DELTA_ALPHA, 0)
         selfrobot.shape_competence(atype, capability=selfrobot.competences[atype]["capability"], importance=newimportance , distance_treshold = selfrobot.competences[atype]["distance_treshold"], substituable = selfrobot.competences[atype]["substituable"])
-        #TODO descendre l'alpha de delta (0.1)
+
     else:
         return_home_or_finish(selfrobot, set_finishing_status=True)
+
+    print(f"step {selfrobot.env.step} robot {selfrobot.robot_id} at position ({int(selfrobot.transform.x)},{int(selfrobot.transform.y)}) performing {selfrobot.action_to_perform}")
+    print(selfrobot.competences)
 
 
 def kth_largest(sorted_desc, k):
@@ -217,17 +221,14 @@ def importances_reallocation(selfrobot):
 
     for type in selfrobot.competences:
         proportion_demande = (demandes_restantes[type]/sum_demandes)
-        new_importance = proportion_demande * manque_imp #TODO : A VOIR parce que la confiance set a rien vu qu'elle est prise en compte avant le calcul des proportions.
+        new_importance = selfrobot.competences[type]["importance"] + (proportion_demande * manque_imp) #TODO : A VOIR parce que la confiance set a rien vu qu'elle est prise en compte avant le calcul des proportions.
+        clipped_new_importance = np.clip(new_importance, 0, 1)
 
         selfrobot.shape_competence(type, 
                                    capability=selfrobot.competences[type]["capability"] , 
-                                   importance=new_importance, 
+                                   importance=clipped_new_importance, 
                                    distance_treshold=selfrobot.competences[type]["distance_treshold"], 
                                    substituable=selfrobot.competences[type]["substituable"])
-    print(f"robot {selfrobot.robot_id} :")
-    print(sum_importances)
-    print(selfrobot.competences)
-    print("--------------------")
 
 
     

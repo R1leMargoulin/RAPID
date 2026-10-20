@@ -547,7 +547,7 @@ class Robot(Sprite):
         """Method that has to be redefined for each type of robot because they don't have the same movement mechanism."""
         raise NotImplementedError(f"move has to be implemented in {type(self).__name__}")
 
-    def shape_competence(self, type, capability, importance, distance_treshold = 0, substituable = True):
+    def shape_competence(self, type, capability, importance, distance_treshold = None, substituable = None):
         """
         Shape the competence for a robot
         
@@ -557,6 +557,18 @@ class Robot(Sprite):
         :param distance_treshold: distance where the robot will be able to detect the task, for example in communication, we don't want to take into account robots in range. default 0
         :param substituable: Boolean : Can another robot carry this kind of tasks (default : True)
         """
+        if type in self.competences:
+            if distance_treshold == None:
+                distance_treshold = self.competences[type]["distance_treshold"]
+            if substituable == None:
+                substituable = self.competences[type]["substituable"]
+        else:
+            if distance_treshold == None:
+                distance_treshold = 0
+            if substituable == None:
+                substituable = True
+
+
         self.competences.update({type:{"capability": capability, "importance":importance, "distance_treshold":distance_treshold, "substituable":substituable}})
     
     def perform_target_action(self):
