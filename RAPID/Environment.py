@@ -16,10 +16,11 @@ import logging
 import time
 
 COMMUNICATION_MODE_LIST = ["blackboard", "limited"]
+DASHBOARD_MODES = ["importances", "tasks", "knowledge", "terminal"]
 
 
 class Environment():
-    def __init__(self, render = True, width:int=100, height:int=100, background_color = (200,200,200), caption = f'RAPID', env_image:Image.Image = None, full_knowledge:bool=True, robot_block = True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, save_img_steps = None, verbose = True):
+    def __init__(self, render = True, width:int=100, height:int=100, background_color = (200,200,200), caption = f'RAPID', env_image:Image.Image = None, full_knowledge:bool=True, robot_block = True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, save_img_steps = None, verbose = True, display_dashboard:bool=False, dashboard_mode:str="importances", dashboard_period:int=10):
         """
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         Params : 
@@ -38,9 +39,19 @@ class Environment():
         - communication_reliability: float in [0,1] = Probability for the agents to be communication neighbors when they are in communication range.
         - save_img_steps: String = if not None, image of the simulation will be saved in the string path given
         - verbose:bool = print the step counter during the simulation.
+        - display_dashboard:bool = (default False) display a dashboard of the robots (see RAPID/dashboard.py). Read-only: does not change the simulation.
+        - dashboard_mode:str = in ["importances", "tasks", "knowledge", "terminal"] : what the dashboard displays.
+        - dashboard_period:int = (default 10) a snapshot is sent to the dashboard every dashboard_period steps.
         """
         self.render = render
         self.verbose = verbose
+
+        if dashboard_mode not in DASHBOARD_MODES:
+            raise ValueError(f"unknown dashboard mode '{dashboard_mode}', available modes : {DASHBOARD_MODES}")
+        self.display_dashboard = display_dashboard
+        self.dashboard_mode = dashboard_mode
+        self.dashboard_period = dashboard_period
+        self.dashboard = None
 
         pygame.init()
 
@@ -101,6 +112,9 @@ class Environment():
     def run(self):
         """Runs the simulation"""
         self.start_time = time.time()
+        if self.display_dashboard:
+            from .dashboard import Dashboard #lazy import : matplotlib is never imported by the simulator process
+            self.dashboard = Dashboard(self, mode=self.dashboard_mode, period=self.dashboard_period)
         while self.running:
             # check user input events
             for event in pygame.event.get():
@@ -112,6 +126,8 @@ class Environment():
             #will update all agents in the self.agents object
             self.step += 1
             self.update()
+            if self.dashboard is not None:
+                self.dashboard.tick()
 
             if self.render:
                 # draw all changes to the screen
@@ -121,11 +137,13 @@ class Environment():
                 print(f"goal not reach in the limited number of steps. srop at {self.step}")
                 self.running = False
             
-            if self.verbose:
+            if self.verbose and not (self.dashboard is not None and self.dashboard.mode == "terminal"):
                 print(f"step : {self.step}", end="\r")
         
 
 
+        if self.dashboard is not None:
+            self.dashboard.close()
         pygame.quit()
 
     def update(self):
@@ -277,7 +295,7 @@ class Environment():
     
 
 class TargetPointEnvironment(Environment):
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, scaling_factor:int=1, communication_mode="blackboard", target_point:tuple[int,int]=None, amount_of_agents_goal=1, save_img_steps = None, verbose = True, end_at_full_exploation=True, full_knowledge=True, robot_block=True, communication_reliability=1):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation_target_point', env_image = None, limit_of_steps = None, scaling_factor:int=1, communication_mode="blackboard", target_point:tuple[int,int]=None, amount_of_agents_goal=1, save_img_steps = None, verbose = True, end_at_full_exploation=True, full_knowledge=True, robot_block=True, communication_reliability=1, display_dashboard:bool=False, dashboard_mode:str="importances", dashboard_period:int=10):
         """"
         Environment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         In this Environment, the Agents has to reach a target point in order to complete the mission.
@@ -301,7 +319,7 @@ class TargetPointEnvironment(Environment):
         """
         self.end_at_full_exploation = end_at_full_exploation
 
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge=full_knowledge, robot_block=robot_block, limit_of_steps=limit_of_steps, scaling_factor=scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps, verbose=verbose)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge=full_knowledge, robot_block=robot_block, limit_of_steps=limit_of_steps, scaling_factor=scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps, verbose=verbose, display_dashboard=display_dashboard, dashboard_mode=dashboard_mode, dashboard_period=dashboard_period)
         if target_point :
             self.init_target_point(x=target_point[0], y=target_point[1])
         else : #s'il n'y a pas de target point, on en génère un aléatoirement:
@@ -358,8 +376,8 @@ class FogEnvironment(Environment):
     Base class of the environments where the agents progressively uncover an exploration map.\\
     Subclasses define goal_condition(); the simulation ends on the goal if end_at_goal is True, otherwise when all robots are done.
     """
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_goal = True, save_img_steps = None, verbose = True):
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps, verbose=verbose)
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_goal = True, save_img_steps = None, verbose = True, display_dashboard:bool=False, dashboard_mode:str="importances", dashboard_period:int=10):
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, save_img_steps=save_img_steps, verbose=verbose, display_dashboard=display_dashboard, dashboard_mode=dashboard_mode, dashboard_period=dashboard_period)
         self.end_at_goal = end_at_goal
 
         self.interest_points["exploration_map"] = np.zeros((self.width, self.height))
@@ -432,7 +450,7 @@ class FogEnvironment(Environment):
 
 
 class ExplorationEnvironment(FogEnvironment):
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, exploration_proportion_goal=0.995, end_at_full_exploation=True, save_img_steps = None, verbose = True):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, exploration_proportion_goal=0.995, end_at_full_exploation=True, save_img_steps = None, verbose = True, display_dashboard:bool=False, dashboard_mode:str="importances", dashboard_period:int=10):
         """
         ExplorationEnvironment Class represents the environment in which the agents are evolving, the user should add agents with the add_agent method before runing the env with the env one.\\
         in this class, there is an exploration map matrix, full of zeros at the beginning of the simulation the goal for agents is to explore all the environment, simulation ends when the matrix is 99% of 1(representing explored cells)\\
@@ -457,7 +475,7 @@ class ExplorationEnvironment(FogEnvironment):
         - exploration_proportion_goal : float in [0,1] = if at least this proportion of the environment is explored, the goal condition of the env will be true.
         - verbose:bool = print the step counter during the simulation.
         """
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, end_at_goal=end_at_full_exploation, save_img_steps=save_img_steps, verbose=verbose)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, end_at_goal=end_at_full_exploation, save_img_steps=save_img_steps, verbose=verbose, display_dashboard=display_dashboard, dashboard_mode=dashboard_mode, dashboard_period=dashboard_period)
 
         self.exploration_proportion_goal = exploration_proportion_goal
         self.exploration_completion = 0.0
@@ -508,14 +526,14 @@ class MineClearingEnvironment(FogEnvironment):
                 return False
 
 
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None, verbose = True):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None, verbose = True, display_dashboard:bool=False, dashboard_mode:str="importances", dashboard_period:int=10):
         """
         MineClearingEnvironment Class : the agents have to clear every mine of the environment (see ExplorationEnvironment for the common params).\\
         Params specific to this class :
         - end_at_full_clear:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when every mine is cleared.
         - fog:bool = currently ignored.
         """
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, end_at_goal=end_at_full_clear, save_img_steps=save_img_steps, verbose=verbose)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, end_at_goal=end_at_full_clear, save_img_steps=save_img_steps, verbose=verbose, display_dashboard=display_dashboard, dashboard_mode=dashboard_mode, dashboard_period=dashboard_period)
 
     def add_mine(self, coords):
         self._add_artifact(self.Mine, "mine", "mine", coords)
@@ -546,14 +564,14 @@ class WasteCleaningEnvironment(FogEnvironment):
                 return False
 
 
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None, verbose = True):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None, verbose = True, display_dashboard:bool=False, dashboard_mode:str="importances", dashboard_period:int=10):
         """
         WasteCleaningEnvironment Class : the agents have to clean every waste of the environment (see ExplorationEnvironment for the common params).\\
         Params specific to this class :
         - end_at_full_clear:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when every waste is cleaned.
         - fog:bool = currently ignored.
         """
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, end_at_goal=end_at_full_clear, save_img_steps=save_img_steps, verbose=verbose)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, end_at_goal=end_at_full_clear, save_img_steps=save_img_steps, verbose=verbose, display_dashboard=display_dashboard, dashboard_mode=dashboard_mode, dashboard_period=dashboard_period)
 
     def add_waste(self, coords):
         self._add_artifact(self.Waste, "waste", "clean", coords)
@@ -585,14 +603,14 @@ class MultiRobotTasksEnvironment(FogEnvironment):
             return super().update(screen)
 
 
-    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None, verbose = True):
+    def __init__(self, render = True, width = 100, height = 100, background_color=(200, 200, 200), caption=f'simulation', env_image = None, full_knowledge = False, robot_block=True, limit_of_steps=None, scaling_factor:int=1, communication_mode="blackboard", communication_reliability = 1, end_at_full_clear = True, fog = True, save_img_steps = None, verbose = True, display_dashboard:bool=False, dashboard_mode:str="importances", dashboard_period:int=10):
         """
         MultiRobotTasksEnvironment Class : the agents have to complete tasks that need several robots at once (see ExplorationEnvironment for the common params).\\
         Params specific to this class :
         - end_at_full_clear:bool(Default True) = if False, the simulation ends when all robots are in the "done" (imdone) state, otherwise, ends when every task is done.
         - fog:bool = currently ignored.
         """
-        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, end_at_goal=end_at_full_clear, save_img_steps=save_img_steps, verbose=verbose)
+        super().__init__(render, width, height, background_color, caption, env_image, full_knowledge, robot_block, limit_of_steps, scaling_factor, communication_mode=communication_mode, communication_reliability=communication_reliability, end_at_goal=end_at_full_clear, save_img_steps=save_img_steps, verbose=verbose, display_dashboard=display_dashboard, dashboard_mode=dashboard_mode, dashboard_period=dashboard_period)
 
     def add_artifact(self, coords, needed_robots=2):
         self._add_artifact(self.MultiRobotArtifact, "multi", "multi_robot_task", coords, needed_robots=needed_robots)

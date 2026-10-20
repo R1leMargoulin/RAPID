@@ -76,3 +76,15 @@ we can see an exploration scenario with a limited range of communication
 ![image](./images/screen_explo.png)
 
 Those images can be found in the **examples/env_images_example** directory.
+
+## Dashboard
+Pass `display_dashboard=True` to an environment (`dashboard_mode`, `dashboard_period=10` snapshot every N steps) to open a read-only dashboard in a separate process. Your script needs an `if __name__ == "__main__":` guard. Example: `examples/program_examples/dashboard_example.py`.
+
+| mode | content |
+|---|---|
+| `importances` | alpha per task type and robot (bars) + alpha(t) of every robot |
+| `tasks` | current task / target / status of each robot + number of robots per task over time |
+| `knowledge` | one map per robot: its belief of the grid, of the other robots (age) and artifacts, target and path |
+| `terminal` | text bars in the terminal, no window |
+
+Keys: `left`/`right` (or `1`-`3`) switch the view, `p` pause display
