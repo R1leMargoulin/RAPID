@@ -84,16 +84,23 @@ def alpha_adapt_action_selection(selfrobot):
         selfrobot.last_plan_time = selfrobot.env.step
 
         #Reduction du delta arbitraire (TODO changer ca apres), l'action ayant ete choisie
-        DELTA_ALPHA=0.1
+
+        
         atype = selfrobot.action_to_perform["type"]
+        satisf = get_task_satisfaction(selfrobot, atype)
+        demande = 1-satisf
+
+        DELTA = 0.05
+        DELTA_ALPHA = np.clip(DELTA/demande, 0, 1)
+
         newimportance = np.maximum(selfrobot.competences[atype]["importance"] - DELTA_ALPHA, 0)
         selfrobot.shape_competence(atype, capability=selfrobot.competences[atype]["capability"], importance=newimportance , distance_treshold = selfrobot.competences[atype]["distance_treshold"], substituable = selfrobot.competences[atype]["substituable"])
 
     else:
         return_home_or_finish(selfrobot, set_finishing_status=True)
 
-    print(f"step {selfrobot.env.step} robot {selfrobot.robot_id} at position ({int(selfrobot.transform.x)},{int(selfrobot.transform.y)}) performing {selfrobot.action_to_perform}")
-    print(selfrobot.competences)
+    # print(f"step {selfrobot.env.step} robot {selfrobot.robot_id} at position ({int(selfrobot.transform.x)},{int(selfrobot.transform.y)}) performing {selfrobot.action_to_perform}")
+    # print(selfrobot.competences)
 
 
 def kth_largest(sorted_desc, k):
@@ -115,21 +122,25 @@ def compute_utilities(selfrobot, interest_points):
         eases.append(infos[robot]["env_ease"])
         traversables.append(infos[robot]["traversable_types"])
     targets = [(int(ip["coordinates"][0]), int(ip["coordinates"][1])) for ip in interest_points]
-    costs = cost_distance_matrix(origins, targets, grid, eases, traversables, selfrobot.cost_calculation_mode)
-    costs = np.maximum(costs, 1).tolist()
+    types = [ip["type"] for ip in interest_points]
+    #compute_costs(selfrobot, origins, targets, types, grid, eases, traversables, selfrobot.cost_calculation_mode) 
+    costs_distance = cost_distance_matrix(origins, targets, grid, eases, traversables, selfrobot.cost_calculation_mode)
+    costs_distance = np.maximum(costs_distance, 1).tolist()
 
     utilities = []
     for n, ip in enumerate(interest_points):
         capability = selfrobot.competences[ip["type"]]["capability"]
-        individual_utility = capability/costs[0][n]
+        cost = compute_full_cost(selfrobot, ip, costs_distance[0][n])
+        individual_utility = capability/cost
 
-        if single_robot or selfrobot.competences[ip["type"]]["substituable"]==False :
-            other_values = [1/selfrobot.env.width]
-        else:
-            other_values = []
-            for k, robot in enumerate(others, start=1):
-                if ip["needed_robots"] <= 1 or robot in ip["awared"]:
-                    other_values.append(infos[robot]["competences"][ip["type"]]["capability"]/costs[k][n])
+        # if single_robot or selfrobot.competences[ip["type"]]["substituable"]==False :
+        #     other_values = [2/selfrobot.env.width] #[1]#
+        # else:
+        other_values = []
+        for k, robot in enumerate(others, start=1):
+            if ip["needed_robots"] <= 1 or robot in ip["awared"]:
+                ocost = compute_full_cost(selfrobot, ip, costs_distance[k][n])
+                other_values.append(infos[robot]["competences"][ip["type"]]["capability"]/ocost)
         other_individual_values = np.array(other_values, dtype=float)
 
         if len(other_individual_values) >= ip["needed_robots"]:
@@ -163,6 +174,33 @@ def compute_utilities(selfrobot, interest_points):
 
         utilities.append((individual_utility + required_assist) / collective_sufficiency)
     return utilities
+
+
+def compute_full_cost(selfrobot, ip, distance, other_robot_id=None):
+    #TODO : rendre ca plus propre. TEST de COUT DIFFERENT POUR LA COMMUNICATION.
+    if ip["type"] == "communication":
+        if other_robot_id:
+            delta_sync = selfrobot.belief_space["last_infos_matrix"][selfrobot.robot_id][other_robot_id]
+        else:
+            delta_sync = 0
+        return distance + delta_sync
+    else:
+        return distance
+
+# def compute_costs(selfrobot, origins, targets, grid, eases, traversables, distance_mode="euclidian"): 
+
+#     distance_costs = cost_distance_matrix(origins, targets, grid, eases, traversables, selfrobot.cost_calculation_mode)
+
+#     print("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
+#     print(f"orogins {origins}")
+#     print(f"targets {targets}")
+#     print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+#     print(distance_costs)
+#     distance_costs = np.maximum(distance_costs, 1).tolist()
+#     print("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
+#     print(distance_costs)
+
+
 
 
 def cost_distance_matrix(origins, targets, grid, eases, traversables, mode="euclidian"):
@@ -199,41 +237,69 @@ def importances_reallocation(selfrobot):
     sum_importances = 0
     for type in selfrobot.competences:
         sum_importances += selfrobot.competences[type]["importance"]
-        if type == "exploration":
-            occ_grid = selfrobot.belief_space["occupancy_grid"]
-            satisf =  self_confidence * (np.count_nonzero(np.where(occ_grid != -1))/occ_grid.size) #conf * %explore connu dans [0,1]
-            demande = 1-satisf
-        elif type == "communication":
-            satisf = self_confidence
-            demande = 1-satisf
-        else : #artifact then
-            #selfrobot.belief_space["artifacts"]
-            counter = Counter([selfrobot.belief_space["artifacts"][i]["status"] for i in selfrobot.belief_space["artifacts"] if (selfrobot.belief_space["artifacts"][i]["type"]==type)])
-            total = sum(counter.values())
-            nb_done = counter["done"]
-            satisf = self_confidence * (nb_done/total)
-            demande = 1-satisf
+        satisf = get_task_satisfaction(selfrobot, type)
+        demande = 1-satisf
+
         satisfactions.update({type:satisf})
         demandes_restantes.update({type:demande})
 
     manque_imp = 1 - sum_importances
     sum_demandes = sum(demandes_restantes.values())
-
+    print(sum_importances)
+    print(demandes_restantes)
     for type in selfrobot.competences:
         proportion_demande = (demandes_restantes[type]/sum_demandes)
-        new_importance = selfrobot.competences[type]["importance"] + (proportion_demande * manque_imp) #TODO : A VOIR parce que la confiance set a rien vu qu'elle est prise en compte avant le calcul des proportions.
+                                                                    #self_confidence *
+        new_importance = selfrobot.competences[type]["importance"] +  (proportion_demande * manque_imp) #TODO : A VOIR parce que la confiance set a rien vu qu'elle est prise en compte avant le calcul des proportions.
         clipped_new_importance = np.clip(new_importance, 0, 1)
 
         selfrobot.shape_competence(type, 
-                                   capability=selfrobot.competences[type]["capability"] , 
+                                   capability=selfrobot.competences[type]["capability"], 
                                    importance=clipped_new_importance, 
                                    distance_treshold=selfrobot.competences[type]["distance_treshold"], 
                                    substituable=selfrobot.competences[type]["substituable"])
 
 
+def get_task_satisfaction(selfrobot, type):
+    if type == "exploration":
+        occ_grid = selfrobot.belief_space["occupancy_grid"]
+        satisf =   (np.count_nonzero(occ_grid != -1)/occ_grid.size) #conf * %explore connu dans [0,1] | self_confidence *
+
+    elif type == "communication":
+
+        # if len(selfrobot.belief_space["robot_informations"].keys())>1:
+        #     infotimes = [selfrobot.belief_space["last_infos_matrix"][selfrobot.robot_id][i] for i in selfrobot.belief_space["last_infos_matrix"] if i!= selfrobot.robot_id]
+        #     mean_infotime = np.mean(infotimes)
+        # else:
+        #     mean_infotime = selfrobot.env.step
+
+        # cross_env_time = 2*np.mean(selfrobot.belief_space["occupancy_grid"].shape)/ np.max([selfrobot.max_speed.x, selfrobot.max_speed.y]) #estimated time to cross the entire mean size of the env.
+
+        # satisf = self_confidence * ((cross_env_time - (selfrobot.env.step - mean_infotime))/cross_env_time) #temps de decalage des sync moyen par rapport au temps qu'il faudrait pour traverser tout l'env estime.
+        
+        if len(selfrobot.belief_space["robot_informations"].keys())>1:
+            infotimes = [selfrobot.belief_space["last_infos_matrix"][selfrobot.robot_id][i] for i in selfrobot.belief_space["last_infos_matrix"] if i!= selfrobot.robot_id]
+            mean_infotime = np.mean(infotimes) #np.min(infotimes) 
+
+            satisf = float(mean_infotime/selfrobot.env.step)
+        else:
+            satisf = 1
+
+    else : #artifact then
+        #selfrobot.belief_space["artifacts"]
+        counter = Counter([selfrobot.belief_space["artifacts"][i]["status"] for i in selfrobot.belief_space["artifacts"] if (selfrobot.belief_space["artifacts"][i]["type"]==type)])
+        total = sum(counter.values())
+        nb_done = counter["done"]
+        if total > 0:
+            satisf =  (nb_done/total) #self_confidence *
+        else:
+            satisf=1
+    print(f"robot {selfrobot.robot_id} satisf {type}")
+    print(satisf)
+    return satisf
     
 
-def reshape_com_importance_for_action_selection(selfrobot, mode="default"):
+def reshape_com_importance_for_action_selection(selfrobot, mode="default"): #old one
     if mode not in COM_IMPORTANCE_MODES:
         raise ValueError(f"incorrect importance com mode in agent {selfrobot.robot_id}")
 

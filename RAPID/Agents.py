@@ -535,13 +535,24 @@ class Robot(Sprite):
         """
         Confidence estiomation regarding beliefs, depending on the last sync time with pairs.
         """
+        # if len(self.belief_space["robot_informations"].keys())>1:
+        #     infotimes = [self.belief_space["last_infos_matrix"][self.robot_id][i] for i in self.belief_space["last_infos_matrix"] if i!= self.robot_id]
+        #     mean_infotime = np.mean(infotimes)
+
+        #     return float(mean_infotime/self.env.step)
+        # else:
+        #     return 1
+
         if len(self.belief_space["robot_informations"].keys())>1:
             infotimes = [self.belief_space["last_infos_matrix"][self.robot_id][i] for i in self.belief_space["last_infos_matrix"] if i!= self.robot_id]
             mean_infotime = np.mean(infotimes)
-
-            return float(mean_infotime/self.env.step)
         else:
-            return 1
+            mean_infotime = self.env.step
+
+        # 2*
+        cross_env_time = np.mean(self.belief_space["occupancy_grid"].shape)/ np.max([self.max_speed.x, self.max_speed.y]) #estimated time to cross the entire mean size of the env.
+
+        return ((cross_env_time - (self.env.step - mean_infotime))/cross_env_time) #temps de decalage des sync moyen par rapport au temps qu'il faudrait pour traverser tout l'env estime.
 
     def move(self, vector_x, vector_y):
         """Method that has to be redefined for each type of robot because they don't have the same movement mechanism."""
