@@ -8,6 +8,7 @@ def return_home_or_finish(robot, set_finishing_status=False):
         if set_finishing_status:
             robot.status = "finishing"
         robot.target = init_pos
+        robot.action_to_perform = None
         robot.last_plan_time = robot.env.step
     else:
         robot.finish()

@@ -128,6 +128,48 @@ def find_nearest_free(grid, target, neighborhood='moore', traversable_types = (O
     return None  # aucune case libre trouvée
 
 
+def find_first_accessible(grid, target, traversable_types = (OG_FREE_CELL,), start=None, min_traversable_neighbors=3):
+    """
+    Find one of the closest explored cells that is reasonably accessible 
+
+    parameters:
+    - grid: 2D numpy array representing the occupancy grid.
+    - target: (x,y) the point to project (floats accepted).
+    - traversable_types: cell types the robot can cross.
+    - start: (x,y) optional position of the robot, the returned cell must be reachable from it.
+    - min_traversable_neighbors: int(default 3) minimal number of traversable 8-neighbors of the returned cell.
+
+    returns:
+    - (x,y) of the closest accessible cell (euclidian distance), target itself if already traversable, or None if no cell is accessible.
+    """
+    target = (int(target[0]), int(target[1]))
+    traversable = np.isin(grid, traversable_types)
+    if traversable[target]:
+        return target
+
+    if start is not None:
+        start = (int(start[0]), int(start[1]))
+        if not traversable[start]:
+            return None
+        reachable = np.array(bfs_distances(traversable, start)).reshape(grid.shape) != -1
+        traversable &= reachable
+
+    padded = np.pad(traversable, 1).astype(np.int8)
+    rows, cols = grid.shape
+    traversable_neighbors = sum(padded[1+dx:1+dx+rows, 1+dy:1+dy+cols]
+                                for dx in (-1, 0, 1) for dy in (-1, 0, 1) if (dx, dy) != (0, 0))
+
+    candidates = traversable & (traversable_neighbors >= min_traversable_neighbors)
+    if not candidates.any():
+        candidates = traversable
+    if not candidates.any():
+        return None
+
+    xs, ys = np.nonzero(candidates)
+    closest = np.argmin((xs - target[0])**2 + (ys - target[1])**2)
+    return (int(xs[closest]), int(ys[closest]))
+
+
 def cluster_frontier_cells(grid, frontier_cells, vision_range, traversable_types = (OG_FREE_CELL,)):
     """
     Cluster frontier cells into groups considering walls and vision range.

@@ -9,7 +9,7 @@ from .utils import Transform2d, a_star_search, euclidian_distance, DIRECTIONS
 from .grid_variables import (ENV_CELL_TYPES, ENV_CELL_TYPE_NAMES, BLOCKING_SENSOR_TYPES, OG_UNKNOWN_CELL, OG_FREE_CELL_GROUP_NAME,
                              OG_WALL_GROUP_NAME, OG_HIGH_WALL_GROUP_NAME, OG_SAND_GROUP_NAME,
                              OG_WATER_GROUP_NAME, OG_GRASS_GROUP_NAME)
-from .behaviors import action_selection, local_frontier, rendezvous, minpos, nearest_frontier, random_wiggle
+from .behaviors import action_selection, local_frontier, rendezvous, minpos, nearest_frontier, random_wiggle, alpha_adapt_action_selection
 
 
 import numpy as np
@@ -198,13 +198,14 @@ class Robot(Sprite):
 
             if self.status == "destroyed":
                 self.finish()
-            
-            if self.new_communication and self.env.step - self.last_plan_time > self.delta_replan:
-                self.target = None
-                self.path_to_target = None
-                self.action_to_perform = None
-                self.new_communication = False
-                self.last_plan_time = self.env.step
+
+            if self.status != "finishing":
+                if self.new_communication and self.env.step - self.last_plan_time > self.delta_replan:
+                    self.target = None
+                    self.path_to_target = None
+                    self.action_to_perform = None
+                    self.new_communication = False
+                    self.last_plan_time = self.env.step
             
             if self.logging:
                 self.write_logs()
@@ -531,11 +532,34 @@ class Robot(Sprite):
         # self.target = None
         # self.path_to_target = None
 
+    def confidence_estimation(self):
+        """
+        Confidence estiomation regarding beliefs, depending on the last sync time with pairs.
+        """
+        # if len(self.belief_space["robot_informations"].keys())>1:
+        #     infotimes = [self.belief_space["last_infos_matrix"][self.robot_id][i] for i in self.belief_space["last_infos_matrix"] if i!= self.robot_id]
+        #     mean_infotime = np.mean(infotimes)
+
+        #     return float(mean_infotime/self.env.step)
+        # else:
+        #     return 1
+
+        if len(self.belief_space["robot_informations"].keys())>1:
+            infotimes = [self.belief_space["last_infos_matrix"][self.robot_id][i] for i in self.belief_space["last_infos_matrix"] if i!= self.robot_id]
+            mean_infotime = np.mean(infotimes)
+        else:
+            mean_infotime = self.env.step
+
+        # 2*
+        cross_env_time = np.mean(self.belief_space["occupancy_grid"].shape)/ np.max([self.max_speed.x, self.max_speed.y]) #estimated time to cross the entire mean size of the env.
+
+        return ((cross_env_time - (self.env.step - mean_infotime))/cross_env_time) #temps de decalage des sync moyen par rapport au temps qu'il faudrait pour traverser tout l'env estime.
+
     def move(self, vector_x, vector_y):
         """Method that has to be redefined for each type of robot because they don't have the same movement mechanism."""
         raise NotImplementedError(f"move has to be implemented in {type(self).__name__}")
 
-    def shape_competence(self, type, capability, importance, distance_treshold = 0, substituable = True):
+    def shape_competence(self, type, capability, importance, distance_treshold = None, substituable = None):
         """
         Shape the competence for a robot
         
@@ -545,14 +569,41 @@ class Robot(Sprite):
         :param distance_treshold: distance where the robot will be able to detect the task, for example in communication, we don't want to take into account robots in range. default 0
         :param substituable: Boolean : Can another robot carry this kind of tasks (default : True)
         """
+        if type in self.competences:
+            if distance_treshold == None:
+                distance_treshold = self.competences[type]["distance_treshold"]
+            if substituable == None:
+                substituable = self.competences[type]["substituable"]
+        else:
+            if distance_treshold == None:
+                distance_treshold = 0
+            if substituable == None:
+                substituable = True
+
+
         self.competences.update({type:{"capability": capability, "importance":importance, "distance_treshold":distance_treshold, "substituable":substituable}})
+
+    def set_importances_equilibrium(self):
+        """set all the importance at 1/nb_competences"""
+        nb_comp = len(list(self.competences.items()))
+        for competence in self.competences:
+            self.shape_competence(competence, 
+                                  capability = self.competences[competence]["capability"],
+                                  importance = 1/nb_comp
+                                  )
     
     def perform_target_action(self):
         """simulate an artifact action with an interaction."""
         if self.action_to_perform["type"] == "exploration":
             self.action_to_perform = None
         elif self.action_to_perform["type"] == "communication":
-            self.action_to_perform = None     
+            if (self.env.step - self.last_plan_time < self.env.width/2) and (self.new_communication == False):
+                if euclidian_distance((self.transform.x, self.transform.y), (int(self.action_to_perform["coordinates"][0]), int(self.action_to_perform["coordinates"][1])))<2:
+                    self.target = self.last_given_position
+                elif euclidian_distance((self.transform.x, self.transform.y), self.last_given_position)<2:
+                    self.target = (int(self.action_to_perform["coordinates"][0]), int(self.action_to_perform["coordinates"][1]))
+            else : 
+                self.action_to_perform = None     
         else: #we'll consider than everything else is consider as an artifact
             a = self.env.artifacts_by_id.get(self.action_to_perform["id"])
             if a is not None and euclidian_distance((int(a.coordinates[0]), int(a.coordinates[1])), (int(self.transform.x), int(self.transform.y))) < 1.5*a.needed_robots:
@@ -598,6 +649,7 @@ class Robot(Sprite):
             random_wiggle.random_wiggle(self) #random move to maybe select another frontier.
             self.path_to_target = None #forget the target and the path
             self.target = None
+            self.action_to_perform = None
 
     def write_logs(self):
         """will keep logs in ram at each steps for simulation stats"""
@@ -627,6 +679,7 @@ class Ground(Robot):
         "local_frontier": local_frontier.local_frontier,
         "action_selection": action_selection.action_selection,
         "rendezvous": rendezvous.rendezvous,
+        "alpha_adapt_action_selection": alpha_adapt_action_selection.alpha_adapt_action_selection
     }
 
     def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False, graph_mode=False, graph_delta=50):
@@ -667,6 +720,7 @@ class Aerial(Robot):
         "minpos": minpos.minpos,
         "local_frontier": local_frontier.local_frontier,
         "action_selection": action_selection.action_selection,
+        "alpha_adapt_action_selection": alpha_adapt_action_selection.alpha_adapt_action_selection
     }
     def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False, graph_mode=False, graph_delta=50):
         super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs, graph_mode=graph_mode, graph_delta=graph_delta)
