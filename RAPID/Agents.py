@@ -198,13 +198,14 @@ class Robot(Sprite):
 
             if self.status == "destroyed":
                 self.finish()
-            
-            if self.new_communication and self.env.step - self.last_plan_time > self.delta_replan:
-                self.target = None
-                self.path_to_target = None
-                self.action_to_perform = None
-                self.new_communication = False
-                self.last_plan_time = self.env.step
+
+            if self.status != "finishing":
+                if self.new_communication and self.env.step - self.last_plan_time > self.delta_replan:
+                    self.target = None
+                    self.path_to_target = None
+                    self.action_to_perform = None
+                    self.new_communication = False
+                    self.last_plan_time = self.env.step
             
             if self.logging:
                 self.write_logs()

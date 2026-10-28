@@ -2,7 +2,7 @@
 import numpy as np
 from collections import Counter
 
-from ..utils import find_frontier_cells, cluster_frontier_cells, euclidian_distance, manhathan_distance, simple_clustering, a_star_cost, max_k
+from ..utils import find_frontier_cells, cluster_frontier_cells, euclidian_distance, manhathan_distance, simple_clustering, a_star_cost, max_k, find_first_accessible
 from .common import return_home_or_finish
 
 def alpha_adapt_action_selection(selfrobot):
@@ -51,8 +51,10 @@ def alpha_adapt_action_selection(selfrobot):
                 #if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) ,selfrobot.belief_space["robot_informations"][robot_id]["position"]) >=  selfrobot.competences["communication"]["distance_treshold"]:
                 if delta_com > selfrobot.env.step - np.mean(list(selfrobot.belief_space["last_infos_matrix"][selfrobot.robot_id].values())):
                     # midpose = ((selfrobot.belief_space["robot_informations"][robot_id]["position"][0]+selfrobot.last_given_position[0])/2, (selfrobot.belief_space["robot_informations"][robot_id]["position"][1]+selfrobot.last_given_position[1])/2)
-
-                    robots_pos_list.append(selfrobot.belief_space["robot_informations"][robot_id]["position"])
+                    robot_pos = (int(selfrobot.belief_space["robot_informations"][robot_id]["position"][0]), int(selfrobot.belief_space["robot_informations"][robot_id]["position"][1]))
+                    if selfrobot.belief_space["occupancy_grid"][robot_pos] not in selfrobot.traversable_types:
+                        robot_pos = find_first_accessible(selfrobot.belief_space["occupancy_grid"], robot_pos, selfrobot.traversable_types)
+                    robots_pos_list.append(robot_pos)
                     # robots_pos_list.append(midpose)
     # if len(robots_pos_list)>0:
     #     if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) , selfrobot.last_given_position) >=  selfrobot.competences["communication"]["distance_treshold"]:
@@ -95,7 +97,7 @@ def alpha_adapt_action_selection(selfrobot):
         satisf = get_task_satisfaction(selfrobot, atype)
         demande = 1-satisf
 
-        DELTA = 0.05
+        DELTA =  0.05 #0.05
         DELTA_ALPHA = np.clip(DELTA/demande, 0, 1)
 
         newimportance = np.maximum(selfrobot.competences[atype]["importance"] - DELTA_ALPHA, 0)
@@ -268,9 +270,10 @@ def get_task_satisfaction(selfrobot, type):
         
         if len(selfrobot.belief_space["robot_informations"].keys())>1:
             infotimes = [selfrobot.belief_space["last_infos_matrix"][selfrobot.robot_id][i] for i in selfrobot.belief_space["last_infos_matrix"] if i!= selfrobot.robot_id]
-            mean_infotime =  np.mean(infotimes) #np.min(infotimes) #  
+            mean_infotime =  np.min(infotimes) #np.mean(infotimes) #  
 
-            satisf = float(mean_infotime/selfrobot.env.step)
+            satisf = 1 - float((selfrobot.env.step - mean_infotime)/selfrobot.env.step)
+            #print(f"SATISF {satisf}")
         else:
             satisf = 1
 
@@ -279,10 +282,15 @@ def get_task_satisfaction(selfrobot, type):
         counter = Counter([selfrobot.belief_space["artifacts"][i]["status"] for i in selfrobot.belief_space["artifacts"] if (selfrobot.belief_space["artifacts"][i]["type"]==type)])
         total = sum(counter.values())
         nb_done = counter["done"]
-        if total > 0:
-            satisf =  (nb_done/total) #self_confidence *
+        if total - nb_done > 0:
+            satisf = 1e-6
         else:
-            satisf=1
+            satisf = 1 - (1e-6)
+
+        # if total > 0:
+        #     satisf =  (nb_done/total) #self_confidence *
+        # else:
+        #     satisf=1
     return satisf
     
 
