@@ -582,6 +582,15 @@ class Robot(Sprite):
 
 
         self.competences.update({type:{"capability": capability, "importance":importance, "distance_treshold":distance_treshold, "substituable":substituable}})
+
+    def set_importances_equilibrium(self):
+        """set all the importance at 1/nb_competences"""
+        nb_comp = len(list(self.competences.items()))
+        for competence in self.competences:
+            self.shape_competence(competence, 
+                                  capability = self.competences[competence]["capability"],
+                                  importance = 1/nb_comp
+                                  )
     
     def perform_target_action(self):
         """simulate an artifact action with an interaction."""
