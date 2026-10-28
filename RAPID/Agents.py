@@ -587,7 +587,13 @@ class Robot(Sprite):
         if self.action_to_perform["type"] == "exploration":
             self.action_to_perform = None
         elif self.action_to_perform["type"] == "communication":
-            self.action_to_perform = None     
+            if (self.env.step - self.last_plan_time < self.env.width/2) and (self.new_communication == False):
+                if euclidian_distance((self.transform.x, self.transform.y), (int(self.action_to_perform["coordinates"][0]), int(self.action_to_perform["coordinates"][1])))<2:
+                    self.target = self.last_given_position
+                elif euclidian_distance((self.transform.x, self.transform.y), self.last_given_position)<2:
+                    self.target = (int(self.action_to_perform["coordinates"][0]), int(self.action_to_perform["coordinates"][1]))
+            else : 
+                self.action_to_perform = None     
         else: #we'll consider than everything else is consider as an artifact
             a = self.env.artifacts_by_id.get(self.action_to_perform["id"])
             if a is not None and euclidian_distance((int(a.coordinates[0]), int(a.coordinates[1])), (int(self.transform.x), int(self.transform.y))) < 1.5*a.needed_robots:
@@ -633,6 +639,7 @@ class Robot(Sprite):
             random_wiggle.random_wiggle(self) #random move to maybe select another frontier.
             self.path_to_target = None #forget the target and the path
             self.target = None
+            self.action_to_perform = None
 
     def write_logs(self):
         """will keep logs in ram at each steps for simulation stats"""

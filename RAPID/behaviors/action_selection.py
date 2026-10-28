@@ -110,8 +110,8 @@ def compute_utilities(selfrobot, interest_points):
         capability = selfrobot.competences[ip["type"]]["capability"]
         individual_utility = capability/costs[0][n]
 
-        if single_robot or selfrobot.competences[ip["type"]]["substituable"]==False :
-            other_values = [1/selfrobot.env.width]
+        if single_robot : # or selfrobot.competences[ip["type"]]["substituable"]==False :
+            other_values = [1] #[1/selfrobot.env.width]
         else:
             other_values = []
             for k, robot in enumerate(others, start=1):

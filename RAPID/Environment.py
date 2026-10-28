@@ -115,6 +115,7 @@ class Environment():
         if self.display_dashboard:
             from .dashboard import Dashboard #lazy import : matplotlib is never imported by the simulator process
             self.dashboard = Dashboard(self, mode=self.dashboard_mode, period=self.dashboard_period)
+                
         while self.running:
             # check user input events
             for event in pygame.event.get():
@@ -150,6 +151,7 @@ class Environment():
         """
         Handle every update method of agents and artifacts.
         """
+
         if self.save_img_steps != None and self.render:
             pygame.image.save(self.screen, self.save_img_steps+str(self.step)+".png")
             
@@ -170,6 +172,12 @@ class Environment():
 
         for a in self.agents: 
             a.update()
+        if self.step == 1:
+            if self.communication_mode == "limited": #init step 0 com
+                for a in self.agents:
+                    for b in self.agents:
+                        if b.robot_id != a.robot_id:
+                            b.recieve_belief(a._belief_message())
 
         if self.render:
             for a in self.agents: 
