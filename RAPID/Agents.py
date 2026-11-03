@@ -121,6 +121,7 @@ class Robot(Sprite):
                 self.env.agents_tools["blackboard"]["occupancy_grid"]=np.full((self.env.width, env.height), OG_UNKNOWN_CELL) #Create the occupancy grid belief in the BB
                 self.env.agents_tools["blackboard"]["robot_informations"]={} #create the robot position dict belief in the BB
                 self.env.agents_tools["blackboard"]["artifacts"]={}
+                self.env.agents_tools["blackboard"]["O_discovery"], self.env.agents_tools["blackboard"]["O_finder"] = self._init_discovery_layers()
                 if self.env.full_knowledge:
                     self.env.agents_tools["blackboard"]["occupancy_grid"] = self.env.real_occupancy_grid #make the blackboard equans to the env grid if the env is known
 
@@ -140,6 +141,7 @@ class Robot(Sprite):
         self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step, "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types} }) #we add the step in order to keep the most recent known position when merging.
         if self.env.full_knowledge:
             self.belief_space["occupancy_grid"] = self.env.real_occupancy_grid
+        self.belief_space["O_discovery"], self.belief_space["O_finder"] = self._init_discovery_layers()
 
         self.graph_mode = graph_mode
         self.graph_delta = graph_delta
@@ -163,6 +165,30 @@ class Robot(Sprite):
         #Ready!
         self.status = "ready"
         self.is_active = True
+
+    def _init_discovery_layers(self):
+        """Discovery layers, same shape as the occupancy grid. O_discovery: step of the first discovery of each cell (inf = unknown). O_finder: id of the robot that discovered it first (-1 = unknown / known from start)."""
+        shape = (self.env.width, self.env.height)
+        if self.env.full_knowledge:
+            return np.zeros(shape), np.full(shape, -1, dtype=int)
+        return np.full(shape, np.inf), np.full(shape, -1, dtype=int)
+
+    @staticmethod
+    def _merge_discovery_layers(discovery, finder, other_discovery, other_finder):
+        """Keep, for each cell, the earliest discovery (ties broken by the smallest finder id so that all robots converge to the same finder). Returns new arrays."""
+        take_other = (other_discovery < discovery) | ((other_discovery == discovery) & (other_finder < finder))
+        return np.where(take_other, other_discovery, discovery), np.where(take_other, other_finder, finder)
+
+    def get_last_sync_time(self, robot_id=None):
+        """
+        Last step up to which the whole fleet is synchronized, according to the local last_infos_matrix M (M[j][o] = step of the most recent info of o known by j).
+
+        :param robot_id: if given, step up to which every robot has the infos of robot_id (min_j M[j][robot_id]). Otherwise min over the whole matrix.
+        """
+        matrix = self.belief_space["last_infos_matrix"]
+        if robot_id is None:
+            return min(min(row.values()) for row in matrix.values())
+        return min(row.get(robot_id, 0) for row in matrix.values())
 
     def update(self):
         """
@@ -331,6 +357,11 @@ class Robot(Sprite):
         idx = np.asarray(neighbors)
         self.belief_space["occupancy_grid"][idx[:, 0], idx[:, 1]] = self.env.real_occupancy_grid[idx[:, 0], idx[:, 1]] #get the real value (simulates sensing, note that we could add noise.)
 
+        #discovery layers : first known discovery of the sensed cells
+        new = np.isinf(self.belief_space["O_discovery"][idx[:, 0], idx[:, 1]])
+        self.belief_space["O_discovery"][idx[new, 0], idx[new, 1]] = self.env.step
+        self.belief_space["O_finder"][idx[new, 0], idx[new, 1]] = self.robot_id
+
         #artifact detection
         artifacts = self.env.interest_points["artifacts"]
         if artifacts:
@@ -424,6 +455,7 @@ class Robot(Sprite):
         blackboard = self.env.agents_tools["blackboard"]
         belief = self.belief_space
         blackboard["occupancy_grid"] = np.maximum.reduce([blackboard["occupancy_grid"], belief["occupancy_grid"]])
+        blackboard["O_discovery"], blackboard["O_finder"] = self._merge_discovery_layers(blackboard["O_discovery"], blackboard["O_finder"], belief["O_discovery"], belief["O_finder"])
         blackboard["robot_informations"][self.robot_id] = belief["robot_informations"][self.robot_id]
         for artifact_id, artifact in belief["artifacts"].items():
             known = blackboard["artifacts"].get(artifact_id)
@@ -433,7 +465,7 @@ class Robot(Sprite):
             if self.robot_id not in artifact["awared"]:
                 artifact["awared"].append(self.robot_id)
 
-        for key in ("occupancy_grid", "robot_informations", "artifacts"):
+        for key in ("occupancy_grid", "O_discovery", "O_finder", "robot_informations", "artifacts"):
             belief[key] = blackboard[key]
 
         matrix = belief["last_infos_matrix"]
@@ -446,12 +478,14 @@ class Robot(Sprite):
             matrix[robot_id][self.robot_id] = self.env.step
 
     def _belief_message(self):
-        """Copy of the part of the belief space read by recieve_belief (the occupancy grid is not copied, the receiver builds a new one)."""
+        """Copy of the part of the belief space read by recieve_belief (the occupancy grid and discovery layers are not copied, the receiver builds new ones)."""
         shared = {key: self.belief_space[key] for key in ("self_id", "robot_informations", "artifacts", "last_infos_matrix")}
         if self.graph_mode:
             shared["graph"] = self.belief_space["graph"]
         message = deepcopy(shared)
         message["occupancy_grid"] = self.belief_space["occupancy_grid"]
+        message["O_discovery"] = self.belief_space["O_discovery"]
+        message["O_finder"] = self.belief_space["O_finder"]
         return message
 
     def recieve_belief(self, sender_belief_space):
@@ -470,6 +504,9 @@ class Robot(Sprite):
             self.belief_space["occupancy_grid"] = np.maximum.reduce([self.belief_space["occupancy_grid"], sender_belief_space["occupancy_grid"]])
         else:
             self.belief_space["graph"].merge_graph(sender_belief_space["graph"]) #TODO : Graph merging has to be improved, currently not working
+
+        #discovery layers fusion (earliest discovery wins)
+        self.belief_space["O_discovery"], self.belief_space["O_finder"] = self._merge_discovery_layers(self.belief_space["O_discovery"], self.belief_space["O_finder"], sender_belief_space["O_discovery"], sender_belief_space["O_finder"])
 
 
         for robot_infos in sender_belief_space["robot_informations"]: #robot positions update based on the newest timestamp
