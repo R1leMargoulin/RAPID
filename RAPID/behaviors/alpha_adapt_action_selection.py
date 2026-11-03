@@ -8,6 +8,7 @@ from .common import return_home_or_finish
 def alpha_adapt_action_selection(selfrobot):
     #reshape_com_importance_for_action_selection(selfrobot, mode = selfrobot.com_importance_mode)
     importances_reallocation(selfrobot)
+    #print(selfrobot.competences)
     #TODO : realocate alphas()
 
     interest_points = []
@@ -78,6 +79,7 @@ def alpha_adapt_action_selection(selfrobot):
 
     best_action = None
     best_weighted_utility = -np.inf
+    #print(interest_points)
     for ip in interest_points:
         weighted_utility = ip["utility"] * selfrobot.competences[ip["type"]]["importance"] #alpha
 
@@ -97,11 +99,24 @@ def alpha_adapt_action_selection(selfrobot):
         satisf = get_task_satisfaction(selfrobot, atype)
         demande = 1-satisf
 
-        DELTA =  0.05 #0.05
+        DELTA =  0.1 #0.05
         DELTA_ALPHA = np.clip(DELTA/demande, 0, 1)
 
         newimportance = np.maximum(selfrobot.competences[atype]["importance"] - DELTA_ALPHA, 0)
         selfrobot.shape_competence(atype, capability=selfrobot.competences[atype]["capability"], importance=newimportance , distance_treshold = selfrobot.competences[atype]["distance_treshold"], substituable = selfrobot.competences[atype]["substituable"])
+
+        #TEST descendre aussi plus faiblement les taches non choisies
+        #print(list(selfrobot.competences.keys()))
+        for other_type in list(selfrobot.competences.keys()):
+            if other_type == atype :
+                continue
+            else:
+                other_satisf = get_task_satisfaction(selfrobot, other_type)
+                other_demande = 1-other_satisf
+                OTHER_DELTA_ALPHA = np.clip(DELTA/other_demande, 0, 1) / len(list(selfrobot.competences.keys()))
+                newimportance = np.maximum(selfrobot.competences[other_type]["importance"] - OTHER_DELTA_ALPHA, 0)
+                selfrobot.shape_competence(other_type, capability=selfrobot.competences[other_type]["capability"], importance=newimportance , distance_treshold = selfrobot.competences[other_type]["distance_treshold"], substituable = selfrobot.competences[other_type]["substituable"])
+
 
     else:
         return_home_or_finish(selfrobot, set_finishing_status=True)
@@ -146,14 +161,14 @@ def compute_utilities(selfrobot, interest_points):
             other_values = []
         for k, robot in enumerate(others, start=1):
             if ip["needed_robots"] <= 1 or robot in ip["awared"]:
-                ocost = compute_full_cost(selfrobot, ip, costs_distance[k][n])
+                ocost = compute_full_cost(selfrobot, ip, costs_distance[k][n], other_robot_id=robot)
                 other_values.append(infos[robot]["competences"][ip["type"]]["capability"]/ocost)
         other_individual_values = np.array(other_values, dtype=float)
 
         if len(other_individual_values) >= ip["needed_robots"]:
             collective_sufficiency = float(max_k(other_individual_values, ip["needed_robots"]))
         elif len(other_individual_values) == ip["needed_robots"]-1:
-            collective_sufficiency = 1
+            collective_sufficiency = 1e-6
         else:
             collective_sufficiency = np.inf
 
@@ -269,11 +284,29 @@ def get_task_satisfaction(selfrobot, type):
         # satisf = self_confidence * ((cross_env_time - (selfrobot.env.step - mean_infotime))/cross_env_time) #temps de decalage des sync moyen par rapport au temps qu'il faudrait pour traverser tout l'env estime.
         
         if len(selfrobot.belief_space["robot_informations"].keys())>1:
+            #first part : com delay
             infotimes = [selfrobot.belief_space["last_infos_matrix"][selfrobot.robot_id][i] for i in selfrobot.belief_space["last_infos_matrix"] if i!= selfrobot.robot_id]
-            mean_infotime =  np.min(infotimes) #np.mean(infotimes) #  
+            min_infotime =  np.min(infotimes) #np.mean(infotimes) #  
 
-            satisf = 1 - float((selfrobot.env.step - mean_infotime)/selfrobot.env.step)
-            #print(f"SATISF {satisf}")
+            #secont part : potential contribution with communication (apport a la communication)
+            last_sync_time = selfrobot.get_last_sync_time()
+            common_mask = selfrobot.belief_space["O_discovery"] <= last_sync_time
+            known_mask = ~np.isinf(selfrobot.belief_space["O_discovery"])#cell is infinite if not discovered
+
+            common = np.count_nonzero(common_mask)#nb de cellules connues en tout
+            new_infos = np.count_nonzero(known_mask & ~common_mask)   #nb de cellules connues NOUVELLES (estimees)
+
+            apport_com = new_infos / common if common > 0 else 0.999999999
+
+            #satisf = 1 - float((selfrobot.env.step - min_infotime)/selfrobot.env.step)
+            satisf = float((selfrobot.env.step - last_sync_time)/selfrobot.env.step) / apport_com   if apport_com > 0 else 0.99999998
+            # print("-------------------")
+            # print(f"common : {common}")
+            # print(f"known : {np.count_nonzero(known_mask)}")
+            # print(f"new_infos : {new_infos}")
+            # print(f"apport com : {apport_com}")
+            # print(f"satisf : {satisf}")
+            # print("-------------------")
         else:
             satisf = 1
 
@@ -291,7 +324,7 @@ def get_task_satisfaction(selfrobot, type):
         #     satisf =  (nb_done/total) #self_confidence *
         # else:
         #     satisf=1
-    return satisf
+    return float(np.clip(satisf,0, 0.99999999))
     
 
 def reshape_com_importance_for_action_selection(selfrobot, mode="default"): #old one
