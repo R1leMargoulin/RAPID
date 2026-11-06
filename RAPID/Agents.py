@@ -438,8 +438,11 @@ class Robot(Sprite):
             if self.communication_mode == "limited":
                 if self.connected_robots:
                     for robot in self.connected_robots:
-                        if self.robot_id != robot.robot_id:
+                        if self.robot_id != robot.robot_id: #pairwise exchange: both robots share their beliefs and reset their communication period
                             robot.recieve_belief(self._belief_message())
+                            self.recieve_belief(robot._belief_message())
+                            robot.time_from_last_communication = 0
+                            robot.last_given_position = (int(robot.transform.x), int(robot.transform.y))
                             self.time_from_last_communication = 0
                     self.last_given_position = (int(self.transform.x), int(self.transform.y))
                 else:

@@ -108,12 +108,13 @@ def alpha_adapt_action_selection(selfrobot):
         #TEST descendre aussi plus faiblement les taches non choisies
         #print(list(selfrobot.competences.keys()))
         for other_type in list(selfrobot.competences.keys()):
-            if other_type == atype :
+            if other_type in [atype, "exploration"] :
                 continue
             else:
                 other_satisf = get_task_satisfaction(selfrobot, other_type)
                 other_demande = 1-other_satisf
                 OTHER_DELTA_ALPHA = np.clip(DELTA/other_demande, 0, 1) / len(list(selfrobot.competences.keys()))
+                #OTHER_DELTA_ALPHA = DELTA / len(list(selfrobot.competences.keys()))
                 newimportance = np.maximum(selfrobot.competences[other_type]["importance"] - OTHER_DELTA_ALPHA, 0)
                 selfrobot.shape_competence(other_type, capability=selfrobot.competences[other_type]["capability"], importance=newimportance , distance_treshold = selfrobot.competences[other_type]["distance_treshold"], substituable = selfrobot.competences[other_type]["substituable"])
 
@@ -202,7 +203,7 @@ def compute_full_cost(selfrobot, ip, distance, other_robot_id=None):
     #TODO : rendre ca plus propre. TEST de COUT DIFFERENT POUR LA COMMUNICATION.
     if ip["type"] == "communication":
         if other_robot_id:
-            delta_sync = selfrobot.belief_space["last_infos_matrix"][selfrobot.robot_id][other_robot_id]
+            delta_sync = selfrobot.env.step - selfrobot.belief_space["last_infos_matrix"][selfrobot.robot_id][other_robot_id]
         else:
             delta_sync = 0
         return distance + delta_sync
@@ -290,6 +291,7 @@ def get_task_satisfaction(selfrobot, type):
 
             #secont part : potential contribution with communication (apport a la communication)
             last_sync_time = selfrobot.get_last_sync_time()
+            delta_sync = selfrobot.env.step - last_sync_time
             common_mask = selfrobot.belief_space["O_discovery"] <= last_sync_time
             known_mask = ~np.isinf(selfrobot.belief_space["O_discovery"])#cell is infinite if not discovered
 
@@ -298,15 +300,10 @@ def get_task_satisfaction(selfrobot, type):
 
             apport_com = new_infos / common if common > 0 else 0.999999999
 
+
             #satisf = 1 - float((selfrobot.env.step - min_infotime)/selfrobot.env.step)
-            satisf = float((selfrobot.env.step - last_sync_time)/selfrobot.env.step) / apport_com   if apport_com > 0 else 0.99999998
-            # print("-------------------")
-            # print(f"common : {common}")
-            # print(f"known : {np.count_nonzero(known_mask)}")
-            # print(f"new_infos : {new_infos}")
-            # print(f"apport com : {apport_com}")
-            # print(f"satisf : {satisf}")
-            # print("-------------------")
+            satisf = np.clip(((selfrobot.env.step - delta_sync)/selfrobot.env.step) / apport_com, 0, 0.99999999)   #if apport_com > 0 else 0.99999998
+            #satisf = ((selfrobot.env.step - delta_sync)/selfrobot.env.step) / apport_com if apport_com > 0 else 0.99999998
         else:
             satisf = 1
 
