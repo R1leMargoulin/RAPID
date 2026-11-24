@@ -69,7 +69,7 @@ def collect_snapshot(env, mode="importances", show_base_stations=False, last_gri
                        "pos": _xy((r.transform.x, r.transform.y)),
                        "status": str(r.status),
                        "imdone": bool(r.imdone),
-                       "importances": {str(t): float(c["importance"]) for t, c in r.competences.items()},
+                       "importances": {str(t): float(a) for t, a in (getattr(r, "importances_at_choice", None) or {t: c["importance"] for t, c in r.competences.items()}).items()},
                        "capabilities": {str(t): float(c["capability"]) for t, c in r.competences.items()},
                        "task": task,
                        "confidence": confidence})

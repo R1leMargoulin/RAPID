@@ -500,7 +500,7 @@ class ExplorationEnvironment(FogEnvironment):
 
     def goal_condition(self):
         self.exploration_completion = np.count_nonzero(self.interest_points["exploration_map"])/self.explorable_cell_number
-        return self.exploration_completion >= self.exploration_proportion_goal
+        return bool(self.exploration_completion >= self.exploration_proportion_goal)
 
 
 class MineClearingEnvironment(FogEnvironment):

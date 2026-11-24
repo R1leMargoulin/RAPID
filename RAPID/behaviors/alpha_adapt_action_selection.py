@@ -57,9 +57,9 @@ def alpha_adapt_action_selection(selfrobot):
                         robot_pos = find_first_accessible(selfrobot.belief_space["occupancy_grid"], robot_pos, selfrobot.traversable_types)
                     robots_pos_list.append(robot_pos)
                     # robots_pos_list.append(midpose)
-    # if len(robots_pos_list)>0:
-    #     if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) , selfrobot.last_given_position) >=  selfrobot.competences["communication"]["distance_treshold"]:
-    #         robots_pos_list.append(selfrobot.last_given_position)# TODO ComInfo, la last given position, c'est a double trnchant, je sais pas trop
+    if len(robots_pos_list)>0:
+        if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) , selfrobot.last_given_position) >=  selfrobot.competences["communication"]["distance_treshold"]:
+            robots_pos_list.append(selfrobot.last_given_position)# TODO ComInfo, la last given position, c'est a double trnchant, je sais pas trop
 
     #communication_clusters = simple_clustering(robots_pos_list, selfrobot.communication_range) #from utils: make simple clusters of robot based on communication range, will return the center of clusters
     #for cc in communication_clusters:
@@ -67,15 +67,21 @@ def alpha_adapt_action_selection(selfrobot):
         interest_points.append({"type":"communication","coordinates":cc, "needed_robots":1})#adding those clusters in the communication points
         #TODO MultiRobotTask : try different values of needed robots
 
+    if len(interest_points) == 0 and np.max(selfrobot.belief_space["O_discovery"]) < selfrobot.get_last_sync_time():
+                return_home_or_finish(selfrobot, set_finishing_status=True)
+                return None
 
     #--------------------------------------        
 
-    if len(interest_points) == 0:
-        return_home_or_finish(selfrobot, set_finishing_status=True)
-        return None
+    # if len(interest_points) == 0:
+    #     return_home_or_finish(selfrobot, set_finishing_status=True)
+    #     return None
 
     for ip, utility in zip(interest_points, compute_utilities(selfrobot, interest_points)):
         ip.update({"utility":utility})
+
+    #copy of the alphas used for the choice (before the decreases below), read by the dashboard
+    selfrobot.importances_at_choice = {t: float(c["importance"]) for t, c in selfrobot.competences.items()}
 
     best_action = None
     best_weighted_utility = -np.inf
@@ -298,7 +304,19 @@ def get_task_satisfaction(selfrobot, type):
             common = np.count_nonzero(common_mask)#nb de cellules connues en tout
             new_infos = np.count_nonzero(known_mask & ~common_mask)   #nb de cellules connues NOUVELLES (estimees)
 
-            apport_com = new_infos / common if common > 0 else 0.999999999
+            
+
+            
+            undone_art = 0
+            new_art = 0
+            for art in selfrobot.belief_space["artifacts"]:
+                if selfrobot.belief_space["artifacts"][art]["status"] != "done":
+                    undone_art += 1
+                    if selfrobot.belief_space["artifacts"][art]["discovery_time"] >= last_sync_time:
+                        new_art += 1
+
+
+            apport_com = np.max([new_infos /( common+1), new_art/(undone_art+1)]) #if (common > 0 or undone_art>0) else 1e-6
 
 
             #satisf = 1 - float((selfrobot.env.step - min_infotime)/selfrobot.env.step)
@@ -320,7 +338,7 @@ def get_task_satisfaction(selfrobot, type):
         # if total > 0:
         #     satisf =  (nb_done/total) #self_confidence *
         # else:
-        #     satisf=1
+        #     satisf= 1 - (1e-6)
     return float(np.clip(satisf,0, 0.99999999))
     
 

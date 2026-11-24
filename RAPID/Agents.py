@@ -10,6 +10,7 @@ from .grid_variables import (ENV_CELL_TYPES, ENV_CELL_TYPE_NAMES, BLOCKING_SENSO
                              OG_WALL_GROUP_NAME, OG_HIGH_WALL_GROUP_NAME, OG_SAND_GROUP_NAME,
                              OG_WATER_GROUP_NAME, OG_GRASS_GROUP_NAME)
 from .behaviors import action_selection, local_frontier, rendezvous, minpos, nearest_frontier, random_wiggle, alpha_adapt_action_selection
+from .behaviors.common import return_home_or_finish
 
 
 import numpy as np
@@ -29,7 +30,7 @@ def _traversable_types(env_ease):
 
 
 class Robot(Sprite):
-    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10, energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False, graph_mode=False, graph_delta=50):
+    def __init__(self, env:Environment, robot_id:int, size, color, init_transform = (0, 0, 0), max_speed = (2,2,2), vision_range=20, communication_range = 40, communication_period = 10, energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, tag="", write_logs=False, graph_mode=False, graph_delta=50):
         """
         Robot class are our agents representing robots.
 
@@ -57,6 +58,8 @@ class Robot(Sprite):
         # inital values
         self.env = env
         self.robot_id = robot_id
+
+        self.tag = tag
 
         # pygame agent components
         self.surf = Surface((4*size, 4*size), SRCALPHA, 32)
@@ -138,7 +141,7 @@ class Robot(Sprite):
         
         #creation of the belief space whatever the communication mode
         self.belief_space = {"self_id": self.robot_id, "occupancy_grid":np.full((self.env.width, env.height), OG_UNKNOWN_CELL), "artifacts":{}, "robot_informations":{}, "last_infos_matrix": {self.robot_id:{self.robot_id:0}}}
-        self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step, "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types} }) #we add the step in order to keep the most recent known position when merging.
+        self.belief_space["robot_informations"].update({ self.robot_id:{"position":(self.transform.x, self.transform.y), "step":self.env.step, "competences":self.competences, "env_ease":self.env_ease, "traversable_types":self.traversable_types, "home":(int(self.init_transform.x), int(self.init_transform.y))} }) #we add the step in order to keep the most recent known position when merging.
         if self.env.full_knowledge:
             self.belief_space["occupancy_grid"] = self.env.real_occupancy_grid
         self.belief_space["O_discovery"], self.belief_space["O_finder"] = self._init_discovery_layers()
@@ -155,6 +158,9 @@ class Robot(Sprite):
         self._neighbors_cache = None
         
         self.imdone = False #if true, the robot will consider it's mission is over, it stops its activity.
+
+        self.robot_info_ttl_factor = 5 #a robot without news since more than factor * (time to cross the env) is considered as lost (see is_robot_lost)
+        self.given_up_robots = {} #{robot_id: info step} lost robots already looked for at their home, not looked for again until a newer info arrives
 
         self.logging = write_logs
         self.logs = {}
@@ -184,11 +190,35 @@ class Robot(Sprite):
         Last step up to which the whole fleet is synchronized, according to the local last_infos_matrix M (M[j][o] = step of the most recent info of o known by j).
 
         :param robot_id: if given, step up to which every robot has the infos of robot_id (min_j M[j][robot_id]). Otherwise min over the whole matrix.
+        Only the active robots (see get_active_robot_ids) are taken into account, rows and columns : a finished robot does not share infos anymore, it would freeze the sync time.
         """
         matrix = self.belief_space["last_infos_matrix"]
+        active = self.get_active_robot_ids()
         if robot_id is None:
-            return min(min(row.values()) for row in matrix.values())
-        return min(row.get(robot_id, 0) for row in matrix.values())
+            return min(matrix[j].get(o, 0) for j in active for o in active)
+        return min(matrix[j].get(robot_id, 0) for j in active)
+
+    def get_active_robot_ids(self):
+        """Ids of the robots of the local last_infos_matrix still taking part in the synchronization (self included) : the ones known as finishing or destroyed are left out."""
+        infos = self.belief_space["robot_informations"]
+        return [r for r in self.belief_space["last_infos_matrix"] if r == self.robot_id or (infos.get(r, {}).get("status") not in ("finishing", "destroyed") and not self.is_robot_lost(r))]
+
+    def is_robot_lost(self, robot_id):
+        """True if no info about robot_id since more than robot_info_ttl_factor * (time to cross the env) : it is probably finished or out of reach, so it is left out of the sync and only looked for once at its home."""
+        infos = self.belief_space["robot_informations"].get(robot_id)
+        if infos is None or robot_id == self.robot_id:
+            return False
+        speed = max(self.max_speed.x, self.max_speed.y)
+        if speed <= 0:
+            return False
+        cross_env_time = np.mean(self.belief_space["occupancy_grid"].shape) / speed
+        return self.env.step - infos["step"] > self.robot_info_ttl_factor * cross_env_time
+
+    @staticmethod
+    def _align_exchanged_rows(matrix, a, b):
+        """After a pairwise exchange, a and b know the same infos : their rows of the last_infos_matrix are set to their element-wise max."""
+        for o in matrix[a].keys() | matrix[b].keys():
+            matrix[a][o] = matrix[b][o] = max(matrix[a].get(o, 0), matrix[b].get(o, 0))
 
     def update(self):
         """
@@ -207,7 +237,10 @@ class Robot(Sprite):
         elif self.action_to_perform != None:
             self.perform_target_action()
         else:
-            self.behave() #in order to determine what to do.
+            if self.status != "finishing":
+                self.behave() #in order to determine what to do.
+            else:
+                return_home_or_finish(self, set_finishing_status=True)
             if not self.imdone and self.target is not None:
                 self.path_to_target = a_star_search(self.belief_space["occupancy_grid"], (int(self.transform.x),int(self.transform.y)), (self.target[0], self.target[1]), traversable_types=self.traversable_types) #from utils : A* Path calculation
                 if self.path_to_target != None:
@@ -441,6 +474,8 @@ class Robot(Sprite):
                         if self.robot_id != robot.robot_id: #pairwise exchange: both robots share their beliefs and reset their communication period
                             robot.recieve_belief(self._belief_message())
                             self.recieve_belief(robot._belief_message())
+                            self._align_exchanged_rows(self.belief_space["last_infos_matrix"], self.robot_id, robot.robot_id)
+                            self._align_exchanged_rows(robot.belief_space["last_infos_matrix"], self.robot_id, robot.robot_id)
                             robot.time_from_last_communication = 0
                             robot.last_given_position = (int(robot.transform.x), int(robot.transform.y))
                             self.time_from_last_communication = 0
@@ -722,8 +757,8 @@ class Ground(Robot):
         "alpha_adapt_action_selection": alpha_adapt_action_selection.alpha_adapt_action_selection
     }
 
-    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False, graph_mode=False, graph_delta=50):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs, graph_mode=graph_mode, graph_delta=graph_delta)
+    def __init__(self, env, robot_id, size = 1, color = (0, 255, 0), init_transform = (0,0,0), max_speed = (1.0,0.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, tag="", write_logs=False, graph_mode=False, graph_delta=50):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, tag=tag, write_logs=write_logs, graph_mode=graph_mode, graph_delta=graph_delta)
         self.behavior_space = list(self.BEHAVIORS)
         self._set_mobility(_ease(1, 0, 0, 0.4, 0, 0.6))
         self._set_behavior(behavior_to_use)
@@ -762,8 +797,8 @@ class Aerial(Robot):
         "action_selection": action_selection.action_selection,
         "alpha_adapt_action_selection": alpha_adapt_action_selection.alpha_adapt_action_selection
     }
-    def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False, graph_mode=False, graph_delta=50):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs, graph_mode=graph_mode, graph_delta=graph_delta)
+    def __init__(self, env, robot_id, size = 1, color = (255, 0, 0), init_transform = (0,0,0), max_speed = (1.0,1.0,1.5),vision_range=20, communication_range = 40, communication_period = 10, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, tag="", write_logs=False, graph_mode=False, graph_delta=50):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, tag=tag, write_logs=write_logs, graph_mode=graph_mode, graph_delta=graph_delta)
         self.behavior_space = list(self.BEHAVIORS)
         self._set_mobility(_ease(1, 1, 0, 1, 1, 1))
         self._set_behavior(behavior_to_use)
@@ -828,8 +863,8 @@ class BaseStation(Robot):
             else:
                 return False
 
-    def __init__(self, env, robot_id, size = 1, color = (0, 0, 255), init_transform = (0,0,0), max_speed = (0.0 ,0.0 , 0.0),vision_range=20, communication_range = 40, communication_period = 1, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, write_logs=False, return_priority=1):
-        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, write_logs=write_logs)
+    def __init__(self, env, robot_id, size = 1, color = (0, 0, 255), init_transform = (0,0,0), max_speed = (0.0 ,0.0 , 0.0),vision_range=20, communication_range = 40, communication_period = 1, behavior_to_use = "random", energy_amount = 1000, energy_cost_per_cell = 1, delta_replan=20, tag="", write_logs=False, return_priority=1):
+        super().__init__(env, robot_id, size, color, init_transform= init_transform, max_speed=max_speed, vision_range=vision_range, communication_range=communication_range, communication_period=communication_period, energy_amount = energy_amount, energy_cost_per_cell = energy_cost_per_cell, delta_replan=delta_replan, tag=tag, write_logs=write_logs)
         self.behavior_space = ["stay"]
         self.return_priority = return_priority
 
