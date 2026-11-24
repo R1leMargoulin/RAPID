@@ -316,7 +316,7 @@ def get_task_satisfaction(selfrobot, type):
                         new_art += 1
 
 
-            apport_com = np.max([new_infos /( common+1), new_art/(undone_art+1)]) #if (common > 0 or undone_art>0) else 1e-6
+            apport_com = np.max([new_infos /max(common, 1), new_art/max(undone_art, 1)]) #if (common > 0 or undone_art>0) else 1e-6
 
 
             #satisf = 1 - float((selfrobot.env.step - min_infotime)/selfrobot.env.step)
