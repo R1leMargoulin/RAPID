@@ -1,7 +1,7 @@
 
 import numpy as np
 
-from ..utils import find_frontier_cells, cluster_frontier_cells, euclidian_distance, manhathan_distance, simple_clustering, a_star_cost, max_k
+from ..utils import find_frontier_cells, cluster_frontier_cells, euclidian_distance, manhathan_distance, simple_clustering, a_star_cost, max_k, find_first_accessible
 from .common import return_home_or_finish
 
 def action_selection(selfrobot):
@@ -42,10 +42,13 @@ def action_selection(selfrobot):
     robots_pos_list = [] #list of float xy position of all robots
     for robot_id in selfrobot.belief_space["robot_informations"]:
         if robot_id != selfrobot.robot_id and selfrobot.belief_space["robot_informations"][robot_id]["status"]!= "finishing":  # ComImportance : est ce que je ferais pas un truc spécifique aux robots?
-            if selfrobot.communication_range*3/selfrobot.max_speed.x <= selfrobot.env.step - selfrobot.belief_space["robot_informations"][robot_id]["step"] < 6 * ( np.max(selfrobot.belief_space["occupancy_grid"].shape)/selfrobot.max_speed.x ) : #time = dist/speed
-            #if selfrobot.env.step - selfrobot.belief_space["robot_informations"][robot_id]["step"] < 6 * ( np.max(selfrobot.belief_space["occupancy_grid"].shape)/selfrobot.max_speed.x ) : #time = dist/speed
-                if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) ,selfrobot.belief_space["robot_informations"][robot_id]["position"]) >=  selfrobot.competences["communication"]["distance_treshold"]:
-                    robots_pos_list.append(selfrobot.belief_space["robot_informations"][robot_id]["position"])
+            delta_com = selfrobot.env.step - selfrobot.belief_space["robot_informations"][robot_id]["step"]
+            if selfrobot.communication_range*1.5/selfrobot.max_speed.x <= delta_com : #time = dist/speed
+                if delta_com > selfrobot.env.step - np.mean(list(selfrobot.belief_space["last_infos_matrix"][selfrobot.robot_id].values())):
+                    robot_pos = (int(selfrobot.belief_space["robot_informations"][robot_id]["position"][0]), int(selfrobot.belief_space["robot_informations"][robot_id]["position"][1]))
+                    if selfrobot.belief_space["occupancy_grid"][robot_pos] not in selfrobot.traversable_types:
+                        robot_pos = find_first_accessible(selfrobot.belief_space["occupancy_grid"], robot_pos, selfrobot.traversable_types)
+                    robots_pos_list.append(robot_pos)
     if len(robots_pos_list)>0:
         if euclidian_distance((selfrobot.transform.x, selfrobot.transform.y) , selfrobot.last_given_position) >=  selfrobot.competences["communication"]["distance_treshold"]:
             robots_pos_list.append(selfrobot.last_given_position)# TODO ComInfo, la last given position, c'est a double trnchant, je sais pas trop
@@ -102,13 +105,14 @@ def compute_utilities(selfrobot, interest_points):
         eases.append(infos[robot]["env_ease"])
         traversables.append(infos[robot]["traversable_types"])
     targets = [(int(ip["coordinates"][0]), int(ip["coordinates"][1])) for ip in interest_points]
-    costs = cost_distance_matrix(origins, targets, grid, eases, traversables, selfrobot.cost_calculation_mode)
-    costs = np.maximum(costs, 1).tolist()
+    costs_distance = cost_distance_matrix(origins, targets, grid, eases, traversables, selfrobot.cost_calculation_mode)
+    costs_distance = np.maximum(costs_distance, 1).tolist()
 
     utilities = []
     for n, ip in enumerate(interest_points):
         capability = selfrobot.competences[ip["type"]]["capability"]
-        individual_utility = capability/costs[0][n]
+        cost = compute_full_cost(selfrobot, ip, costs_distance[0][n])
+        individual_utility = capability/cost
 
         if single_robot : # or selfrobot.competences[ip["type"]]["substituable"]==False :
             other_values = [1] #[1/selfrobot.env.width]
@@ -116,7 +120,8 @@ def compute_utilities(selfrobot, interest_points):
             other_values = []
             for k, robot in enumerate(others, start=1):
                 if ip["needed_robots"] <= 1 or robot in ip["awared"]:
-                    other_values.append(infos[robot]["competences"][ip["type"]]["capability"]/costs[k][n])
+                    ocost = compute_full_cost(selfrobot, ip, costs_distance[k][n], other_robot_id=robot)
+                    other_values.append(infos[robot]["competences"][ip["type"]]["capability"]/ocost)
         other_individual_values = np.array(other_values, dtype=float)
 
         if len(other_individual_values) >= ip["needed_robots"]:
@@ -150,6 +155,17 @@ def compute_utilities(selfrobot, interest_points):
 
         utilities.append((individual_utility + required_assist) / collective_sufficiency)
     return utilities
+
+
+def compute_full_cost(selfrobot, ip, distance, other_robot_id=None):
+    if ip["type"] == "communication":
+        if other_robot_id:
+            delta_sync = selfrobot.env.step - selfrobot.belief_space["last_infos_matrix"][selfrobot.robot_id][other_robot_id]
+        else:
+            delta_sync = 0
+        return distance + delta_sync
+    else:
+        return distance
 
 
 def cost_distance_matrix(origins, targets, grid, eases, traversables, mode="euclidian"):
